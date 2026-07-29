@@ -24,7 +24,7 @@ Scanner Improvements
 - Added WAVESHELL support — the scanner can now probe WAVESHell VST3 bundles without freezing, handling their slow plugin enumeration and problematic cleanup routines
 
 RX/TX VST Bypass
-Added front panel buttons to bypass RX VST and TX VST processing independently
+Added front panel buttons to bypass RX VST and TX VST processing independently right clicking them will bring you directly into the chain host window
 
 
 
