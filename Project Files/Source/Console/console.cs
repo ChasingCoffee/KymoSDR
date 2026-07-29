@@ -960,7 +960,7 @@ namespace Thetis
 
             //            
             if (!IsSetupFormNull) SetupForm.SetupCMAsio(_portAudioIssue, Common.HasArg(args, "-cmasioconfig"));
-            vstChainsToolStripMenuItem.Visible = _vstEnabled;
+            vstToolStripMenuItem.Visible = _vstEnabled;
             chkTXVST.Visible = _vstEnabled;
             chkRXVST.Visible = _vstEnabled;
 
@@ -48509,6 +48509,11 @@ namespace Thetis
                 SetupForm.Focus();
                 SetFocusMaster(false);
             }
+        }
+
+        private void vstToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            vstChainsToolStripMenuItem_Click(sender, e);
         }
 
         private void vstChainsToolStripMenuItem_Click(object sender, EventArgs e)

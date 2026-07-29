@@ -744,6 +744,7 @@
             this.databaseManagerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.memoryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.equalizerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.vstToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.xVTRsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.cWXToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.eSCToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -4140,6 +4141,7 @@
             this.setupToolStripMenuItem,
             this.memoryToolStripMenuItem,
             this.equalizerToolStripMenuItem,
+            this.vstToolStripMenuItem,
             this.xVTRsToolStripMenuItem,
             this.cWXToolStripMenuItem,
             this.eSCToolStripMenuItem,
@@ -4163,7 +4165,6 @@
             // 
             this.setupToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.setupToolStripMenuItem1,
-            this.vstChainsToolStripMenuItem,
             this.toolStripMenuItem1,
             this.databaseManagerToolStripMenuItem});
             this.setupToolStripMenuItem.ForeColor = System.Drawing.SystemColors.ControlLightLight;
@@ -4208,6 +4209,15 @@
             this.equalizerToolStripMenuItem.Name = "equalizerToolStripMenuItem";
             resources.ApplyResources(this.equalizerToolStripMenuItem, "equalizerToolStripMenuItem");
             this.equalizerToolStripMenuItem.Click += new System.EventHandler(this.equalizerToolStripMenuItem_Click);
+            // 
+            // vstToolStripMenuItem
+            // 
+            this.vstToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.vstChainsToolStripMenuItem});
+            this.vstToolStripMenuItem.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.vstToolStripMenuItem.Name = "vstToolStripMenuItem";
+            this.vstToolStripMenuItem.Text = "VST";
+            this.vstToolStripMenuItem.Click += new System.EventHandler(this.vstToolStripMenuItem_Click);
             // 
             // xVTRsToolStripMenuItem
             // 
@@ -7960,6 +7970,7 @@
         private NumericUpDownTS udTXStepAttData;
         private ToolStripMenuItem databaseManagerToolStripMenuItem;
         private ToolStripMenuItem setupToolStripMenuItem1;
+        private ToolStripMenuItem vstToolStripMenuItem;
         private ToolStripMenuItem vstChainsToolStripMenuItem;
         private ToolStripSeparator toolStripMenuItem1;
         private ToolStripMenuItem miAbout;
