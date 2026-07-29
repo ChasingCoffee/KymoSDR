@@ -739,7 +739,6 @@
             this.menuStrip1 = new System.Windows.Forms.MenuStrip();
             this.setupToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.setupToolStripMenuItem1 = new System.Windows.Forms.ToolStripMenuItem();
-            this.vstChainsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem1 = new System.Windows.Forms.ToolStripSeparator();
             this.databaseManagerToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.memoryToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -4178,13 +4177,6 @@
             resources.ApplyResources(this.setupToolStripMenuItem1, "setupToolStripMenuItem1");
             this.setupToolStripMenuItem1.Click += new System.EventHandler(this.setupToolStripMenuItem1_Click);
             // 
-            // vstChainsToolStripMenuItem
-            // 
-            this.vstChainsToolStripMenuItem.Name = "vstChainsToolStripMenuItem";
-            this.vstChainsToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
-            this.vstChainsToolStripMenuItem.Text = "VST Chains";
-            this.vstChainsToolStripMenuItem.Click += new System.EventHandler(this.vstChainsToolStripMenuItem_Click);
-            // 
             // toolStripMenuItem1
             // 
             this.toolStripMenuItem1.Name = "toolStripMenuItem1";
@@ -4212,11 +4204,9 @@
             // 
             // vstToolStripMenuItem
             // 
-            this.vstToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.vstChainsToolStripMenuItem});
             this.vstToolStripMenuItem.ForeColor = System.Drawing.SystemColors.ControlLightLight;
             this.vstToolStripMenuItem.Name = "vstToolStripMenuItem";
-            this.vstToolStripMenuItem.Text = "VST";
+            this.vstToolStripMenuItem.Text = "VST Chains";
             this.vstToolStripMenuItem.Click += new System.EventHandler(this.vstToolStripMenuItem_Click);
             // 
             // xVTRsToolStripMenuItem
@@ -7971,7 +7961,6 @@
         private ToolStripMenuItem databaseManagerToolStripMenuItem;
         private ToolStripMenuItem setupToolStripMenuItem1;
         private ToolStripMenuItem vstToolStripMenuItem;
-        private ToolStripMenuItem vstChainsToolStripMenuItem;
         private ToolStripSeparator toolStripMenuItem1;
         private ToolStripMenuItem miAbout;
         private PictureBox pbAutoAttWarningRX1;

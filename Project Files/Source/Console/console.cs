@@ -48513,11 +48513,6 @@ namespace Thetis
 
         private void vstToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            vstChainsToolStripMenuItem_Click(sender, e);
-        }
-
-        private void vstChainsToolStripMenuItem_Click(object sender, EventArgs e)
-        {
             if (VstChainManagerForm.InvokeRequired)
             {
                 VstChainManagerForm.Invoke(new MethodInvoker(() =>
