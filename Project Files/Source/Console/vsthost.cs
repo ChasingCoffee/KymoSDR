@@ -1397,6 +1397,7 @@ namespace Thetis
                         {
                             Path = nativeInfo.Path,
                             Name = nativeInfo.Name,
+                            ClassId = nativeInfo.ClassId,
                             Enabled = nativeInfo.Enabled != 0,
                             Bypass = nativeInfo.Bypass != 0,
                             LoadState = (VstPluginLoadState)nativeInfo.LoadState,

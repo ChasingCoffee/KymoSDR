@@ -1026,6 +1026,8 @@ namespace
 
 					initialize_cached_plugin_state(cached_plugin, info.path);
 					wcsncpy_s(cached_plugin.name, VST_MAX_PLUGIN_NAME_CHARS, info.name, _TRUNCATE);
+					if (info.cid[0])
+						wcsncpy_s(cached_plugin.cid, VST_MAX_PLUGIN_CID_CHARS, info.cid, _TRUNCATE);
 					cached_plugin.enabled = info.enabled;
 					cached_plugin.bypass = info.bypass;
 					cached_plugin.load_state = info.load_state;
@@ -1158,6 +1160,8 @@ namespace
 				if (host_get_plugin_info(kind, host_index, host_info) == 0)
 				{
 					wcsncpy_s(cached_plugin.name, VST_MAX_PLUGIN_NAME_CHARS, host_info.name, _TRUNCATE);
+					if (host_info.cid[0])
+						wcsncpy_s(cached_plugin.cid, VST_MAX_PLUGIN_CID_CHARS, host_info.cid, _TRUNCATE);
 					cached_plugin.load_state = host_info.load_state;
 					if (host_info.format != VST_PLUGIN_FORMAT_UNKNOWN)
 						cached_plugin.format = host_info.format;
