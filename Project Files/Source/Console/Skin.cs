@@ -1168,21 +1168,25 @@ namespace Thetis
             CheckBox ctrl = (CheckBox)sender;
             ImageState state = ImageState.NormalUp;
 
+            bool isChecked = ctrl.Checked;
+            if (ctrl.Name == "chkTXVST" || ctrl.Name == "chkRXVST")
+                isChecked = !isChecked;
+
             if (!ctrl.Enabled &&
                 ctrl.ImageList.Images.IndexOfKey(ImageState.DisabledDown.ToString()) >= 0 &&
                 ctrl.ImageList.Images.IndexOfKey(ImageState.DisabledUp.ToString()) >= 0)
             {
-                state = ctrl.Checked ? ImageState.DisabledDown : ImageState.DisabledUp;
+                state = isChecked ? ImageState.DisabledDown : ImageState.DisabledUp;
             }
             else if (ctrl.Focused && 
                 ctrl.ImageList.Images.IndexOfKey(ImageState.FocusedDown.ToString()) >= 0 &&
                 ctrl.ImageList.Images.IndexOfKey(ImageState.FocusedUp.ToString()) >= 0)
             {
-                state = ctrl.Checked ? ImageState.FocusedDown : ImageState.FocusedUp;
+                state = isChecked ? ImageState.FocusedDown : ImageState.FocusedUp;
             }
             else
             {
-                state = ctrl.Checked ? ImageState.NormalDown : ImageState.NormalUp;
+                state = isChecked ? ImageState.NormalDown : ImageState.NormalUp;
             }
 
             SetCheckBoxImageState(ctrl, state);
@@ -1193,8 +1197,12 @@ namespace Thetis
             CheckBox ctrl = (CheckBox)sender;
             if (!ctrl.Enabled) return;
 
+            bool isChecked = ctrl.Checked;
+            if (ctrl.Name == "chkTXVST" || ctrl.Name == "chkRXVST")
+                isChecked = !isChecked;
+
             ImageState state = ImageState.MouseOverUp;
-            if (ctrl.Checked) state = ImageState.MouseOverDown;
+            if (isChecked) state = ImageState.MouseOverDown;
 
             SetCheckBoxImageState(ctrl, state);
         }

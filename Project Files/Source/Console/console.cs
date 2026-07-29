@@ -28894,8 +28894,8 @@ namespace Thetis
 
         private void chkTXVST_CheckedChanged(object sender, System.EventArgs e)
         {
-            if (chkTXVST.Checked) chkTXVST.BackColor = button_selected_color;
-            else chkTXVST.BackColor = SystemColors.Control;
+            if (chkTXVST.Checked) chkTXVST.BackColor = SystemColors.Control;
+            else chkTXVST.BackColor = button_selected_color;
 
             VstHost.SetChainBypass(VstChainKind.Tx, chkTXVST.Checked);
         }
@@ -28912,8 +28912,8 @@ namespace Thetis
 
         private void chkRXVST_CheckedChanged(object sender, System.EventArgs e)
         {
-            if (chkRXVST.Checked) chkRXVST.BackColor = button_selected_color;
-            else chkRXVST.BackColor = SystemColors.Control;
+            if (chkRXVST.Checked) chkRXVST.BackColor = SystemColors.Control;
+            else chkRXVST.BackColor = button_selected_color;
 
             VstHost.SetChainBypass(VstChainKind.Rx, chkRXVST.Checked);
         }
