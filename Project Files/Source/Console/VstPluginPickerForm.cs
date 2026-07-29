@@ -116,6 +116,7 @@ namespace Thetis
 
             _searchPathsListBox = new ListBox();
             _searchPathsListBox.Dock = DockStyle.Fill;
+            _searchPathsListBox.SelectedIndexChanged += delegate { UpdateSelection(); };
             pathsPanel.Controls.Add(_searchPathsListBox, 0, 1);
 
             FlowLayoutPanel pathButtonPanel = new FlowLayoutPanel();

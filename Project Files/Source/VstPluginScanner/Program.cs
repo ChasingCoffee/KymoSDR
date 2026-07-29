@@ -68,7 +68,7 @@ namespace VstPluginScanner
         private const uint SEM_FAILCRITICALERRORS = 0x0001;
         private const uint SEM_NOGPFAULTERRORBOX = 0x0002;
         private const uint SEM_NOOPENFILEERRORBOX = 0x8000;
-        private const int MaxProbeClasses = 64;
+        private const int MaxProbeClasses = 2048;
 
         [DllImport(NativeLibrary, EntryPoint = "VST_ProbePluginMetadataOnly", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         private static extern int NativeProbePluginMetadataOnly(string pluginPath, out VstPluginProbeInfoNative info);
