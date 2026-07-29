@@ -999,12 +999,16 @@ namespace Thetis
 
         private static void SetupCheckBoxImages(CheckBox ctrl)
         {
+            string imgName = ctrl.Name;
+            if (imgName == "chkTXVST" || imgName == "chkRXVST")
+                imgName = "chkNoiseGate";
+
             string skey = "";
             for (int i=0; i<8; i++)
             {
-                string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + imgName + "-" + i.ToString() + pic_file_ext;
                 if (!File.Exists(spath))
-                    spath = path + "\\" + "Console" + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                    spath = path + "\\" + "Console" + "\\" + imgName + "-" + i.ToString() + pic_file_ext;
                 if (File.Exists(spath))
                 {
                     Image img = loadImage(spath); // load to cache it
@@ -1028,11 +1032,11 @@ namespace Thetis
                 for (int i = 0; i < 8; i++)
                 {
                     string sstate = ((ImageState)i).ToString();
-                    string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                    string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + imgName + "-" + i.ToString() + pic_file_ext;
                     Image img = getImageFromFilePath(spath);
                     if (img == null)
                     {
-                        spath = path + "\\" + "Console" + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                        spath = path + "\\" + "Console" + "\\" + imgName + "-" + i.ToString() + pic_file_ext;
                         img = getImageFromFilePath(spath);
                     }
                     if (img != null && !_shared_image_lists[skey].Images.ContainsKey(sstate))
@@ -1045,7 +1049,7 @@ namespace Thetis
             if (ctrl.ImageList == null) ctrl.ImageList = new ImageList(); // just assign one, it wont be used as no images were found
 
             setupCheckBoxHandlers(ctrl);
-           
+            
             CheckBox_StateChanged(ctrl, EventArgs.Empty);
         }
 

@@ -102,6 +102,8 @@
         private System.Windows.Forms.LabelTS lblRXGain;
         private System.Windows.Forms.PictureBox picVOX;
         private System.Windows.Forms.CheckBoxTS chkNoiseGate;
+        private System.Windows.Forms.CheckBoxTS chkTXVST;
+        private System.Windows.Forms.CheckBoxTS chkRXVST;
         private System.Windows.Forms.PictureBox picNoiseGate;
         private System.Windows.Forms.LabelTS lblVFOBLSD;
         private System.Windows.Forms.TextBoxTS txtVFOAMSD;
@@ -2094,6 +2096,42 @@
             this.toolTip1.SetToolTip(this.chkNoiseGate, resources.GetString("chkNoiseGate.ToolTip"));
             this.chkNoiseGate.CheckedChanged += new System.EventHandler(this.chkNoiseGate_CheckedChanged);
             this.chkNoiseGate.MouseDown += new System.Windows.Forms.MouseEventHandler(this.chkNoiseGate_MouseDown);
+            // 
+            // chkTXVST
+            // 
+            this.chkTXVST = new System.Windows.Forms.CheckBoxTS();
+            this.chkTXVST.Appearance = System.Windows.Forms.Appearance.Button;
+            this.chkTXVST.FlatAppearance.BorderSize = 0;
+            this.chkTXVST.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.chkTXVST.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.chkTXVST.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.chkTXVST.Location = new System.Drawing.Point(5, 99);
+            this.chkTXVST.Name = "chkTXVST";
+            this.chkTXVST.Size = new System.Drawing.Size(50, 23);
+            this.chkTXVST.TabIndex = 71;
+            this.chkTXVST.Text = "TXVST";
+            this.chkTXVST.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.toolTip1.SetToolTip(this.chkTXVST, "TX VST chain bypass");
+            this.chkTXVST.CheckedChanged += new System.EventHandler(this.chkTXVST_CheckedChanged);
+            this.chkTXVST.MouseDown += new System.Windows.Forms.MouseEventHandler(this.chkTXVST_MouseDown);
+            // 
+            // chkRXVST
+            // 
+            this.chkRXVST = new System.Windows.Forms.CheckBoxTS();
+            this.chkRXVST.Appearance = System.Windows.Forms.Appearance.Button;
+            this.chkRXVST.FlatAppearance.BorderSize = 0;
+            this.chkRXVST.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.chkRXVST.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.chkRXVST.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.chkRXVST.Location = new System.Drawing.Point(58, 99);
+            this.chkRXVST.Name = "chkRXVST";
+            this.chkRXVST.Size = new System.Drawing.Size(50, 23);
+            this.chkRXVST.TabIndex = 72;
+            this.chkRXVST.Text = "RXVST";
+            this.chkRXVST.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.toolTip1.SetToolTip(this.chkRXVST, "RX VST chain bypass");
+            this.chkRXVST.CheckedChanged += new System.EventHandler(this.chkRXVST_CheckedChanged);
+            this.chkRXVST.MouseDown += new System.Windows.Forms.MouseEventHandler(this.chkRXVST_MouseDown);
             // 
             // comboTXProfile
             // 
@@ -5959,6 +5997,8 @@
             this.panelModeSpecificPhone.Controls.Add(this.chkCPDR);
             this.panelModeSpecificPhone.Controls.Add(this.chkVOX);
             this.panelModeSpecificPhone.Controls.Add(this.chkNoiseGate);
+            this.panelModeSpecificPhone.Controls.Add(this.chkTXVST);
+            this.panelModeSpecificPhone.Controls.Add(this.chkRXVST);
             this.panelModeSpecificPhone.Controls.Add(this.comboTXProfile);
             this.panelModeSpecificPhone.Controls.Add(this.comboAMTXProfile);
             this.panelModeSpecificPhone.Name = "panelModeSpecificPhone";

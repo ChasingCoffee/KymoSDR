@@ -961,6 +961,8 @@ namespace Thetis
             //            
             if (!IsSetupFormNull) SetupForm.SetupCMAsio(_portAudioIssue, Common.HasArg(args, "-cmasioconfig"));
             vstChainsToolStripMenuItem.Visible = _vstEnabled;
+            chkTXVST.Visible = _vstEnabled;
+            chkRXVST.Visible = _vstEnabled;
 
             CpuUsage(); //[2.10.1.0] MW0LGE initial call to setup check marks in status bar as a minimum
 
@@ -28888,6 +28890,42 @@ namespace Thetis
             else chkNoiseGate.BackColor = SystemColors.Control;
 
             SetGeneralSetting(0, OtherButtonId.DEXP, chkNoiseGate.Checked);
+        }
+
+        private void chkTXVST_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (chkTXVST.Checked) chkTXVST.BackColor = button_selected_color;
+            else chkTXVST.BackColor = SystemColors.Control;
+
+            VstHost.SetChainBypass(VstChainKind.Tx, chkTXVST.Checked);
+        }
+
+        private void chkTXVST_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                VstChainManagerForm.RefreshChains();
+                VstChainManagerForm.Show(this);
+                VstChainManagerForm.Focus();
+            }
+        }
+
+        private void chkRXVST_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (chkRXVST.Checked) chkRXVST.BackColor = button_selected_color;
+            else chkRXVST.BackColor = SystemColors.Control;
+
+            VstHost.SetChainBypass(VstChainKind.Rx, chkRXVST.Checked);
+        }
+
+        private void chkRXVST_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                VstChainManagerForm.RefreshChains();
+                VstChainManagerForm.Show(this);
+                VstChainManagerForm.Focus();
+            }
         }
 
         private void ptbVACRXGain_Scroll(object sender, System.EventArgs e)
