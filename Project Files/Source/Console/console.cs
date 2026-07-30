@@ -28905,7 +28905,10 @@ namespace Thetis
             if (e.Button == MouseButtons.Right)
             {
                 VstChainManagerForm.RefreshChains();
-                VstChainManagerForm.Show(this);
+                if (VstChainManagerForm.Visible)
+                    VstChainManagerForm.BringToFront();
+                else
+                    VstChainManagerForm.Show(this);
                 VstChainManagerForm.Focus();
             }
         }
@@ -28923,7 +28926,10 @@ namespace Thetis
             if (e.Button == MouseButtons.Right)
             {
                 VstChainManagerForm.RefreshChains();
-                VstChainManagerForm.Show(this);
+                if (VstChainManagerForm.Visible)
+                    VstChainManagerForm.BringToFront();
+                else
+                    VstChainManagerForm.Show(this);
                 VstChainManagerForm.Focus();
             }
         }
@@ -48513,23 +48519,20 @@ namespace Thetis
 
         private void vstToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (VstChainManagerForm.InvokeRequired)
-            {
-                VstChainManagerForm.Invoke(new MethodInvoker(() =>
-                {
-                    VstChainManagerForm.RefreshChains();
-                    VstChainManagerForm.Show(this);
-                    VstChainManagerForm.Focus();
-                    SetFocusMaster(false);
-                }));
-            }
-            else
+            void showForm()
             {
                 VstChainManagerForm.RefreshChains();
-                VstChainManagerForm.Show(this);
+                if (VstChainManagerForm.Visible)
+                    VstChainManagerForm.BringToFront();
+                else
+                    VstChainManagerForm.Show(this);
                 VstChainManagerForm.Focus();
                 SetFocusMaster(false);
             }
+            if (VstChainManagerForm.InvokeRequired)
+                VstChainManagerForm.Invoke(new MethodInvoker(showForm));
+            else
+                showForm();
         }
 
         public void ToggleRxTxAnt()
