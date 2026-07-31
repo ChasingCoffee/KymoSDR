@@ -2102,8 +2102,15 @@ namespace Thetis
                 comboTXProfileName.Items.Count > 0)
                 comboTXProfileName.SelectedIndex = 0;
 
-            if (loadTXProfile(comboTXProfileName.Text)) _current_profile = comboTXProfileName.Text;
-            else _current_profile = "";
+            if (loadTXProfile(comboTXProfileName.Text))
+            {
+                _current_profile = comboTXProfileName.Text;
+                VstHost.SetCurrentProfile(console.AppDataPath, _current_profile);
+            }
+            else
+            {
+                _current_profile = "";
+            }
 
             //recover discovered radios
             if (a.ContainsKey("discovered_radios"))
@@ -3912,6 +3919,7 @@ namespace Thetis
             else
             {
                 updateTXProfileInDB(dr); //MW0LGE_21a remove duplication
+                VstHost.SaveProfileChains(console.AppDataPath, name);
             }
         }
 
@@ -9675,6 +9683,7 @@ namespace Thetis
             if (loadTXProfile(comboTXProfileName.Text))
             {
                 _current_profile = comboTXProfileName.Text;
+                VstHost.SetCurrentProfile(console.AppDataPath, _current_profile);
             }
             else
             {
@@ -9734,6 +9743,7 @@ namespace Thetis
             else
             {
                 updateTXProfileInDB(dr); //MW0LGE_21a remove duplication
+                VstHost.SaveProfileChains(console.AppDataPath, name);
             }
 
             if (!comboTXProfileName.Items.Contains(name))
@@ -9772,6 +9782,8 @@ namespace Thetis
                 return;
 
             profile_deleted = true;
+
+            VstHost.DeleteTxChainForProfile(console.AppDataPath, comboTXProfileName.Text);
 
             DataRow[] rows = getDataRowsForTXProfile(comboTXProfileName.Text);// DB.ds.Tables["TXProfile"].Select("Name = '" + comboTXProfileName.Text.Replace("'", "''") + "'"); //MW0LGE_21k9rc6 replace ' for ''
 

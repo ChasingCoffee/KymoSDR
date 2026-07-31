@@ -251,6 +251,12 @@ namespace Thetis
         }
     }
 
+    sealed class VstProfileState
+    {
+        public VstChainState Rx { get; set; }
+        public VstChainState Tx { get; set; }
+    }
+
     static class VstHost
     {
         private const string NativeLibrary = "VstHostBridge.dll";
@@ -270,9 +276,13 @@ namespace Thetis
         private static bool _nativeUnavailable;
         private static bool _nativeCallbackRegistered;
         private static string _stateAppDataPath;
+        private static string _currentProfileName;
         private static readonly object _stateSaveLock = new object();
         private static Timer _stateSaveTimer;
         private static volatile string _lastPersistenceError;
+        private static readonly List<VstPluginState>[] _requestedPluginsByKind = new List<VstPluginState>[2];
+        private static readonly Dictionary<int, VstPluginState>[] _failedPluginsByKind = new Dictionary<int, VstPluginState>[2];
+        internal static event Action<VstChainKind> ChainStateChanged;
         private static readonly NativeStateChangedCallback _nativeStateChangedCallback = OnNativeStateChanged;
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -541,6 +551,80 @@ namespace Thetis
             return CaptureChainInfo(kind, false, false);
         }
 
+        public static VstChainState CaptureChainPersistentState(VstChainKind kind)
+        {
+            if (!EnsureNativeAvailable())
+                return new VstChainState();
+
+            VstChainInfo chainInfo = CaptureChainInfo(kind, true, true);
+            if (chainInfo == null)
+                return new VstChainState();
+
+            return ToPersistentState(kind, chainInfo);
+        }
+
+        internal static List<VstPluginState> GetRequestedPlugins(VstChainKind kind)
+        {
+            return _requestedPluginsByKind[(int)kind];
+        }
+
+        internal static Dictionary<int, VstPluginState> GetFailedPlugins(VstChainKind kind)
+        {
+            return _failedPluginsByKind[(int)kind];
+        }
+
+        public static bool RemoveRequestedPlugin(VstChainKind kind, string pluginPath)
+        {
+            List<VstPluginState> requested = _requestedPluginsByKind[(int)kind];
+            if (requested == null || string.IsNullOrEmpty(pluginPath))
+                return false;
+
+            int removeIndex = -1;
+            for (int i = 0; i < requested.Count; i++)
+            {
+                VstPluginState p = requested[i];
+                if (p != null && string.Equals(p.Path, pluginPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    removeIndex = i;
+                    break;
+                }
+            }
+            if (removeIndex < 0)
+                return false;
+
+            requested.RemoveAt(removeIndex);
+
+            Dictionary<int, VstPluginState> failed = _failedPluginsByKind[(int)kind];
+            if (failed != null)
+            {
+                Dictionary<int, VstPluginState> rebuilt = new Dictionary<int, VstPluginState>();
+                foreach (var kv in failed)
+                {
+                    if (kv.Key == removeIndex)
+                        continue;
+                    rebuilt[kv.Key > removeIndex ? kv.Key - 1 : kv.Key] = kv.Value;
+                }
+                _failedPluginsByKind[(int)kind] = rebuilt;
+            }
+
+            if (requested.Count == 0)
+            {
+                _requestedPluginsByKind[(int)kind] = null;
+                _failedPluginsByKind[(int)kind] = null;
+            }
+
+            ScheduleStateSave(DeferredStateSaveDelayMs);
+            return true;
+        }
+
+        public static Dictionary<int, VstPluginState> ApplyChainPersistentState(VstChainKind kind, VstChainState state)
+        {
+            if (!EnsureNativeAvailable())
+                return new Dictionary<int, VstPluginState>();
+
+            return ApplyChainState(kind, state);
+        }
+
         public static bool GetChainReady(VstChainKind kind)
         {
             if (!EnsureNativeAvailable())
@@ -690,7 +774,11 @@ namespace Thetis
 
             VstOperationResult result = BuildAddPluginResult(kind, index);
             if (result.Success)
+            {
+                _requestedPluginsByKind[(int)kind] = null;
+                _failedPluginsByKind[(int)kind] = null;
                 QueueStructuralStateSave();
+            }
 
             return result;
         }
@@ -701,6 +789,8 @@ namespace Thetis
             if (NativeRemovePlugin(kind, index) != 0)
                 return false;
 
+            _requestedPluginsByKind[(int)kind] = null;
+            _failedPluginsByKind[(int)kind] = null;
             QueueStructuralStateSave();
             return true;
         }
@@ -711,6 +801,8 @@ namespace Thetis
             if (NativeMovePlugin(kind, fromIndex, toIndex) != 0)
                 return false;
 
+            _requestedPluginsByKind[(int)kind] = null;
+            _failedPluginsByKind[(int)kind] = null;
             QueueStructuralStateSave();
             return true;
         }
@@ -1101,6 +1193,15 @@ namespace Thetis
             return Path.Combine(appDataPath, "vst");
         }
 
+        public static string GetVstDirectoryPath()
+        {
+            string appDataPath = GetCurrentAppDataPath();
+            if (string.IsNullOrWhiteSpace(appDataPath))
+                return string.Empty;
+
+            return GetVstSubdirectory(appDataPath);
+        }
+
         private static string GetStateFilePath(string appDataPath)
         {
             if (string.IsNullOrEmpty(appDataPath))
@@ -1109,6 +1210,142 @@ namespace Thetis
             string vstDir = GetVstSubdirectory(appDataPath);
             MigrateFileToVstSubdirectory(appDataPath, vstDir, StateFileName);
             return Path.Combine(vstDir, StateFileName);
+        }
+
+        private static string SanitizeProfileName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "Default";
+
+            char[] invalid = Path.GetInvalidFileNameChars();
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(name);
+            for (int i = 0; i < sb.Length; i++)
+            {
+                if (Array.IndexOf(invalid, sb[i]) >= 0)
+                    sb[i] = '_';
+            }
+            return sb.ToString();
+        }
+
+        private static string GetTxProfileStateFilePath(string appDataPath, string profileName)
+        {
+            string vstDir = GetVstSubdirectory(appDataPath);
+            string safeName = SanitizeProfileName(profileName);
+            return Path.Combine(vstDir, "vst_chains_tx_" + safeName + ".json");
+        }
+
+        public static void SetCurrentProfile(string appDataPath, string profileName)
+        {
+            if (string.IsNullOrWhiteSpace(appDataPath))
+                return;
+
+            RememberAppDataPath(appDataPath);
+
+            if (!string.IsNullOrEmpty(_currentProfileName) &&
+                !string.Equals(_currentProfileName, profileName, StringComparison.Ordinal))
+            {
+                SaveProfileChains(appDataPath, _currentProfileName);
+            }
+
+            _currentProfileName = profileName;
+
+            if (!string.IsNullOrWhiteSpace(profileName))
+                LoadProfileChains(appDataPath, profileName);
+        }
+
+        public static string GetCurrentProfileName()
+        {
+            return _currentProfileName ?? string.Empty;
+        }
+
+        public static void SaveProfileChains(string appDataPath, string profileName)
+        {
+            if (string.IsNullOrWhiteSpace(appDataPath) || string.IsNullOrWhiteSpace(profileName))
+                return;
+
+            try
+            {
+                VstProfileState profileState = new VstProfileState();
+
+                VstChainInfo rxChain = CaptureChainInfo(VstChainKind.Rx, true, true);
+                if (rxChain != null && !ChainStateIsTransient(rxChain))
+                    profileState.Rx = ToPersistentState(VstChainKind.Rx, rxChain);
+
+                VstChainInfo txChain = CaptureChainInfo(VstChainKind.Tx, true, true);
+                if (txChain != null && !ChainStateIsTransient(txChain))
+                    profileState.Tx = ToPersistentState(VstChainKind.Tx, txChain);
+
+                if (profileState.Rx == null && profileState.Tx == null)
+                    return;
+
+                string filePath = GetTxProfileStateFilePath(appDataPath, profileName);
+                string directoryPath = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(directoryPath))
+                    Directory.CreateDirectory(directoryPath);
+
+                WriteTextFileAtomically(filePath, JsonConvert.SerializeObject(profileState, Formatting.Indented));
+            }
+            catch (Exception ex)
+            {
+                SetPersistenceError("VST profile state save failed for " + profileName, ex);
+            }
+        }
+
+        private static void LoadProfileChains(string appDataPath, string profileName)
+        {
+            if (string.IsNullOrWhiteSpace(appDataPath) || string.IsNullOrWhiteSpace(profileName))
+                return;
+
+            string filePath = GetTxProfileStateFilePath(appDataPath, profileName);
+            if (!File.Exists(filePath))
+                return;
+
+            try
+            {
+                string json = File.ReadAllText(filePath);
+                Newtonsoft.Json.Linq.JObject obj = Newtonsoft.Json.Linq.JObject.Parse(json);
+
+                if (obj.Property("Rx") != null || obj.Property("Tx") != null)
+                {
+                    VstProfileState profileState = JsonConvert.DeserializeObject<VstProfileState>(json);
+                    int rxFailures = 0;
+                    int txFailures = 0;
+                    if (profileState.Rx != null)
+                        rxFailures = ApplyChainState(VstChainKind.Rx, profileState.Rx).Count;
+                    if (profileState.Tx != null)
+                        txFailures = ApplyChainState(VstChainKind.Tx, profileState.Tx).Count;
+                    int totalFailures = rxFailures + txFailures;
+                    if (totalFailures > 0)
+                        Trace.WriteLine("VST profile " + profileName + ": " + totalFailures + " plugin(s) not found");
+                }
+                else
+                {
+                    VstChainState txState = JsonConvert.DeserializeObject<VstChainState>(json);
+                    if (txState != null)
+                        ApplyChainState(VstChainKind.Tx, txState);
+                }
+            }
+            catch (Exception ex)
+            {
+                SetPersistenceError("VST profile state load failed for " + profileName, ex);
+            }
+        }
+
+        public static void DeleteTxChainForProfile(string appDataPath, string profileName)
+        {
+            if (string.IsNullOrWhiteSpace(appDataPath) || string.IsNullOrWhiteSpace(profileName))
+                return;
+
+            try
+            {
+                string filePath = GetTxProfileStateFilePath(appDataPath, profileName);
+                if (File.Exists(filePath))
+                    File.Delete(filePath);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine("VST profile state delete failed for " + profileName + ": " + ex.Message);
+            }
         }
 
         private static string GetCatalogFilePath(string appDataPath)
@@ -1223,6 +1460,9 @@ namespace Thetis
         {
             try
             {
+                Action<VstChainKind> handler = ChainStateChanged;
+                if (handler != null)
+                    handler(kind);
                 ScheduleStateSave(DeferredStateSaveDelayMs);
             }
             catch (Exception ex)
@@ -1286,6 +1526,21 @@ namespace Thetis
                 if (!string.IsNullOrEmpty(directoryPath))
                     Directory.CreateDirectory(directoryPath);
                 WriteTextFileAtomically(stateFilePath, JsonConvert.SerializeObject(state, Formatting.Indented));
+
+                if (!string.IsNullOrEmpty(_currentProfileName))
+                {
+                    VstProfileState profileState = new VstProfileState();
+                    if (state.Rx != null)
+                        profileState.Rx = state.Rx;
+                    if (state.Tx != null)
+                        profileState.Tx = state.Tx;
+                    string profileFilePath = GetTxProfileStateFilePath(appDataPath, _currentProfileName);
+                    string profileDir = Path.GetDirectoryName(profileFilePath);
+                    if (!string.IsNullOrEmpty(profileDir))
+                        Directory.CreateDirectory(profileDir);
+                    WriteTextFileAtomically(profileFilePath, JsonConvert.SerializeObject(profileState, Formatting.Indented));
+                }
+
                 ClearPersistenceError();
             }
             catch (Exception ex)
@@ -1317,8 +1572,8 @@ namespace Thetis
 
             state = new VstStateFile();
             state.SdkAvailable = SdkAvailable;
-            state.Rx = ToPersistentState(rxChain);
-            state.Tx = ToPersistentState(txChain);
+            state.Rx = ToPersistentState(VstChainKind.Rx, rxChain);
+            state.Tx = ToPersistentState(VstChainKind.Tx, txChain);
             return true;
         }
 
@@ -1466,11 +1721,52 @@ namespace Thetis
             return state;
         }
 
-        private static void ApplyChainState(VstChainKind kind, VstChainState chainState)
+        internal static VstChainState ToPersistentState(VstChainKind kind, VstChainInfo chainInfo)
+        {
+            VstChainState state = ToPersistentState(chainInfo);
+            if (chainInfo == null)
+                return state;
+
+            state.Plugins = BuildPersistentPlugins(kind, chainInfo.Plugins ?? new List<VstPluginState>());
+            return state;
+        }
+
+        private static List<VstPluginState> BuildPersistentPlugins(VstChainKind kind, List<VstPluginState> loadedPlugins)
+        {
+            List<VstPluginState> requested = _requestedPluginsByKind[(int)kind];
+            Dictionary<int, VstPluginState> failed = _failedPluginsByKind[(int)kind];
+            if (requested == null || requested.Count == 0 || failed == null || failed.Count == 0)
+                return loadedPlugins ?? new List<VstPluginState>();
+
+            List<VstPluginState> result = new List<VstPluginState>();
+            int loadedIdx = 0;
+            for (int i = 0; i < requested.Count; i++)
+            {
+                VstPluginState requestedPlugin = requested[i];
+                if (requestedPlugin == null || string.IsNullOrEmpty(requestedPlugin.Path))
+                    continue;
+
+                if (failed.ContainsKey(i))
+                {
+                    result.Add(requestedPlugin);
+                }
+                else if (loadedPlugins != null && loadedIdx < loadedPlugins.Count)
+                {
+                    result.Add(loadedPlugins[loadedIdx++]);
+                }
+            }
+            return result;
+        }
+
+        private static Dictionary<int, VstPluginState> ApplyChainState(VstChainKind kind, VstChainState chainState)
         {
             int[] addedIndexes;
+            Dictionary<int, VstPluginState> failedPlugins = new Dictionary<int, VstPluginState>();
 
-            if (chainState == null) return;
+            _requestedPluginsByKind[(int)kind] = null;
+            _failedPluginsByKind[(int)kind] = null;
+
+            if (chainState == null) return failedPlugins;
 
             NativeClearChain(kind);
             NativeSetChainGain(kind, chainState.Gain);
@@ -1479,7 +1775,9 @@ namespace Thetis
                 NativeSetPipelineLatencyFloor(kind, chainState.LatencyFloor);
 
             if (chainState.Plugins == null)
-                return;
+                return failedPlugins;
+
+            _requestedPluginsByKind[(int)kind] = new List<VstPluginState>(chainState.Plugins);
 
             addedIndexes = new int[chainState.Plugins.Count];
             for (int i = 0; i < addedIndexes.Length; i++)
@@ -1491,7 +1789,14 @@ namespace Thetis
 
                 if (pluginState == null || string.IsNullOrEmpty(pluginState.Path)) continue;
                 addedIndexes[i] = NativeAddPlugin(kind, pluginState.Path, pluginState.ClassId);
+                if (addedIndexes[i] < 0)
+                {
+                    pluginState.LoadState = VstPluginLoadState.Failed;
+                    failedPlugins[i] = pluginState;
+                }
             }
+
+            _failedPluginsByKind[(int)kind] = failedPlugins;
 
             for (int i = 0; i < chainState.Plugins.Count; i++)
             {
@@ -1508,6 +1813,7 @@ namespace Thetis
             }
 
             EnforceRestoredChainState(kind, chainState, addedIndexes);
+            return failedPlugins;
         }
 
         private static void EnforceRestoredChainState(VstChainKind kind, VstChainState chainState, int[] addedIndexes)

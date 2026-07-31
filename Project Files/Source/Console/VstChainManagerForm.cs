@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
@@ -45,8 +46,11 @@ namespace Thetis
             public Button ToggleBypassButton;
             public Button OpenEditorButton;
             public Button RefreshButton;
+            public Button ExportButton;
+            public Button ImportButton;
             public TextBox DetailTextBox;
             public VstChainInfo LastChainInfo;
+            public string LastTrackingSignature;
             public bool RefreshInProgress;
             public bool RefreshPending;
             public int PendingPreferredIndex = -1;
@@ -68,8 +72,8 @@ namespace Thetis
             Text = "VST Chains";
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             StartPosition = FormStartPosition.CenterParent;
-            MinimumSize = new Size(820, 420);
-            Size = new Size(1024, 560);
+            MinimumSize = new Size(820, 520);
+            Size = new Size(1024, 620);
             ShowInTaskbar = false;
 
             TableLayoutPanel rootPanel = new TableLayoutPanel();
@@ -129,6 +133,8 @@ namespace Thetis
             rootPanel.Controls.Add(headerPanel, 0, 0);
             rootPanel.Controls.Add(_tabControl, 0, 1);
             Controls.Add(rootPanel);
+
+            VstHost.ChainStateChanged += OnChainStateChanged;
 
             Shown += delegate { _statusTimer.Start(); RefreshChains(); };
             Activated += delegate { RefreshChains(); };
@@ -272,6 +278,7 @@ namespace Thetis
             buttonPanel.FlowDirection = FlowDirection.TopDown;
             buttonPanel.WrapContents = false;
 
+
             page.AddButton = CreateButton("Add VST3...");
             page.AddButton.Click += delegate { AddPluginFromCatalog(page); };
             buttonPanel.Controls.Add(page.AddButton);
@@ -303,6 +310,14 @@ namespace Thetis
             page.RefreshButton = CreateButton("Refresh");
             page.RefreshButton.Click += delegate { RefreshChainPageAsync(page); };
             buttonPanel.Controls.Add(page.RefreshButton);
+
+            page.ExportButton = CreateButton("Export Chain");
+            page.ExportButton.Click += delegate { ExportChain(page); };
+            buttonPanel.Controls.Add(page.ExportButton);
+
+            page.ImportButton = CreateButton("Import Chain");
+            page.ImportButton.Click += delegate { ImportChain(page); };
+            buttonPanel.Controls.Add(page.ImportButton);
 
             page.DeferredRefreshTimer = new System.Windows.Forms.Timer();
             page.DeferredRefreshTimer.Interval = DeferredUiRefreshDelayMs;
@@ -450,6 +465,90 @@ namespace Thetis
             return 0;
         }
 
+        private static bool IsStubRow(VstPluginState plugin)
+        {
+            return plugin != null && plugin.LoadState == VstPluginLoadState.Failed;
+        }
+
+        private static int GetNativePluginIndex(ChainPage page, int rowIndex)
+        {
+            if (rowIndex < 0)
+                return -1;
+
+            List<VstPluginState> requested = VstHost.GetRequestedPlugins(page.Kind);
+            if (requested == null || requested.Count == 0)
+                return rowIndex;
+
+            HashSet<string> failedPaths = new HashSet<string>();
+            Dictionary<int, VstPluginState> failed = VstHost.GetFailedPlugins(page.Kind);
+            if (failed != null)
+            {
+                foreach (VstPluginState s in failed.Values)
+                    failedPaths.Add(s.Path ?? string.Empty);
+            }
+
+            int row = 0;
+            int nativeIdx = 0;
+            for (int ri = 0; ri < requested.Count; ri++)
+            {
+                VstPluginState p = requested[ri];
+                if (p == null || string.IsNullOrEmpty(p.Path))
+                    continue;
+
+                bool isFailed = failedPaths.Contains(p.Path ?? string.Empty);
+                if (row == rowIndex)
+                    return isFailed ? -1 : nativeIdx;
+
+                if (!isFailed)
+                    nativeIdx++;
+                row++;
+            }
+            return -1;
+        }
+
+        private static bool ChainStructureEquals(VstChainInfo previous, VstChainInfo current)
+        {
+            if (previous == null || current == null)
+                return false;
+            if (previous.Plugins == null || current.Plugins == null)
+                return previous.Plugins == null && current.Plugins == null;
+            if (previous.Plugins.Count != current.Plugins.Count)
+                return false;
+
+            for (int i = 0; i < current.Plugins.Count; i++)
+            {
+                string prevPath = previous.Plugins[i] != null ? previous.Plugins[i].Path : null;
+                string currPath = current.Plugins[i] != null ? current.Plugins[i].Path : null;
+                if (!string.Equals(prevPath, currPath, StringComparison.Ordinal))
+                    return false;
+            }
+            return true;
+        }
+
+        private static string BuildTrackingSignature(List<VstPluginState> requested, Dictionary<int, VstPluginState> failed)
+        {
+            if (requested == null || requested.Count == 0)
+                return string.Empty;
+
+            HashSet<string> failedPaths = new HashSet<string>();
+            if (failed != null)
+            {
+                foreach (VstPluginState s in failed.Values)
+                    failedPaths.Add(s.Path ?? string.Empty);
+            }
+
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            for (int i = 0; i < requested.Count; i++)
+            {
+                VstPluginState p = requested[i];
+                if (p == null || string.IsNullOrEmpty(p.Path))
+                    continue;
+                sb.Append(p.Path);
+                sb.Append(failedPaths.Contains(p.Path) ? "F;" : "L;");
+            }
+            return sb.ToString();
+        }
+
         private void ApplyChainPageRefresh(ChainPage page, VstChainInfo chainInfo, int preferredIndex)
         {
             int selectedIndex = preferredIndex;
@@ -458,6 +557,12 @@ namespace Thetis
 
             try
             {
+                List<VstPluginState> requested = VstHost.GetRequestedPlugins(page.Kind);
+                Dictionary<int, VstPluginState> failed = VstHost.GetFailedPlugins(page.Kind);
+                string trackingSignature = BuildTrackingSignature(requested, failed);
+                bool structureUnchanged = ChainStructureEquals(page.LastChainInfo, chainInfo);
+                bool trackingUnchanged = string.Equals(trackingSignature, page.LastTrackingSignature, StringComparison.Ordinal);
+
                 page.LastChainInfo = chainInfo;
                 page.ChainBypassCheckBox.Checked = chainInfo.Bypass;
                 page.GainUpDown.Value = ClampDecimal(chainInfo.Gain, page.GainUpDown.Minimum, page.GainUpDown.Maximum);
@@ -466,34 +571,102 @@ namespace Thetis
                     page.LatencyFloorUpDown.Value = chainInfo.LatencyFloorBlocks;
                 UpdateChainStatusLabel(page, chainInfo.Ready, chainInfo.Plugins.Count, chainInfo.HostState);
 
+                if (structureUnchanged && trackingUnchanged)
+                {
+                    UpdateSelection(page);
+                    return;
+                }
+
+                page.LastTrackingSignature = trackingSignature;
                 page.PluginListView.BeginUpdate();
                 page.PluginListView.Items.Clear();
 
-                for (int i = 0; i < chainInfo.Plugins.Count; i++)
+                if (requested != null && requested.Count > 0)
                 {
-                    VstPluginState plugin = chainInfo.Plugins[i];
-                    ListViewItem item = new ListViewItem((i + 1).ToString());
-                    item.SubItems.Add(VstHost.GetPluginDisplayName(plugin));
-                    item.SubItems.Add(VstHost.GetPluginFormatDisplayName(plugin.Format));
-                    item.SubItems.Add(VstHost.GetLoadStateDisplayName(plugin.LoadState));
-                    item.SubItems.Add(plugin.Enabled ? "Yes" : "No");
-                    item.SubItems.Add(plugin.Bypass ? "Yes" : "No");
-                    item.SubItems.Add(plugin.Path ?? string.Empty);
-                    item.Tag = plugin;
-                    page.PluginListView.Items.Add(item);
-                }
+                    HashSet<string> failedPaths = new HashSet<string>();
+                    if (failed != null)
+                    {
+                        foreach (VstPluginState s in failed.Values)
+                            failedPaths.Add(s.Path ?? string.Empty);
+                    }
 
-                for (int i = chainInfo.Plugins.Count; i < MaxPluginsPerChain; i++)
+                    int loadedIdx = 0;
+                    for (int ri = 0; ri < requested.Count; ri++)
+                    {
+                        VstPluginState requestedPlugin = requested[ri];
+                        if (requestedPlugin == null || string.IsNullOrEmpty(requestedPlugin.Path))
+                            continue;
+
+                        bool isFailed = failedPaths.Contains(requestedPlugin.Path ?? string.Empty);
+                        if (isFailed)
+                        {
+                            ListViewItem item = new ListViewItem((ri + 1).ToString());
+                            item.SubItems.Add(VstHost.GetPluginDisplayName(requestedPlugin));
+                            item.SubItems.Add(VstHost.GetPluginFormatDisplayName(requestedPlugin.Format));
+                            item.SubItems.Add("Failed");
+                            item.SubItems.Add("No");
+                            item.SubItems.Add("Yes");
+                            item.SubItems.Add("Not Installed");
+                            item.Tag = requestedPlugin;
+                            item.ForeColor = SystemColors.GrayText;
+                            page.PluginListView.Items.Add(item);
+                        }
+                        else if (loadedIdx < chainInfo.Plugins.Count)
+                        {
+                            VstPluginState plugin = chainInfo.Plugins[loadedIdx++];
+                            ListViewItem item = new ListViewItem((ri + 1).ToString());
+                            item.SubItems.Add(VstHost.GetPluginDisplayName(plugin));
+                            item.SubItems.Add(VstHost.GetPluginFormatDisplayName(plugin.Format));
+                            item.SubItems.Add(VstHost.GetLoadStateDisplayName(plugin.LoadState));
+                            item.SubItems.Add(plugin.Enabled ? "Yes" : "No");
+                            item.SubItems.Add(plugin.Bypass ? "Yes" : "No");
+                            item.SubItems.Add(plugin.Path ?? string.Empty);
+                            item.Tag = plugin;
+                            page.PluginListView.Items.Add(item);
+                        }
+                    }
+
+                    for (int i = requested.Count; i < MaxPluginsPerChain; i++)
+                    {
+                        ListViewItem item = new ListViewItem((i + 1).ToString());
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.ForeColor = SystemColors.GrayText;
+                        page.PluginListView.Items.Add(item);
+                    }
+                }
+                else
                 {
-                    ListViewItem item = new ListViewItem((i + 1).ToString());
-                    item.SubItems.Add(string.Empty);
-                    item.SubItems.Add(string.Empty);
-                    item.SubItems.Add(string.Empty);
-                    item.SubItems.Add(string.Empty);
-                    item.SubItems.Add(string.Empty);
-                    item.SubItems.Add(string.Empty);
-                    item.ForeColor = SystemColors.GrayText;
-                    page.PluginListView.Items.Add(item);
+                    for (int i = 0; i < chainInfo.Plugins.Count; i++)
+                    {
+                        VstPluginState plugin = chainInfo.Plugins[i];
+                        ListViewItem item = new ListViewItem((i + 1).ToString());
+                        item.SubItems.Add(VstHost.GetPluginDisplayName(plugin));
+                        item.SubItems.Add(VstHost.GetPluginFormatDisplayName(plugin.Format));
+                        item.SubItems.Add(VstHost.GetLoadStateDisplayName(plugin.LoadState));
+                        item.SubItems.Add(plugin.Enabled ? "Yes" : "No");
+                        item.SubItems.Add(plugin.Bypass ? "Yes" : "No");
+                        item.SubItems.Add(plugin.Path ?? string.Empty);
+                        item.Tag = plugin;
+                        page.PluginListView.Items.Add(item);
+                    }
+
+                    for (int i = chainInfo.Plugins.Count; i < MaxPluginsPerChain; i++)
+                    {
+                        ListViewItem item = new ListViewItem((i + 1).ToString());
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.SubItems.Add(string.Empty);
+                        item.ForeColor = SystemColors.GrayText;
+                        page.PluginListView.Items.Add(item);
+                    }
                 }
 
                 page.PluginListView.EndUpdate();
@@ -572,6 +745,8 @@ namespace Thetis
         {
             if (disposing)
             {
+                VstHost.ChainStateChanged -= OnChainStateChanged;
+
                 if (_statusTimer != null)
                 {
                     _statusTimer.Stop();
@@ -582,6 +757,21 @@ namespace Thetis
             }
 
             base.Dispose(disposing);
+        }
+
+        private void OnChainStateChanged(VstChainKind kind)
+        {
+            if (IsDisposed || Disposing || !IsHandleCreated)
+                return;
+
+            BeginInvoke((MethodInvoker)delegate
+            {
+                if (IsDisposed || Disposing)
+                    return;
+
+                ChainPage page = kind == VstChainKind.Rx ? _rxPage : _txPage;
+                RefreshChainPageAsync(page);
+            });
         }
 
         private static void DisposeChainPageTimer(ChainPage page)
@@ -601,14 +791,15 @@ namespace Thetis
             bool hasSelection = plugin != null;
             int pluginCount = GetDisplayedPluginCount(page);
             bool chainHasCapacity = pluginCount < MaxPluginsPerChain;
+            bool isStub = IsStubRow(plugin);
 
             page.AddButton.Enabled = chainHasCapacity;
             page.RemoveButton.Enabled = hasSelection;
-            page.MoveUpButton.Enabled = hasSelection && selectedIndex > 0;
-            page.MoveDownButton.Enabled = hasSelection && selectedIndex >= 0 && selectedIndex < pluginCount - 1;
-            page.ToggleEnabledButton.Enabled = hasSelection;
-            page.ToggleBypassButton.Enabled = hasSelection;
-            page.OpenEditorButton.Enabled = hasSelection && plugin != null && plugin.LoadState == VstPluginLoadState.Active;
+            page.MoveUpButton.Enabled = hasSelection && !isStub && selectedIndex > 0;
+            page.MoveDownButton.Enabled = hasSelection && !isStub && selectedIndex >= 0 && selectedIndex < pluginCount - 1;
+            page.ToggleEnabledButton.Enabled = hasSelection && !isStub;
+            page.ToggleBypassButton.Enabled = hasSelection && !isStub;
+            page.OpenEditorButton.Enabled = hasSelection && !isStub && plugin != null && plugin.LoadState == VstPluginLoadState.Active;
 
             if (!hasSelection)
             {
@@ -618,8 +809,8 @@ namespace Thetis
                 return;
             }
 
-            page.ToggleEnabledButton.Text = plugin.Enabled ? "Disable" : "Enable";
-            page.ToggleBypassButton.Text = plugin.Bypass ? "Unbypass" : "Bypass";
+            page.ToggleEnabledButton.Text = isStub ? "Enable" : (plugin.Enabled ? "Disable" : "Enable");
+            page.ToggleBypassButton.Text = isStub ? "Bypass" : (plugin.Bypass ? "Unbypass" : "Bypass");
             page.DetailTextBox.Text = string.Format(
                 "{0}\r\nFormat: {1}\r\nLoad state: {2}\r\nEnabled: {3}\r\nBypass: {4}\r\nPath: {5}",
                 VstHost.GetPluginDisplayName(plugin),
@@ -677,10 +868,25 @@ namespace Thetis
         private void RemoveSelectedPlugin(ChainPage page)
         {
             int selectedIndex = GetSelectedIndex(page);
-            if (selectedIndex < 0)
+            VstPluginState plugin = GetSelectedPlugin(page);
+
+            if (selectedIndex < 0 || plugin == null)
                 return;
 
-            if (!VstHost.RemovePlugin(page.Kind, selectedIndex))
+            if (IsStubRow(plugin))
+            {
+                if (!VstHost.RemoveRequestedPlugin(page.Kind, plugin.Path))
+                {
+                    MessageBox.Show(this, "The missing plugin entry could not be removed.", "VST Chains", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                RefreshChainPageAsync(page, Math.Max(0, selectedIndex - 1));
+                return;
+            }
+
+            int nativeIndex = GetNativePluginIndex(page, selectedIndex);
+            if (nativeIndex < 0 || !VstHost.RemovePlugin(page.Kind, nativeIndex))
             {
                 MessageBox.Show(this, "The native host could not remove the selected plugin.", "VST Chains", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -697,7 +903,13 @@ namespace Thetis
             if (selectedIndex < 0)
                 return;
 
-            if (!VstHost.MovePlugin(page.Kind, selectedIndex, targetIndex))
+            int fromNativeIndex = GetNativePluginIndex(page, selectedIndex);
+            int toNativeIndex = GetNativePluginIndex(page, targetIndex);
+
+            if (fromNativeIndex < 0 || toNativeIndex < 0)
+                return;
+
+            if (!VstHost.MovePlugin(page.Kind, fromNativeIndex, toNativeIndex))
             {
                 MessageBox.Show(this, "The native host could not reorder the selected plugin.", "VST Chains", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -711,10 +923,11 @@ namespace Thetis
             int selectedIndex = GetSelectedIndex(page);
             VstPluginState plugin = GetSelectedPlugin(page);
 
-            if (selectedIndex < 0 || plugin == null)
+            if (selectedIndex < 0 || plugin == null || IsStubRow(plugin))
                 return;
 
-            if (!VstHost.SetPluginEnabled(page.Kind, selectedIndex, !plugin.Enabled))
+            int nativeIndex = GetNativePluginIndex(page, selectedIndex);
+            if (nativeIndex < 0 || !VstHost.SetPluginEnabled(page.Kind, nativeIndex, !plugin.Enabled))
             {
                 MessageBox.Show(this, "The native host could not update the plugin enabled state.", "VST Chains", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -728,10 +941,11 @@ namespace Thetis
             int selectedIndex = GetSelectedIndex(page);
             VstPluginState plugin = GetSelectedPlugin(page);
 
-            if (selectedIndex < 0 || plugin == null)
+            if (selectedIndex < 0 || plugin == null || IsStubRow(plugin))
                 return;
 
-            if (!VstHost.SetPluginBypass(page.Kind, selectedIndex, !plugin.Bypass))
+            int nativeIndex = GetNativePluginIndex(page, selectedIndex);
+            if (nativeIndex < 0 || !VstHost.SetPluginBypass(page.Kind, nativeIndex, !plugin.Bypass))
             {
                 MessageBox.Show(this, "The native host could not update the plugin bypass state.", "VST Chains", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -745,10 +959,11 @@ namespace Thetis
             int selectedIndex = GetSelectedIndex(page);
             VstPluginState plugin = GetSelectedPlugin(page);
 
-            if (selectedIndex < 0 || plugin == null)
+            if (selectedIndex < 0 || plugin == null || IsStubRow(plugin))
                 return;
 
-            if (plugin.LoadState != VstPluginLoadState.Active)
+            int nativeIndex = GetNativePluginIndex(page, selectedIndex);
+            if (nativeIndex < 0 || plugin.LoadState != VstPluginLoadState.Active)
             {
                 MessageBox.Show(this, "Only loaded plugins can open an editor.", "VST Chains", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
@@ -760,7 +975,7 @@ namespace Thetis
             page.OpenEditorButton.Enabled = false;
             UseWaitCursor = true;
 
-            Task.Run(() => VstHost.OpenPluginEditorWindow(page.Kind, selectedIndex)).ContinueWith(task =>
+            Task.Run(() => VstHost.OpenPluginEditorWindow(page.Kind, nativeIndex)).ContinueWith(task =>
             {
                 if (IsDisposed || Disposing)
                     return;
@@ -777,6 +992,134 @@ namespace Thetis
                     }
                 });
             }, TaskScheduler.Default);
+        }
+
+        private void ExportChain(ChainPage page)
+        {
+            VstProfileState profileState = new VstProfileState();
+            VstChainState rxState = VstHost.CaptureChainPersistentState(VstChainKind.Rx);
+            VstChainState txState = VstHost.CaptureChainPersistentState(VstChainKind.Tx);
+            if (rxState != null && rxState.Plugins != null && rxState.Plugins.Count > 0)
+                profileState.Rx = rxState;
+            if (txState != null && txState.Plugins != null && txState.Plugins.Count > 0)
+                profileState.Tx = txState;
+
+            string activeProfile = VstHost.GetCurrentProfileName();
+            string vstDir = VstHost.GetVstDirectoryPath();
+
+            string suggestedName = string.IsNullOrEmpty(activeProfile)
+                ? "vst_profile.json"
+                : "vst_chains_tx_" + activeProfile + ".json";
+
+            using (SaveFileDialog dialog = new SaveFileDialog())
+            {
+                dialog.Title = "Export Full Profile";
+                dialog.Filter = "TX Profile Chains (vst_chains_tx_*.json)|vst_chains_tx_*.json|All JSON Files (*.json)|*.json|All Files (*.*)|*.*";
+                dialog.DefaultExt = "json";
+                dialog.FileName = suggestedName;
+                if (!string.IsNullOrEmpty(vstDir) && Directory.Exists(vstDir))
+                    dialog.InitialDirectory = vstDir;
+
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                    return;
+
+                try
+                {
+                    string json = Newtonsoft.Json.JsonConvert.SerializeObject(profileState, Newtonsoft.Json.Formatting.Indented);
+                    File.WriteAllText(dialog.FileName, json);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Failed to export chain: " + ex.Message, "Export Error",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void ImportChain(ChainPage page)
+        {
+            string chainName = VstHost.GetChainDisplayName(page.Kind);
+            string vstDir = VstHost.GetVstDirectoryPath();
+
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Import " + chainName + " Chain";
+                dialog.Filter = "TX Profile Chains (vst_chains_tx_*.json)|vst_chains_tx_*.json|All JSON Files (*.json)|*.json|All Files (*.*)|*.*";
+                dialog.DefaultExt = "json";
+                dialog.CheckFileExists = true;
+                if (!string.IsNullOrEmpty(vstDir) && Directory.Exists(vstDir))
+                    dialog.InitialDirectory = vstDir;
+
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                    return;
+
+                try
+                {
+                    string json = File.ReadAllText(dialog.FileName);
+                    Newtonsoft.Json.Linq.JObject obj = Newtonsoft.Json.Linq.JObject.Parse(json);
+                    Dictionary<int, VstPluginState> rxFailed = null;
+                    Dictionary<int, VstPluginState> txFailed = null;
+
+                    if (obj.Property("Rx") != null || obj.Property("Tx") != null)
+                    {
+                        VstProfileState profileState = Newtonsoft.Json.JsonConvert.DeserializeObject<VstProfileState>(json);
+                        if (profileState == null || (profileState.Rx == null && profileState.Tx == null))
+                        {
+                            MessageBox.Show(this, "Failed to parse the profile chain file.", "Import Error",
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+                        if (profileState.Rx != null)
+                            rxFailed = VstHost.ApplyChainPersistentState(VstChainKind.Rx, profileState.Rx);
+                        if (profileState.Tx != null)
+                            txFailed = VstHost.ApplyChainPersistentState(VstChainKind.Tx, profileState.Tx);
+                    }
+                    else
+                    {
+                        VstChainState state = Newtonsoft.Json.JsonConvert.DeserializeObject<VstChainState>(json);
+                        if (state == null)
+                        {
+                            MessageBox.Show(this, "Failed to parse the chain file.", "Import Error",
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+                        if (page.Kind == VstChainKind.Rx)
+                            rxFailed = VstHost.ApplyChainPersistentState(VstChainKind.Rx, state);
+                        else
+                            txFailed = VstHost.ApplyChainPersistentState(VstChainKind.Tx, state);
+                    }
+
+                    RefreshChainPageAsync(_rxPage);
+                    RefreshChainPageAsync(_txPage);
+
+                    List<string> failedNames = new List<string>();
+                    if (rxFailed != null)
+                    {
+                        foreach (var kv in rxFailed)
+                            failedNames.Add(!string.IsNullOrEmpty(kv.Value.Name) ? kv.Value.Name : kv.Value.Path);
+                    }
+                    if (txFailed != null)
+                    {
+                        foreach (var kv in txFailed)
+                            failedNames.Add(!string.IsNullOrEmpty(kv.Value.Name) ? kv.Value.Name : kv.Value.Path);
+                    }
+
+                    if (failedNames.Count > 0)
+                    {
+                        string msg = "The following plugins could not be loaded:\n\n  - "
+                            + string.Join("\n  - ", failedNames)
+                            + "\n\nThe plugins may not be installed on this system.\n"
+                            + "They are shown at their original position with 'Failed' status.";
+                        MessageBox.Show(this, msg, "Plugins Not Found",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Failed to import chain: " + ex.Message, "Import Error",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
         }
 
         private static decimal ClampDecimal(double value, decimal minimum, decimal maximum)
