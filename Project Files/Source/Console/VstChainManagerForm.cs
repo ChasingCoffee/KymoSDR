@@ -525,6 +525,35 @@ namespace Thetis
             return true;
         }
 
+        private static bool ChainPluginStatesEqual(VstChainInfo previous, VstChainInfo current)
+        {
+            if (previous == null || current == null)
+                return false;
+            if (previous.Plugins == null || current.Plugins == null)
+                return previous.Plugins == null && current.Plugins == null;
+            if (previous.Plugins.Count != current.Plugins.Count)
+                return false;
+
+            for (int i = 0; i < current.Plugins.Count; i++)
+            {
+                VstPluginState prev = previous.Plugins[i];
+                VstPluginState curr = current.Plugins[i];
+                if (prev == null || curr == null)
+                {
+                    if (prev != null || curr != null)
+                        return false;
+                    continue;
+                }
+
+                if (prev.Enabled != curr.Enabled ||
+                    prev.Bypass != curr.Bypass ||
+                    prev.LoadState != curr.LoadState)
+                    return false;
+            }
+
+            return true;
+        }
+
         private static string BuildTrackingSignature(List<VstPluginState> requested, Dictionary<int, VstPluginState> failed)
         {
             if (requested == null || requested.Count == 0)
@@ -561,6 +590,7 @@ namespace Thetis
                 Dictionary<int, VstPluginState> failed = VstHost.GetFailedPlugins(page.Kind);
                 string trackingSignature = BuildTrackingSignature(requested, failed);
                 bool structureUnchanged = ChainStructureEquals(page.LastChainInfo, chainInfo);
+                bool stateUnchanged = ChainPluginStatesEqual(page.LastChainInfo, chainInfo);
                 bool trackingUnchanged = string.Equals(trackingSignature, page.LastTrackingSignature, StringComparison.Ordinal);
 
                 page.LastChainInfo = chainInfo;
@@ -571,7 +601,7 @@ namespace Thetis
                     page.LatencyFloorUpDown.Value = chainInfo.LatencyFloorBlocks;
                 UpdateChainStatusLabel(page, chainInfo.Ready, chainInfo.Plugins.Count, chainInfo.HostState);
 
-                if (structureUnchanged && trackingUnchanged)
+                if (structureUnchanged && stateUnchanged && trackingUnchanged)
                 {
                     UpdateSelection(page);
                     return;
