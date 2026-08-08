@@ -23,6 +23,7 @@
 <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
 <?define FilesPath = "..\..\Bin\$(var.Platform)\$(var.Configuration)\" ?>
 <?endif ?>
+<?define LspPath = "..\..\lib\lsp\" ?>
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
       xmlns:fire="http://schemas.microsoft.com/wix/FirewallExtension">
@@ -63,6 +64,7 @@
 
     <Feature Id="ProductFeature" Title="Thetis" Level="1" ConfigurableDirectory="INSTALLFOLDER">
       <ComponentGroupRef Id="ProductComponents" />
+      <ComponentGroupRef Id="LspComponents" />
       <ComponentRef Id="StartMenuShortcut" />
       <ComponentRef Id="DesktopShortcut" />
     </Feature>
@@ -122,6 +124,18 @@
 		  </Directory>
         </Directory>
       </Directory>
+
+      <?if $(var.Platform) = x64 ?>
+      <Directory Id="CommonFiles64Folder">
+        <Directory Id="VST3Folder" Name="VST3">
+        </Directory>
+      </Directory>
+      <?else ?>
+      <Directory Id="CommonFilesFolder">
+        <Directory Id="VST3Folder" Name="VST3">
+        </Directory>
+      </Directory>
+      <?endif ?>
 
       <Directory Id="ProgramMenuFolder">
         <Directory Id="OpenHPSDRShortcutsDir" Name="OpenHPSDR">
@@ -843,6 +857,45 @@
             />
 		</Component>
 	</ComponentGroup>
+
+	<!-- LSP VST3 plugin suite installed to Common Files\VST3.
+	     Components are Permanent so uninstalling Thetis does not remove plugin
+	     files that other VST3 hosts may also use. -->
+    <ComponentGroup Id="LspComponents" Directory="VST3Folder">
+      <Component Id="LspPluginsVST3" Guid="*" Permanent="yes">
+        <File Id="LspPluginsVST3File"
+              Source="$(var.LspPath)lsp-plugins.vst3"
+              KeyPath="yes"
+              Checksum="yes" />
+      </Component>
+      <Component Id="LspLibwinpthreadDLL" Guid="*" Permanent="yes">
+        <File Id="LspLibwinpthreadDLLFile"
+              Source="$(var.LspPath)libwinpthread-1.dll"
+              KeyPath="yes"
+              Checksum="yes" />
+      </Component>
+      <Component Id="LspR3dWglLibDLL" Guid="*" Permanent="yes">
+        <File Id="LspR3dWglLibDLLFile"
+              Source="$(var.LspPath)lsp-r3d-wgl-lib.dll"
+              KeyPath="yes"
+              Checksum="yes" />
+      </Component>
+      <Component Id="LspAttribution" Guid="*" Permanent="yes">
+        <File Id="LspAttributionTXT"
+              Source="$(var.LspPath)ATTRIBUTION.txt"
+              KeyPath="yes" />
+      </Component>
+      <Component Id="LspLicenseLgpl" Guid="*" Permanent="yes">
+        <File Id="LspLicenseLgplTXT"
+              Source="$(var.LspPath)LICENSE-LGPL-3.0.txt"
+              KeyPath="yes" />
+      </Component>
+      <Component Id="LspLicenseWinpthread" Guid="*" Permanent="yes">
+        <File Id="LspLicenseWinpthreadTXT"
+              Source="$(var.LspPath)LICENSE-libwinpthread.txt"
+              KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
 
     <Binary Id="InstallSkins" SourceFile="OpenHPSDR_Skins.exe" />
     <CustomAction Id="InstallSkins_CA" BinaryKey="InstallSkins"

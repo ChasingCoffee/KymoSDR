@@ -25210,7 +25210,7 @@ namespace Thetis
             }
             else if (mt == MeterType.BAND_BUTTONS || mt == MeterType.MODE_BUTTONS || mt == MeterType.FILTER_BUTTONS ||
                      mt == MeterType.ANTENNA_BUTTONS || mt == MeterType.TUNESTEP_BUTTONS || mt == MeterType.DISCORD_BUTTONS ||
-                     mt == MeterType.OTHER_BUTTONS || mt == MeterType.VOICE_RECORD_PLAY_BUTTONS)
+                     mt == MeterType.OTHER_BUTTONS || mt == MeterType.VOICE_RECORD_PLAY_BUTTONS || mt == MeterType.TX_VST_PLUGINS || mt == MeterType.RX_VST_PLUGINS)
             {
                 if (mt == MeterType.VOICE_RECORD_PLAY_BUTTONS)
                 {
@@ -25717,6 +25717,13 @@ namespace Thetis
             return igs;
         }
         private bool _ignoreMeterItemChangeEvents = false;
+        private System.Drawing.Font makeSafeFont(string family, float size, FontStyle style)
+        {
+            if (string.IsNullOrEmpty(family)) family = "Trebuchet MS";
+            if (size <= 0f || float.IsNaN(size) || float.IsInfinity(size)) size = 8.25f;
+            return new System.Drawing.Font(family, size, style);
+        }
+
         private void updateItemSettingsControlsForSelected()
         {
             if (initializing) return;
@@ -25737,13 +25744,12 @@ namespace Thetis
             if (igs == null) return;
 
             _ignoreMeterItemChangeEvents = true;
-
             // setup any meter that has variable % buttons, ignore those that do not
             if (mt != MeterType.ROTATOR && mt != MeterType.SIGNAL_TEXT && mt != MeterType.VFO_DISPLAY && mt != MeterType.CLOCK &&
                 mt != MeterType.TEXT_OVERLAY && mt != MeterType.SPACER && mt != MeterType.LED &&
                 mt != MeterType.BAND_BUTTONS && mt != MeterType.MODE_BUTTONS && mt != MeterType.FILTER_BUTTONS && mt != MeterType.ANTENNA_BUTTONS &&
                 mt != MeterType.HISTORY && mt != MeterType.TUNESTEP_BUTTONS && mt != MeterType.DISCORD_BUTTONS && mt != MeterType.FILTER_DISPLAY &&
-                mt != MeterType.DIAL_DISPLAY && mt != MeterType.OTHER_BUTTONS && mt != MeterType.WAVE_RECORD && mt != MeterType.VOICE_RECORD_PLAY_BUTTONS
+                mt != MeterType.DIAL_DISPLAY && mt != MeterType.OTHER_BUTTONS && mt != MeterType.WAVE_RECORD && mt != MeterType.VOICE_RECORD_PLAY_BUTTONS && mt != MeterType.TX_VST_PLUGINS && mt != MeterType.RX_VST_PLUGINS
                 )
             {
                 switch (m.MeterVariables(mt))
@@ -25874,7 +25880,7 @@ namespace Thetis
             }
             else if (mt == MeterType.BAND_BUTTONS || mt == MeterType.MODE_BUTTONS || mt == MeterType.FILTER_BUTTONS ||
                      mt == MeterType.ANTENNA_BUTTONS || mt == MeterType.TUNESTEP_BUTTONS || mt == MeterType.DISCORD_BUTTONS ||
-                     mt == MeterType.OTHER_BUTTONS || mt == MeterType.VOICE_RECORD_PLAY_BUTTONS)
+                     mt == MeterType.OTHER_BUTTONS || mt == MeterType.VOICE_RECORD_PLAY_BUTTONS || mt == MeterType.TX_VST_PLUGINS || mt == MeterType.RX_VST_PLUGINS)
             {
                 int columns = 1;
                 int max_buttons = 1;
@@ -25983,6 +25989,12 @@ namespace Thetis
                         if (nudBandButtons_columns.Value > 12) nudBandButtons_columns.Value = 12;
                         if (nudBandButtons_columns.Maximum != 12) nudBandButtons_columns.Maximum = 12;
                         break;
+                    case MeterType.TX_VST_PLUGINS:
+                    case MeterType.RX_VST_PLUGINS:
+                        columns = 1; // vst plugin lists are always a single column
+                        if (nudBandButtons_columns.Value > 1) nudBandButtons_columns.Value = 1;
+                        if (nudBandButtons_columns.Maximum != 1) nudBandButtons_columns.Maximum = 1;
+                        break;
                     case MeterType.OTHER_BUTTONS:
                         max_buttons = 0;
                         for (int n = 0; n < OtherButtonIdHelpers.MAX_BITFIELD_GROUP; n++)
@@ -26031,7 +26043,7 @@ namespace Thetis
                 chkButtonBox_fix_text_size.Checked = igs.GetSetting<bool>("buttonbox_fix_text_size", false, false, false, false);
                 chkButtonBox_use_icons.Checked = igs.GetSetting<bool>("buttonbox_use_icons", false, false, false, true);
 
-                _bandButtons_font = new Font(igs.FontFamily1, igs.FontSize1, igs.FontStyle1);
+                _bandButtons_font = makeSafeFont(igs.FontFamily1, igs.FontSize1, igs.FontStyle1);
                 chkBandButtons_fade_rx.Checked = igs.FadeOnRx;
                 chkBandButtons_fade_tx.Checked = igs.FadeOnTx;
 
@@ -26349,8 +26361,8 @@ namespace Thetis
                 txtTextOverlay_RXText.Text = igs.Text1;
                 txtTextOverlay_TXText.Text = igs.Text2;
 
-                _textOverlayFont1 = new Font(igs.FontFamily1, igs.FontSize1, igs.FontStyle1);
-                _textOverlayFont2 = new Font(igs.FontFamily2, igs.FontSize2, igs.FontStyle2);
+                _textOverlayFont1 = makeSafeFont(igs.FontFamily1, igs.FontSize1, igs.FontStyle1);
+                _textOverlayFont2 = makeSafeFont(igs.FontFamily2, igs.FontSize2, igs.FontStyle2);
 
                 nudTextOverlay_PanelPadding.Value = (decimal)igs.SpacerPadding;
 
@@ -26820,6 +26832,8 @@ namespace Thetis
             setupMMSettingsGroupBoxes(MeterType.MODE_BUTTONS, false);
             setupMMSettingsGroupBoxes(MeterType.BAND_BUTTONS, false);
             setupMMSettingsGroupBoxes(MeterType.DISCORD_BUTTONS, false);
+            setupMMSettingsGroupBoxes(MeterType.TX_VST_PLUGINS, false);
+            setupMMSettingsGroupBoxes(MeterType.RX_VST_PLUGINS, false);
             setupMMSettingsGroupBoxes(MeterType.HISTORY, false);
         }
         private void setupMMSettingsGroupBoxes(MeterType mt, bool all = true)
@@ -26918,6 +26932,8 @@ namespace Thetis
                 case MeterType.MODE_BUTTONS:
                 case MeterType.BAND_BUTTONS:
                 case MeterType.DISCORD_BUTTONS:
+                case MeterType.TX_VST_PLUGINS:
+                case MeterType.RX_VST_PLUGINS:
                     {
                         clrbtnButonBox_fontcolour.Visible = mt != MeterType.ANTENNA_BUTTONS;
                         chkButtonBox_use_icons.Visible = mt == MeterType.OTHER_BUTTONS;

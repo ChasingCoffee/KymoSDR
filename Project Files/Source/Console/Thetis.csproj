@@ -981,6 +981,7 @@
       <DependentUpon>frmLog.cs</DependentUpon>
     </EmbeddedResource>
     <None Include="Resources\cpu.png" />
+    <EmbeddedResource Include="Resources\DefaultVstCatalogPlugins.json" />
     <EmbeddedResource Include="Resources\star.png" />
     <EmbeddedResource Include="Resources\sun.png" />
     <EmbeddedResource Include="Resources\digital7.ttf" />

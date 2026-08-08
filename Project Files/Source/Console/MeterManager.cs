@@ -228,6 +228,8 @@ namespace Thetis
         OTHER_BUTTONS,
         WAVE_RECORD,
         VOICE_RECORD_PLAY_BUTTONS,
+        TX_VST_PLUGINS,
+        RX_VST_PLUGINS,
         ACG_MAX_MAG,
         LAST
     }
@@ -2195,6 +2197,8 @@ namespace Thetis
                 case MeterType.OTHER_BUTTONS: return 2;
                 case MeterType.WAVE_RECORD: return 2;
                 case MeterType.VOICE_RECORD_PLAY_BUTTONS: return 2;
+                case MeterType.TX_VST_PLUGINS: return 2;
+                case MeterType.RX_VST_PLUGINS: return 2;
 
                 case MeterType.ACG_MAX_MAG: return 0;
 
@@ -2253,6 +2257,8 @@ namespace Thetis
                 case MeterType.OTHER_BUTTONS: return "Other Buttons";
                 case MeterType.WAVE_RECORD: return "WaveList Player";
                 case MeterType.VOICE_RECORD_PLAY_BUTTONS: return "Voice Record/Play";
+                case MeterType.TX_VST_PLUGINS: return "TX VST Plugins";
+                case MeterType.RX_VST_PLUGINS: return "RX VST Plugins";
                 case MeterType.ACG_MAX_MAG: return "Max ADC Magnitude";
             }
 
@@ -6660,7 +6666,9 @@ namespace Thetis
                 DIAL_DISPLAY,
                 OTHER_BUTTONS,
                 WAVE_RECORD,
-                VOICE_RECORD_PLAY_BUTTONS
+                VOICE_RECORD_PLAY_BUTTONS,
+                TX_VST_PLUGINS,
+                RX_VST_PLUGINS
             }
 
             public class clsPercCache
@@ -13622,6 +13630,245 @@ namespace Thetis
                     base.HeightRatio = value;
                     setupButtons();
                 }
+            }
+        }
+        internal class clsVstPlugins : clsButtonBox
+        {
+            private const int MAX_PLUGINS = 8;
+            private static readonly object _chain_lock = new object();
+            private static readonly Dictionary<VstChainKind, VstChainInfo> _cached_chains = new Dictionary<VstChainKind, VstChainInfo>();
+            private static readonly Dictionary<VstChainKind, DateTime> _cached_chain_times = new Dictionary<VstChainKind, DateTime>();
+            private static readonly TimeSpan CHAIN_CACHE_TIME = TimeSpan.FromSeconds(1);
+
+            private clsMeter _owningmeter;
+            private bool _click_highlight;
+            private System.Timers.Timer _click_timer;
+            private readonly VstChainKind _chain_kind;
+            private readonly MeterItemType _item_type;
+
+            public clsVstPlugins(clsMeter owningmeter, VstChainKind kind, MeterItemType itemType)
+            {
+                _owningmeter = owningmeter;
+                _chain_kind = kind;
+                _item_type = itemType;
+                _click_highlight = false;
+
+                ItemType = itemType;
+
+                Buttons = MAX_PLUGINS;
+                UpdateInterval = 250;
+
+                setupButtons();
+
+                for (int i = 0; i < Buttons; i++)
+                {
+                    SetFontSize(0, i, 18f);
+                    SetFontSize(1, i, 18f);
+                }
+            }
+
+            private VstChainInfo GetCachedChain()
+            {
+                DateTime now = DateTime.UtcNow;
+                VstChainInfo cached;
+                lock (_chain_lock)
+                {
+                    if (_cached_chains.TryGetValue(_chain_kind, out cached))
+                    {
+                        DateTime cached_time;
+                        if (_cached_chain_times.TryGetValue(_chain_kind, out cached_time) && (now - cached_time) < CHAIN_CACHE_TIME)
+                            return cached;
+                    }
+                }
+
+                VstChainInfo info = VstHost.GetChainInfo(_chain_kind);
+                lock (_chain_lock)
+                {
+                    _cached_chains[_chain_kind] = info;
+                    _cached_chain_times[_chain_kind] = now;
+                }
+                return info;
+            }
+
+            private void setupButtons()
+            {
+                if (!RebuildButtons) return;
+
+                // copy from 0 to 1. 0 is settings bank, 1 is where renderer reads from
+                for (int i = 0; i < Buttons; i++)
+                {
+                    SetText(1, i, GetText(0, i));
+                    SetFontColour(1, i, GetFontColour(0, i));
+                    SetFontFamily(1, i, GetFontFamily(0, i));
+                    SetFontSize(1, i, GetFontSize(0, i));
+                    SetFontStyle(1, i, GetFontStyle(0, i));
+                    SetUseIndicator(1, i, GetUseIndicator(0, i));
+                    SetOnColour(1, i, GetOnColour(0, i));
+                    SetOffColour(1, i, GetOffColour(0, i));
+                    SetIndicatorWidth(1, i, GetIndicatorWidth(0, i));
+                    SetEnabled(1, i, false);
+                    SetVisible(1, i, true);
+                    SetOn(1, i, false);
+
+                    SetFillColour(1, i, GetFillColour(0, i));
+                    SetHoverColour(1, i, GetHoverColour(0, i));
+                    SetBorderColour(1, i, GetBorderColour(0, i));
+
+                    SetClickColour(1, i, GetClickColour(0, i));
+
+                    SetUseOffColour(1, i, GetUseOffColour(0, i));
+
+                    SetIndicatorType(1, i, GetIndicatorType(0, i));
+                }
+            }
+
+            public override void Update(int rx, ref List<Reading> readingsUsed, Dictionary<Reading, object> all_list_item_readings = null)
+            {
+                VstChainInfo chain = GetCachedChain();
+                if (chain == null) return;
+
+                List<VstPluginState> chainPlugins = chain.Plugins != null ? chain.Plugins : new List<VstPluginState>();
+                bool hostRunning = chain.HostState == VstHostState.Running;
+
+                // hide all slots, then show one per plugin so the list auto-sizes to its contents
+                for (int i = 0; i < MAX_PLUGINS; i++)
+                {
+                    string family = GetFontFamily(0, i);
+                    if (string.IsNullOrEmpty(family))
+                    {
+                        family = "Trebuchet MS";
+                        SetFontFamily(0, i, family);
+                    }
+                    SetFontFamily(1, i, family);
+
+                    SetVisible(1, i, false);
+                    SetEnabled(1, i, false);
+                    SetOn(1, i, false);
+                    SetText(1, i, "");
+                    dimButton(i, true);
+                }
+
+                if (chainPlugins.Count == 0)
+                {
+                    SetVisible(1, 0, true);
+                    SetText(1, 0, VstHost.NativeAvailable ? "No plugins loaded" : "VST host unavailable");
+                    return;
+                }
+
+                int row = 0;
+                for (int i = 0; i < chainPlugins.Count && row < MAX_PLUGINS; i++)
+                {
+                    VstPluginState plugin = chainPlugins[i];
+                    if (plugin == null || string.IsNullOrEmpty(plugin.Path)) continue;
+
+                    SetVisible(1, row, true);
+                    SetText(1, row, VstHost.GetPluginDisplayName(plugin));
+
+                    bool canEdit = hostRunning && plugin.LoadState == VstPluginLoadState.Active && plugin.Enabled && !plugin.Bypass;
+                    SetEnabled(1, row, canEdit);
+                    SetOn(1, row, canEdit);
+                    dimButton(row, !canEdit);
+                    row++;
+                }
+            }
+
+            private void dimButton(int button, bool dim)
+            {
+                System.Drawing.Color text_color = GetFontColour(0, button);
+                if (dim)
+                    SetFontColour(1, button, System.Drawing.Color.FromArgb(255, (int)(text_color.R * 0.3f), (int)(text_color.G * 0.3f), (int)(text_color.B * 0.3f)));
+                else
+                    SetFontColour(1, button, text_color);
+            }
+
+            public override bool ClickHighlight
+            {
+                get { return _click_highlight; }
+            }
+            private void setupClick(bool setup)
+            {
+                if (setup)
+                {
+                    _click_timer = new System.Timers.Timer(100);
+                    _click_timer.Elapsed += (sender, ee) =>
+                    {
+                        _click_highlight = false;
+                        if (_click_timer != null)
+                        {
+                            _click_timer.Stop();
+                            _click_timer.Dispose();
+                            _click_timer = null;
+                        }
+                    };
+                    _click_timer.AutoReset = false;
+                    _click_timer.Start();
+                }
+                else
+                {
+                    if (_click_timer != null)
+                    {
+                        _click_timer.Stop();
+                        _click_timer.Dispose();
+                        _click_timer = null;
+                    }
+                    _click_highlight = true;
+                }
+            }
+            public override bool MouseEntered
+            {
+                get
+                {
+                    return base.MouseEntered;
+                }
+                set
+                {
+                    if (!value && _click_highlight)
+                    {
+                        if (_click_timer != null)
+                        {
+                            _click_timer.Stop();
+                            _click_timer.Dispose();
+                        }
+                        _click_highlight = false;
+                    }
+                    base.MouseEntered = value;
+                }
+            }
+            public override void MouseDown(MouseEventArgs e)
+            {
+                if (FadeOnRx && !_owningmeter.MOX) return;
+                if (FadeOnTx && _owningmeter.MOX) return;
+
+                int index = base.ButtonIndex;
+                if (index == -1) return;
+
+                if (!GetEnabled(1, index)) return;
+
+                setupClick(false);
+            }
+            public override void MouseUp(MouseEventArgs e)
+            {
+                if (FadeOnRx && !_owningmeter.MOX) return;
+                if (FadeOnTx && _owningmeter.MOX) return;
+
+                setupClick(true);
+
+                if (_console == null) return;
+                int index = base.ButtonIndex;
+                if (index == -1) return;
+
+                if (!GetEnabled(1, index)) return;
+
+                int nativeIndex = index;
+                if (nativeIndex < 0) return;
+
+                VstChainInfo chain = GetCachedChain();
+                if (chain == null) return;
+                if (chain.HostState != VstHostState.Running) return;
+
+                // editor open is a blocking IPC call with a long timeout, never run on the UI thread
+                int captured = nativeIndex;
+                Task.Run(() => VstHost.OpenPluginEditorWindow(_chain_kind, captured));
             }
         }
         internal class clsButtonBox : clsMeterItem
@@ -22677,6 +22924,8 @@ namespace Thetis
                     case MeterType.OTHER_BUTTONS: ret = Reading.NONE.ToString(); break;
                     case MeterType.WAVE_RECORD: ret = Reading.NONE.ToString(); break;
                     case MeterType.VOICE_RECORD_PLAY_BUTTONS: ret = Reading.NONE.ToString(); break;
+                    case MeterType.TX_VST_PLUGINS: ret = Reading.NONE.ToString(); break;
+                    case MeterType.RX_VST_PLUGINS: ret = Reading.NONE.ToString(); break;
                     case MeterType.ACG_MAX_MAG: ret = Reading.ADC_MAX_MAG.ToString(); break;
                 }
                 return ret;
@@ -22732,6 +22981,8 @@ namespace Thetis
                     case MeterType.OTHER_BUTTONS: return 0;
                     case MeterType.WAVE_RECORD: return 0;
                     case MeterType.VOICE_RECORD_PLAY_BUTTONS: return 0;
+                    case MeterType.TX_VST_PLUGINS: return 0;
+                    case MeterType.RX_VST_PLUGINS: return 0;
 
                     case MeterType.ACG_MAX_MAG: return 1;
                 }
@@ -22792,6 +23043,8 @@ namespace Thetis
                     case MeterType.OTHER_BUTTONS: AddOtherButtons(nDelay, 0, out bBottom, restoreIg); break;
                     case MeterType.WAVE_RECORD: AddWaveRecord(nDelay, 0, out bBottom, restoreIg); break;
                     case MeterType.VOICE_RECORD_PLAY_BUTTONS: AddVoiceRecordPlay(nDelay, 0, out bBottom, restoreIg); break;
+                    case MeterType.TX_VST_PLUGINS: AddTxVstPlugins(nDelay, 0, out bBottom, restoreIg); break;
+                    case MeterType.RX_VST_PLUGINS: AddRxVstPlugins(nDelay, 0, out bBottom, restoreIg); break;
                     case MeterType.ACG_MAX_MAG: AddADCMaxMag(nDelay, 0, out bBottom, restoreIg); break;
                 }
 
@@ -25445,6 +25698,50 @@ namespace Thetis
 
                 return bb.ID;
             }
+            public string AddTxVstPlugins(int nMSupdate, float fTop, out float fBottom, clsItemGroup restoreIg = null)
+            {
+                return AddVstPlugins(MeterType.TX_VST_PLUGINS, clsMeterItem.MeterItemType.TX_VST_PLUGINS, VstChainKind.Tx, nMSupdate, fTop, out fBottom, restoreIg);
+            }
+            public string AddRxVstPlugins(int nMSupdate, float fTop, out float fBottom, clsItemGroup restoreIg = null)
+            {
+                return AddVstPlugins(MeterType.RX_VST_PLUGINS, clsMeterItem.MeterItemType.RX_VST_PLUGINS, VstChainKind.Rx, nMSupdate, fTop, out fBottom, restoreIg);
+            }
+            private string AddVstPlugins(MeterType mt, clsMeterItem.MeterItemType mit, VstChainKind kind, int nMSupdate, float fTop, out float fBottom, clsItemGroup restoreIg = null)
+            {
+                clsItemGroup ig = new clsItemGroup();
+                if (restoreIg != null) ig.ID = restoreIg.ID;
+                ig.ParentID = ID;
+
+                clsVstPlugins bb = new clsVstPlugins(this, kind, mit);
+                bb.RebuildButtons = false;
+                bb.ParentID = ig.ID;
+
+                bb.TopLeft = new PointF(_fPadX, fTop + _fPadY - (_fHeight * 0.75f));
+                bb.Size = new SizeF(1f - _fPadX * 2f, 0.5f);
+
+                bb.ZOrder = 1;
+                bb.Columns = 1;
+                bb.Margin = 0.005f;
+                bb.Radius = 0.01f;
+                bb.HeightRatio = 0.5f;
+                bb.RebuildButtons = true;
+                bb.Border = 0.005f;
+                addMeterItem(bb);
+
+                fBottom = bb.TopLeft.Y + bb.Size.Height;
+
+                ig.TopLeft = bb.TopLeft;
+                ig.Size = new SizeF(bb.Size.Width, fBottom);
+                ig.MeterType = mt;
+                ig.Order = restoreIg == null ? numberOfMeterGroups() : restoreIg.Order;
+
+                clsFadeCover fc = getFadeCover(ig.ID);
+                if (fc != null) addMeterItem(fc);
+
+                addMeterItem(ig);
+
+                return bb.ID;
+            }
             public string AddModeButtons(int nMSupdate, float fTop, out float fBottom, clsItemGroup restoreIg = null)
             {
                 clsItemGroup ig = new clsItemGroup();
@@ -27047,6 +27344,8 @@ namespace Thetis
                                 case MeterType.BAND_BUTTONS:
                                 case MeterType.DISCORD_BUTTONS:
                                 case MeterType.VOICE_RECORD_PLAY_BUTTONS:
+                                case MeterType.TX_VST_PLUGINS:
+                                case MeterType.RX_VST_PLUGINS:
                                 {
                                         bRebuild = true;
 
@@ -27078,6 +27377,12 @@ namespace Thetis
                                                 break;
                                             case MeterType.VOICE_RECORD_PLAY_BUTTONS:
                                                 mit = clsMeterItem.MeterItemType.VOICE_RECORD_PLAY_BUTTONS;
+                                                break;
+                                            case MeterType.TX_VST_PLUGINS:
+                                                mit = clsMeterItem.MeterItemType.TX_VST_PLUGINS;
+                                                break;
+                                            case MeterType.RX_VST_PLUGINS:
+                                                mit = clsMeterItem.MeterItemType.RX_VST_PLUGINS;
                                                 break;
                                         }
                                         if (mit == clsMeterItem.MeterItemType.BASE) continue; // skip
@@ -27121,7 +27426,10 @@ namespace Thetis
                                                 bb.SetFontColour(0, button, font_colour);
                                             }
 
-                                            bb.Columns = igs.GetSetting<int>("buttonbox_columns", true, 1, 512, 3);
+                                            if (mt == MeterType.TX_VST_PLUGINS || mt == MeterType.RX_VST_PLUGINS)
+                                                bb.Columns = 1; // vst plugin lists are always a single column
+                                            else
+                                                bb.Columns = igs.GetSetting<int>("buttonbox_columns", true, 1, 512, 3);
                                             bb.Border = igs.GetSetting<float>("buttonbox_border", true, 0f, 1f, 0.05f) / 10f;
                                             bb.Margin = igs.GetSetting<float>("buttonbox_margin", true, 0f, 1f, 0f) / 10f;
                                             bb.Radius = igs.GetSetting<float>("buttonbox_radius", true, 0f, 2f, 0f) / 10f;
@@ -28464,6 +28772,8 @@ namespace Thetis
                                 case MeterType.BAND_BUTTONS:
                                 case MeterType.DISCORD_BUTTONS:
                                 case MeterType.VOICE_RECORD_PLAY_BUTTONS:
+                                case MeterType.TX_VST_PLUGINS:
+                                case MeterType.RX_VST_PLUGINS:
                                 {
                                         clsMeterItem.MeterItemType mit = clsMeterItem.MeterItemType.BASE;
                                         switch (mt)
@@ -28491,6 +28801,12 @@ namespace Thetis
                                                 break;
                                             case MeterType.DISCORD_BUTTONS:
                                                 mit = clsMeterItem.MeterItemType.DISCORD_BUTTONS;
+                                                break;
+                                            case MeterType.TX_VST_PLUGINS:
+                                                mit = clsMeterItem.MeterItemType.TX_VST_PLUGINS;
+                                                break;
+                                            case MeterType.RX_VST_PLUGINS:
+                                                mit = clsMeterItem.MeterItemType.RX_VST_PLUGINS;
                                                 break;
                                         }
                                         if (mit == clsMeterItem.MeterItemType.BASE) continue; // skip
@@ -32982,6 +33298,8 @@ namespace Thetis
                                     case clsMeterItem.MeterItemType.BAND_BUTTONS:
                                     case clsMeterItem.MeterItemType.DISCORD_BUTTONS:
                                     case clsMeterItem.MeterItemType.VOICE_RECORD_PLAY_BUTTONS:
+                                    case clsMeterItem.MeterItemType.TX_VST_PLUGINS:
+                                    case clsMeterItem.MeterItemType.RX_VST_PLUGINS:
                                         renderButtonBox(rect, mi, m);
                                         break;                                    
                                     case clsMeterItem.MeterItemType.WAVE_RECORD:
@@ -39014,6 +39332,10 @@ namespace Thetis
                 bool is_vrp = mi.ItemType == clsMeterItem.MeterItemType.VOICE_RECORD_PLAY_BUTTONS;
                 float offset =  is_vrp ? 0.075f : 0f; // shifts it down to add two special buttons at top
 
+                bool is_vst_bb = mi.ItemType == clsMeterItem.MeterItemType.TX_VST_PLUGINS ||
+                                 mi.ItemType == clsMeterItem.MeterItemType.RX_VST_PLUGINS;
+                string vst_header = is_vst_bb ? (mi.ItemType == clsMeterItem.MeterItemType.TX_VST_PLUGINS ? "TX Chain" : "RX Chain") : "";
+
                 float x = (mi.DisplayTopLeft.X / m.XRatio) * rect.Width;
                 float y = ((mi.DisplayTopLeft.Y / m.YRatio) * rect.Height) + ((offset / m.YRatio) * rect.Height);
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
@@ -39039,6 +39361,26 @@ namespace Thetis
                 float button_height = ((h + expand) / (float)rows) - margin - border;
                 button_width += margin + border;
                 button_height += margin + border;
+
+                float vst_header_height = 0f;
+                if (is_vst_bb)
+                {
+                    // header row above the plugin buttons
+                    vst_header_height = rect.Height * 0.075f;
+                    SharpDX.RectangleF header_rect = new SharpDX.RectangleF(x, y, w, vst_header_height);
+                    RoundedRectangle header_rr = new RoundedRectangle();
+                    header_rr.Rect = header_rect;
+                    header_rr.RadiusX = vst_header_height * 0.25f;
+                    header_rr.RadiusY = vst_header_height * 0.25f;
+                    fillRoundedRectangle(header_rr, getDXBrushForColour(System.Drawing.Color.FromArgb(150, 20, 20, 20)));
+                    plotText(vst_header, x + (w / 2f), y + (vst_header_height / 2f), rect.Width, 24f,
+                        System.Drawing.Color.White, 255, bb.GetFontFamily(1, 0), FontStyle.Bold, false, true,
+                        w * 0.95f, false, vst_header_height, 0, false, null, true);
+                    // fixed button size when few plugins, shrink to fit when many
+                    float vst_button_ref_rows = 6f;
+                    button_height = ((h - vst_header_height + expand) / (float)Math.Max(rows, vst_button_ref_rows)) - margin - border;
+                    button_height += margin + border;
+                }
 
                 int highlighted_index = -1;
                 int button_index = 0;
@@ -39165,7 +39507,7 @@ namespace Thetis
 
                         bool indicator = bb.GetUseIndicator(1, button);
                         float xP = x + half_border + (button_width * col);
-                        float yP = y + half_border + (button_height * row);
+                        float yP = y + vst_header_height + half_border + (button_height * row);
 
                         rectBB.X = xP;
                         rectBB.Y = yP;

@@ -264,6 +264,8 @@ namespace Thetis
         private const string StateFileName = "vst_chains.json";
         private const string CatalogFileName = "vst_plugin_catalog.json";
         private const string ScanLogFileName = "vst_scan_log.txt";
+        private const string DefaultCatalogResourceName = "Thetis.Resources.DefaultVstCatalogPlugins.json";
+        private const string DefaultCatalogProgramFilesToken = "{PROGRAMFILES}";
         private const int DeferredStateSaveDelayMs = 750;
         private const int StructuralStateSaveDelayMs = 1000;
         private const int RetryStateSaveDelayMs = 750;
@@ -844,7 +846,11 @@ namespace Thetis
 
             catalogFilePath = GetCatalogFilePath(GetCurrentAppDataPath());
             if (string.IsNullOrWhiteSpace(catalogFilePath) || !File.Exists(catalogFilePath))
+            {
+                SeedDefaultCatalog(catalog);
+                SavePluginCatalog(catalog);
                 return NormalizeCatalog(catalog);
+            }
 
             try
             {
@@ -858,6 +864,57 @@ namespace Thetis
             }
 
             return NormalizeCatalog(catalog);
+        }
+
+        private static void SeedDefaultCatalog(VstPluginCatalogFile catalog)
+        {
+            try
+            {
+                string json = LoadEmbeddedDefaultCatalogJson();
+                if (string.IsNullOrWhiteSpace(json))
+                    return;
+
+                List<VstCatalogPlugin> defaultPlugins = JsonConvert.DeserializeObject<List<VstCatalogPlugin>>(json);
+                if (defaultPlugins == null || defaultPlugins.Count == 0)
+                    return;
+
+                string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                foreach (VstCatalogPlugin plugin in defaultPlugins)
+                {
+                    if (plugin == null)
+                        continue;
+                    if (!string.IsNullOrWhiteSpace(plugin.Path))
+                        plugin.Path = plugin.Path.Replace(DefaultCatalogProgramFilesToken, programFiles);
+                    catalog.Plugins.Add(plugin);
+                }
+
+                foreach (string path in GetDefaultPluginSearchPaths())
+                    AddSearchPathIfPresent(catalog.SearchPaths, path);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine("VST default catalog seed failed. " + ex);
+            }
+        }
+
+        private static string LoadEmbeddedDefaultCatalogJson()
+        {
+            try
+            {
+                using (Stream stream = typeof(VstHost).Assembly.GetManifestResourceStream(DefaultCatalogResourceName))
+                {
+                    if (stream == null)
+                        return null;
+
+                    using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+                        return reader.ReadToEnd();
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine("VST default catalog resource load failed. " + ex.Message);
+                return null;
+            }
         }
 
         public static void SavePluginCatalog(VstPluginCatalogFile catalog)
