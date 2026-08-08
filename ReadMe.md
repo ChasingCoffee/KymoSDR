@@ -1,11 +1,3 @@
-Not required but if you find this software usefull and want to support development donations are happily accepted through cashapp or paypal
-
-https://cash.app/$nubbyless
-
-https://www.paypal.me/nubbyless
-
-
-
 WARNING: INSTALLING THIS WILL OVERWRITE YOUR CURRENT VERSION OF THETIS BUT SHOULD KEEP YOUR DATABASE INTACT (AS WITH EVERYTHING FREE NO GUARANTEES)
 
 
