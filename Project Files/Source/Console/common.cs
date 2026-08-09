@@ -632,7 +632,7 @@ namespace Thetis
             }
         }
 
-		// returns the Thetis version number in "a.b.c" format
+		// returns the Thetis version number (trailing zero components trimmed, e.g. "4.1")
 		// MW0LGE moved here from titlebar.cs, and used by console.cs and others
 		private static string m_sVersionNumber = "";
 		private static string m_sFileVersion = "";
@@ -685,7 +685,10 @@ namespace Thetis
 
 			Assembly assembly = Assembly.GetExecutingAssembly();
 			FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
-			m_sVersionNumber = fvi.FileVersion.Substring(0, fvi.FileVersion.LastIndexOf("."));
+			string[] sParts = fvi.FileVersion.Split('.');
+			int iParts = sParts.Length;
+			while (iParts > 2 && sParts[iParts - 1] == "0") iParts--;
+			m_sVersionNumber = string.Join(".", sParts, 0, iParts);
 			m_sFileVersion = fvi.FileVersion;
 			m_sRevision = fvi.FileVersion.Substring(fvi.FileVersion.LastIndexOf(".") + 1);
 		}

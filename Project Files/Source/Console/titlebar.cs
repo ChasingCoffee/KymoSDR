@@ -50,14 +50,14 @@ namespace Thetis
 {
     class TitleBar
     {
-        public const string BUILD_NAME = "MW0LGE.n1mm";
+        public const string BUILD_NAME = "MW0LGE.n1mm.w4yny";
         public static string GetString(bool bWithFirmware = true)
         {
             string sRevision = "." + Common.GetRevision();
             if (sRevision == ".0") sRevision = "";
 
             string version = Common.GetVerNum() + sRevision;
-            string s = "Thetis";
+            string s = "SDR-VST3";
 
             string sBits = Common.Is64Bit ? " x64" : " x86";
 

@@ -690,10 +690,10 @@ namespace Thetis
             {
                 if (Environment.Is64BitProcess)
                     app_data_path = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                    + "\\OpenHPSDR\\Thetis-x64\\";
+                    + "\\OpenHPSDR\\SDR-VST3-x64\\";
                 else
                     app_data_path = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                        + "\\OpenHPSDR\\Thetis\\";
+                        + "\\OpenHPSDR\\SDR-VST3\\";
             }
 
 #if(DEBUG)
@@ -1491,10 +1491,10 @@ namespace Thetis
             if (string.IsNullOrEmpty(app_data_path))
             {
                 app_data_path = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                    + "\\OpenHPSDR\\Thetis\\";
+                    + "\\OpenHPSDR\\SDR-VST3\\";
                 if (Environment.Is64BitProcess)
                     app_data_path = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                    + "\\OpenHPSDR\\Thetis-x64\\";
+                    + "\\OpenHPSDR\\SDR-VST3-x64\\";
 
 #if(DEBUG)
                 app_data_path += "Debug\\";

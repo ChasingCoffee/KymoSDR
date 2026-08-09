@@ -6,11 +6,11 @@
     <ProductVersion>3.5</ProductVersion>
     <ProjectGuid>{B3FB4FDC-D517-4C56-872D-9E86627B5A53}</ProjectGuid>
     <SchemaVersion>2.0</SchemaVersion>
-    <OutputName>Thetis</OutputName>
+    <OutputName>SDR-VST3</OutputName>
     <OutputType>Package</OutputType>
     <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' AND '$(MSBuildExtensionsPath32)' != '' ">$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets</WixTargetsPath>
     <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' ">$(MSBuildExtensionsPath)\Microsoft\WiX\v3.x\Wix.targets</WixTargetsPath>
-    <Name>Thetis-Installer</Name>
+    <Name>SDR-VST3-Installer</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
     <OutputPath>bin\$(Configuration)\</OutputPath>
@@ -37,7 +37,7 @@
     <ProductVersion>3.5</ProductVersion>
     <ProjectGuid>{b3fb4fdc-d517-4c56-872d-9e86627b5a53}</ProjectGuid>
     <SchemaVersion>2.0</SchemaVersion>
-    <OutputName>Thetis</OutputName>
+    <OutputName>SDR-VST3</OutputName>
     <OutputType>Package</OutputType>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
@@ -102,6 +102,6 @@
       <Pattern>^(\d+.\d+.\d+.\d+)</Pattern>
       <AssemblyVersion>$([System.Text.RegularExpressions.Regex]::Match($(In), $(Pattern)))</AssemblyVersion>
     </PropertyGroup>
-    <Move SourceFiles="..\..\bin\Installers\$(OutputName).msi" DestinationFiles="..\..\bin\Installers\Thetis-Plus-v$(AssemblyVersion).$(Platform).msi" />
+    <Move SourceFiles="..\..\bin\Installers\$(OutputName).msi" DestinationFiles="..\..\bin\Installers\SDR-VST3-v$(AssemblyVersion).$(Platform).msi" />
   </Target>
 </Project>

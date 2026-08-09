@@ -8,17 +8,17 @@
 <!-- 32-bit / 64-bit variables -->
 <?if $(var.Platform) = x64 ?>
 <?define Win64 = "yes" ?>
-<?define UpgradeCode = "DEC025E2-4B27-425D-8EFE-AD6F5F780D52"?>
-<?define ProductName = "Thetis (64-bit)" ?>
-<?define ThetisName = "Thetis-x64"?>
+<?define UpgradeCode = "159a9e90-3b5b-4501-a324-44c5b3c0df4b"?>
+<?define ProductName = "SDR-VST3 (64-bit)" ?>
+<?define ThetisName = "SDR-VST3-x64"?>
 <?define VC145 = "Microsoft_VC145_CRT_x64.msm" ?>
 <?define PlatformProgramFilesFolder = "ProgramFiles64Folder" ?>
 <?define FilesPath = "..\..\Bin\$(var.Platform)\$(var.Configuration)\" ?>
 <?else ?>
 <?define Win64 = "no" ?>
-<?define UpgradeCode = "CE4756C9-3CA7-4A55-8980-7F0A920890DE"?>
-<?define ProductName = "Thetis (32-bit)" ?>
-<?define ThetisName = "Thetis"?>
+<?define UpgradeCode = "3efd9e6a-b229-4806-8d98-301ca668da8f"?>
+<?define ProductName = "SDR-VST3 (32-bit)" ?>
+<?define ThetisName = "SDR-VST3"?>
 <?define VC145 = "Microsoft_VC145_CRT_x86.msm" ?>
 <?define PlatformProgramFilesFolder = "ProgramFilesFolder" ?>
 <?define FilesPath = "..\..\Bin\$(var.Platform)\$(var.Configuration)\" ?>
@@ -62,7 +62,7 @@
 
     <WixVariable Id="WixUILicenseRtf" Value="GNU_GENERAL_PUBLIC_LICENSE.rtf" />
 
-    <Feature Id="ProductFeature" Title="Thetis" Level="1" ConfigurableDirectory="INSTALLFOLDER">
+    <Feature Id="ProductFeature" Title="SDR-VST3" Level="1" ConfigurableDirectory="INSTALLFOLDER">
       <ComponentGroupRef Id="ProductComponents" />
       <ComponentGroupRef Id="LspComponents" />
       <ComponentRef Id="StartMenuShortcut" />
@@ -120,7 +120,7 @@
 
       <Directory Id="$(var.PlatformProgramFilesFolder)">
         <Directory Id="HPSDRFolder" Name="OpenHPSDR">
-          <Directory Id="INSTALLFOLDER" Name="Thetis">
+          <Directory Id="INSTALLFOLDER" Name="SDR-VST3">
 		  </Directory>
         </Directory>
       </Directory>
@@ -155,7 +155,7 @@
       <Component Id="DesktopShortcut" Guid="6A395378-66D6-4986-97C6-8CF9423A066C">       
         <Shortcut Id="ProgramDesktopShortcut"
                   Name="$(var.ThetisName)"
-                  Description="Run Thetis"
+                  Description="Run SDR-VST3"
                   Target="[INSTALLFOLDER]Thetis.exe"
                   WorkingDirectory="INSTALLFOLDER" />
         <RegistryValue Root="HKLM" Key="Software\OpenHPSDR\$(var.ThetisName)"
@@ -168,7 +168,7 @@
               
         <Shortcut Id="ThetisShortcut"
                   Name="$(var.ThetisName)"
-                  Description="Run Thetis"
+                  Description="Run SDR-VST3"
                   Target="[INSTALLFOLDER]Thetis.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   />
@@ -242,7 +242,7 @@
 
 			<fire:FirewallException Id="thetis_$(var.Platform)_tcp"
                       Name="$(var.ThetisName) (TCP In)"
-                      Description="TCP In-bound Firewall rule for OpenHPSDR SDRs running Thetis"
+                      Description="TCP In-bound Firewall rule for OpenHPSDR SDRs running SDR-VST3"
                       Protocol="tcp"
                       Scope="any"
                       IgnoreFailure="no"
@@ -250,7 +250,7 @@
 			
 			<fire:FirewallException Id="thetis_$(var.Platform)_udp"
                       Name="$(var.ThetisName) (UDP In)"
-                      Description="UDP In-bound Firewall rule for OpenHPSDR SDRs running Thetis"
+                      Description="UDP In-bound Firewall rule for OpenHPSDR SDRs running SDR-VST3"
                       Protocol="udp"
                       Scope="any"
                       IgnoreFailure="no"

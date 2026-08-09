@@ -46,8 +46,8 @@ namespace Thetis
 {
     static class SingleInstance
     {
-        private const string MUTEX_NAME = @"Global\Thetis_7F1F9E7F-6C3E-4F3E-9E4C-8E0A3C6E8C11"; // some random ID specifc to THETIS
-                                                                                                 // this could be changed for a HL2 version for example
+        private const string MUTEX_NAME = @"Global\SDR-VST3_e5a2cba2-ce31-467f-ab24-892c5aa20fad"; // some random ID specifc to SDR-VST3
+                                                                                                      // this could be changed for a HL2 version for example
         private static Mutex _mutex;
         private static bool _owns_mutex;
 
