@@ -10,7 +10,7 @@ example:
 <img width="536" height="696" alt="Screenshot 2026-07-26 205107" src="https://github.com/user-attachments/assets/c9a2abb9-74e0-482e-b2a7-f755bb30d239" />
 
 
-Special Thanks to chasingcoffee his hard work is what made this vst version possible i only changed a few things 
+Special Thanks to chasingcoffee his hard work is what made this vst version possible  
 Forked from his original at his github page 
 https://github.com/ChasingCoffee/Thetis/tree/vst-support
 
