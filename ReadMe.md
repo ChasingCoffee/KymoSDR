@@ -1,4 +1,22 @@
-WARNING: INSTALLING THIS WILL OVERWRITE YOUR CURRENT VERSION OF THETIS BUT SHOULD KEEP YOUR DATABASE INTACT (AS WITH EVERYTHING FREE NO GUARANTEES)
+After a brief discussion with Richie [MW0LGE] who maintains the last version of Thetis v2.10.3.15 which this software fork is based on 
+He suggested a rebrand to keep versions from becoming confusing among other issues.
+He also suggested it should be its own install databases etc. as to be able to run side by side with Thetis and not overwrite it.
+  
+SDR-VST3 is a rebranded build of Thetis (the OpenHPSDR software-defined radio console) that adds built-in VST3 plugin support. 
+
+Key changes in this release:
+- New name, new look — The fork is now called "SDR-VST3" with updated splash screen, app icon, and installer artwork.
+- 
+- It now Installs side-by-side — It installs as its own separate program, so it won't overwrite or conflict with an existing Thetis installation. You can run both. (Understand there's No guarantees here that i didn't miss something but in my own testing everything works separately as it should)
+-  
+- Separate settings — It keeps its own data folder (SDR-VST3-x64), so your VST chains and settings don't get mixed up with the original Thetis.
+- 
+- Fresh version numbering — Versioning now starts clean at v4.1, so it's easy to tell releases apart.
+Install the MSI like any other Windows program — the installer will walk you through it.
+-
+-Since this is based on Thetis you can import your current database from your Thetis v2.10.3.15 if you like after the restart it will complain because of version conflicts with the new version system its ok allow it to update and you'll be all set.
+-
+-All future releases will install independent of Thetis so as to avoid conflicts.  
 
 
 This version of thetis has a built in vst plugin system it can only use vst3 plugins it can not use .vst or .vst2 plugins
