@@ -2107,7 +2107,7 @@
             this.chkTXVST.ForeColor = System.Drawing.SystemColors.ControlLightLight;
             this.chkTXVST.Location = new System.Drawing.Point(5, 99);
             this.chkTXVST.Name = "chkTXVST";
-            this.chkTXVST.Size = new System.Drawing.Size(50, 23);
+            this.chkTXVST.Size = new System.Drawing.Size(58, 23);
             this.chkTXVST.TabIndex = 71;
             this.chkTXVST.Text = "TXVST";
             this.chkTXVST.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -2123,9 +2123,9 @@
             this.chkRXVST.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.chkRXVST.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.chkRXVST.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.chkRXVST.Location = new System.Drawing.Point(58, 99);
+            this.chkRXVST.Location = new System.Drawing.Point(66, 99);
             this.chkRXVST.Name = "chkRXVST";
-            this.chkRXVST.Size = new System.Drawing.Size(50, 23);
+            this.chkRXVST.Size = new System.Drawing.Size(58, 23);
             this.chkRXVST.TabIndex = 72;
             this.chkRXVST.Text = "RXVST";
             this.chkRXVST.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;

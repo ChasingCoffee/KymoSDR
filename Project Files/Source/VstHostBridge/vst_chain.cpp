@@ -1111,6 +1111,8 @@ void VstChain_Destroy(VstChainState& chain)
 void VstChain_SetBypass(VstChainState& chain, int bypass)
 {
 	InterlockedExchange(&chain.bypass, bypass ? 1 : 0);
+	if (chain.state_dirty_callback)
+		chain.state_dirty_callback(chain.state_dirty_context);
 }
 
 int VstChain_GetBypass(const VstChainState& chain)
@@ -1609,6 +1611,8 @@ int VstChain_SetPluginBypass(VstChainState& chain, int index, int bypass)
 		InterlockedExchange(&active_state->plugins[index].bypass, bypass ? 1 : 0);
 	ReleaseSRWLockExclusive(&chain.state_lock);
 	LeaveCriticalSection(&chain.mutation_lock);
+	if (chain.state_dirty_callback)
+		chain.state_dirty_callback(chain.state_dirty_context);
 	return 0;
 }
 
@@ -1634,6 +1638,8 @@ int VstChain_SetPluginEnabled(VstChainState& chain, int index, int enabled)
 		InterlockedExchange(&active_state->plugins[index].enabled, enabled ? 1 : 0);
 	ReleaseSRWLockExclusive(&chain.state_lock);
 	LeaveCriticalSection(&chain.mutation_lock);
+	if (chain.state_dirty_callback)
+		chain.state_dirty_callback(chain.state_dirty_context);
 	return 0;
 }
 

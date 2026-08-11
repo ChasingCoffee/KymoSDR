@@ -3342,6 +3342,7 @@ namespace Thetis
         public static void Init(Console c, Display.AdaptorInfo adaptor = null)
         {
             _console = c;
+            VstRackMeterHost.Initialize(c);
             _image_fetcher.Version = c.ProductVersion;
 
             _adaptor = adaptor;
@@ -3532,6 +3533,8 @@ namespace Thetis
             _cat_queue_system.stopAll(); // stop the cat queue
 
             MeterScriptEngine.Stop();
+
+            VstRackMeterHost.Shutdown();
 
             if (_image_fetcher != null)
                 _image_fetcher.Shutdown();
@@ -6585,6 +6588,8 @@ namespace Thetis
                     uc.DockedMoved -= ucMeter_FloatingDockedMoved;
                     uc.SettingsClicked -= ucMeter_SettingsClicked;
                 }
+
+                VstRackMeterHost.Unhost(sId);
 
                 removeRenderer(sId);
 
@@ -23043,8 +23048,8 @@ namespace Thetis
                     case MeterType.OTHER_BUTTONS: AddOtherButtons(nDelay, 0, out bBottom, restoreIg); break;
                     case MeterType.WAVE_RECORD: AddWaveRecord(nDelay, 0, out bBottom, restoreIg); break;
                     case MeterType.VOICE_RECORD_PLAY_BUTTONS: AddVoiceRecordPlay(nDelay, 0, out bBottom, restoreIg); break;
-                    case MeterType.TX_VST_PLUGINS: AddTxVstPlugins(nDelay, 0, out bBottom, restoreIg); break;
-                    case MeterType.RX_VST_PLUGINS: AddRxVstPlugins(nDelay, 0, out bBottom, restoreIg); break;
+                    case MeterType.TX_VST_PLUGINS: AddTxVstPlugins(nDelay, 0, out bBottom, restoreIg); HostVstRack(MeterType.TX_VST_PLUGINS); break;
+                    case MeterType.RX_VST_PLUGINS: AddRxVstPlugins(nDelay, 0, out bBottom, restoreIg); HostVstRack(MeterType.RX_VST_PLUGINS); break;
                     case MeterType.ACG_MAX_MAG: AddADCMaxMag(nDelay, 0, out bBottom, restoreIg); break;
                 }
 
@@ -23070,6 +23075,28 @@ namespace Thetis
                         OnCompandChanged(CompandEnabled, CompandEnabled);
                         break;
                 }
+            }
+            /// <summary>
+            /// Swaps the DirectX plugin list renderer for the compact VstRackView.
+            /// The meter item added by AddTxVstPlugins / AddRxVstPlugins is kept
+            /// so persistence and the setup UI stay unchanged.
+            /// </summary>
+            private void HostVstRack(MeterType meter)
+            {
+                if (!Console.VstEnabled)
+                    return;
+
+                VstChainKind kind = meter == MeterType.TX_VST_PLUGINS ? VstChainKind.Tx : VstChainKind.Rx;
+
+                ucMeter uc = null;
+                if (MeterManager._lstUCMeters.ContainsKey(_sId))
+                    uc = MeterManager._lstUCMeters[_sId];
+
+                if (uc == null || uc.IsDisposed)
+                    return;
+
+                MeterManager.removeRenderer(_sId);
+                VstRackMeterHost.Host(_sId, kind, uc);
             }
             #region meterDefs
             public string AddSMeterBarSignal(int nMSupdate, float fTop, out float fBottom, clsItemGroup restoreIg = null)
@@ -26902,6 +26929,15 @@ namespace Thetis
                                     tmpIg.Order--;
                             }
                         }
+                    }
+
+                    if (mt == MeterType.TX_VST_PLUGINS || mt == MeterType.RX_VST_PLUGINS)
+                    {
+                        bool anyLeft = _meterItems.Values.Any(o => o.ItemType == clsMeterItem.MeterItemType.ITEM_GROUP
+                            && ((clsItemGroup)o).MeterType == mt);
+
+                        if (!anyLeft)
+                            VstRackMeterHost.Unhost(_sId);
                     }
 
                     if (bRebuild) Rebuild();

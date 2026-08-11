@@ -28,6 +28,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -260,18 +261,55 @@ namespace Thetis
         public List<string> SubCategories { get; set; }
     }
 
+    enum VstChainViewMode
+    {
+        List = 0,
+        Rack = 1
+    }
+
+    /// <summary>
+    /// Presentation-only state for the chain manager. Kept separate from
+    /// <see cref="VstChainState"/> so UI layout metadata never mixes with the
+    /// DSP chain model that the bridge replays into the host.
+    /// </summary>
+    sealed class VstUiState
+    {
+        public VstChainViewMode ChainViewMode { get; set; }
+
+        /// <summary>
+        /// When false the rack draws its placeholder faceplate for every
+        /// plugin, ignoring both captured and vendor artwork.
+        /// </summary>
+        public bool ShowSnapshots { get; set; }
+
+        /// <summary>Plugin paths whose rack unit is collapsed.</summary>
+        public List<string> CollapsedPlugins { get; set; }
+
+        public VstUiState()
+        {
+            ChainViewMode = VstChainViewMode.Rack;
+            // State files written before this setting existed simply omit it,
+            // and Newtonsoft leaves the constructor value in place — so the
+            // default must be the historical behaviour of showing artwork.
+            ShowSnapshots = true;
+            CollapsedPlugins = new List<string>();
+        }
+    }
+
     sealed class VstStateFile
     {
         public int Version { get; set; }
         public bool SdkAvailable { get; set; }
         public VstChainState Rx { get; set; }
         public VstChainState Tx { get; set; }
+        public VstUiState Ui { get; set; }
 
         public VstStateFile()
         {
             Version = 3;
             Rx = new VstChainState();
             Tx = new VstChainState();
+            Ui = new VstUiState();
         }
     }
 
@@ -298,6 +336,8 @@ namespace Thetis
         private const string BundleContentsDir = "Contents";
         private const string BundleResourcesDir = "Resources";
         private const string ModuleInfoFileName = "moduleinfo.json";
+        private const string SnapshotsDirName = "Snapshots";
+        private const string CapturedArtDirName = "art";
         private const string AudioModuleClassCategory = "Audio Module Class";
         private static bool _nativeUnavailable;
         private static bool _nativeCallbackRegistered;
@@ -306,6 +346,7 @@ namespace Thetis
         private static readonly object _stateSaveLock = new object();
         private static Timer _stateSaveTimer;
         private static volatile string _lastPersistenceError;
+        private static VstUiState _uiState = new VstUiState();
         private static readonly List<VstPluginState>[] _requestedPluginsByKind = new List<VstPluginState>[2];
         private static readonly Dictionary<int, VstPluginState>[] _failedPluginsByKind = new Dictionary<int, VstPluginState>[2];
         internal static event Action<VstChainKind> ChainStateChanged;
@@ -659,6 +700,20 @@ namespace Thetis
             return NativeGetChainReady(kind) != 0;
         }
 
+        /// <summary>
+        /// Presentation-only chain manager state. Mutate then call
+        /// <see cref="ScheduleUiStateSave"/> to persist.
+        /// </summary>
+        internal static VstUiState UiState
+        {
+            get { return _uiState; }
+        }
+
+        internal static void ScheduleUiStateSave()
+        {
+            ScheduleStateSave(DeferredStateSaveDelayMs);
+        }
+
         public static void LoadState(string appDataPath)
         {
             string stateFilePath;
@@ -674,6 +729,13 @@ namespace Thetis
             {
                 state = JsonConvert.DeserializeObject<VstStateFile>(File.ReadAllText(stateFilePath));
                 if (state == null) return;
+
+                if (state.Ui != null)
+                {
+                    if (state.Ui.CollapsedPlugins == null)
+                        state.Ui.CollapsedPlugins = new List<string>();
+                    _uiState = state.Ui;
+                }
 
                 ApplyChainState(VstChainKind.Rx, state.Rx);
                 ApplyChainState(VstChainKind.Tx, state.Tx);
@@ -1283,6 +1345,71 @@ namespace Thetis
             return GetVstSubdirectory(appDataPath);
         }
 
+        /// <summary>
+        /// Directory holding editor screenshots captured for plugins that ship
+        /// no vendor snapshot. Returns null when the app data path is unknown.
+        /// </summary>
+        internal static string GetCapturedArtDirectory()
+        {
+            string appDataPath = GetCurrentAppDataPath();
+
+            if (string.IsNullOrWhiteSpace(appDataPath))
+                return null;
+
+            try
+            {
+                string artDir = Path.Combine(GetVstSubdirectory(appDataPath), CapturedArtDirName);
+
+                if (!Directory.Exists(artDir))
+                    Directory.CreateDirectory(artDir);
+
+                return artDir;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Deletes every editor screenshot Thetis has captured. Only touches
+        /// our own cache directory — vendor snapshots live inside the plugin
+        /// bundles and are never modified. Returns the number of files removed.
+        /// </summary>
+        internal static int ClearCapturedArt()
+        {
+            string artDir = GetCapturedArtDirectory();
+            int removed = 0;
+
+            if (artDir == null || !Directory.Exists(artDir))
+                return 0;
+
+            string[] files;
+
+            try
+            {
+                files = Directory.GetFiles(artDir, "*.png");
+            }
+            catch
+            {
+                return 0;
+            }
+
+            for (int i = 0; i < files.Length; i++)
+            {
+                try
+                {
+                    File.Delete(files[i]);
+                    removed++;
+                }
+                catch
+                {
+                }
+            }
+
+            return removed;
+        }
+
         private static string GetStateFilePath(string appDataPath)
         {
             if (string.IsNullOrEmpty(appDataPath))
@@ -1655,6 +1782,7 @@ namespace Thetis
             state.SdkAvailable = SdkAvailable;
             state.Rx = ToPersistentState(VstChainKind.Rx, rxChain);
             state.Tx = ToPersistentState(VstChainKind.Tx, txChain);
+            state.Ui = _uiState;
             return true;
         }
 
@@ -2491,6 +2619,108 @@ namespace Thetis
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Returns the VST3 bundle's snapshot directory
+        /// (Contents/Resources/Snapshots), or null when the plugin is not a
+        /// bundle or has no snapshot folder.
+        /// </summary>
+        internal static string GetSnapshotsDirectory(string pluginPath)
+        {
+            string normalizedPath = NormalizePluginPath(pluginPath);
+
+            if (string.IsNullOrWhiteSpace(normalizedPath) || !Directory.Exists(normalizedPath))
+                return null;
+
+            try
+            {
+                string snapshotsDir = Path.Combine(normalizedPath, BundleContentsDir, BundleResourcesDir, SnapshotsDirName);
+                if (Directory.Exists(snapshotsDir))
+                    return snapshotsDir;
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Returns the class ID of the first audio-module class declared in the
+        /// bundle's moduleinfo.json, or null when unavailable. The value is the
+        /// same 32-character hex string used to name snapshot files.
+        /// </summary>
+        internal static string TryGetPrimaryClassId(string pluginPath)
+        {
+            ModuleInfoFile moduleInfo = TryReadModuleInfo(pluginPath);
+
+            if (moduleInfo == null || moduleInfo.Classes == null)
+                return null;
+
+            for (int i = 0; i < moduleInfo.Classes.Count; i++)
+            {
+                ModuleInfoClassEntry classEntry = moduleInfo.Classes[i];
+
+                if (classEntry == null)
+                    continue;
+                if (!string.Equals(classEntry.Category, AudioModuleClassCategory, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (string.IsNullOrWhiteSpace(classEntry.CID))
+                    continue;
+
+                return classEntry.CID.Trim();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Stable per-plugin artwork key: the plugin's own VST3 class ID when
+        /// available, otherwise a hash of its normalized path. Class IDs
+        /// distinguish individual plugins inside a multi-plugin bundle (every
+        /// WaveShell effect shares one .vst3 file path but has its own CID), so
+        /// keying by class ID keeps each shell's artwork separate. The result is
+        /// uppercase for consistent cache file naming.
+        /// </summary>
+        internal static string GetPluginArtKey(string pluginPath, string classId)
+        {
+            if (!string.IsNullOrWhiteSpace(classId))
+                return classId.Trim().ToUpperInvariant();
+
+            string normalized = NormalizePluginPath(pluginPath);
+
+            if (string.IsNullOrWhiteSpace(normalized))
+                return null;
+
+            using (MD5 md5 = MD5.Create())
+            {
+                byte[] hash = md5.ComputeHash(Encoding.UTF8.GetBytes(normalized.ToLowerInvariant()));
+                StringBuilder builder = new StringBuilder(hash.Length * 2);
+
+                for (int i = 0; i < hash.Length; i++)
+                    builder.Append(hash[i].ToString("X2"));
+
+                return builder.ToString();
+            }
+        }
+
+        private static ModuleInfoFile TryReadModuleInfo(string pluginPath)
+        {
+            string moduleInfoPath = GetModuleInfoPath(pluginPath);
+
+            if (moduleInfoPath == null)
+                return null;
+
+            try
+            {
+                string json = File.ReadAllText(moduleInfoPath, Encoding.UTF8);
+                return JsonConvert.DeserializeObject<ModuleInfoFile>(json);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static bool TryProbeFromModuleInfo(string pluginPath, out VstCatalogPlugin result)

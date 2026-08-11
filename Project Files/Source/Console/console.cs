@@ -963,6 +963,12 @@ namespace Thetis
             vstToolStripMenuItem.Visible = _vstEnabled;
             chkTXVST.Visible = _vstEnabled;
             chkRXVST.Visible = _vstEnabled;
+            VstHost.ChainStateChanged += OnVstChainStateChanged;
+            if (_vstEnabled)
+            {
+                chkTXVST.Checked = VstHost.GetChainInfo(VstChainKind.Tx).Bypass;
+                chkRXVST.Checked = VstHost.GetChainInfo(VstChainKind.Rx).Bypass;
+            }
 
             CpuUsage(); //[2.10.1.0] MW0LGE initial call to setup check marks in status bar as a minimum
 
@@ -28931,6 +28937,30 @@ namespace Thetis
                 else
                     VstChainManagerForm.Show(this);
                 VstChainManagerForm.Focus();
+            }
+        }
+
+        private void OnVstChainStateChanged(VstChainKind kind)
+        {
+            if (IsDisposed || Disposing || !IsHandleCreated)
+                return;
+
+            try
+            {
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    if (IsDisposed || Disposing)
+                        return;
+
+                    if (kind == VstChainKind.Tx)
+                        chkTXVST.Checked = VstHost.GetChainInfo(VstChainKind.Tx).Bypass;
+                    else if (kind == VstChainKind.Rx)
+                        chkRXVST.Checked = VstHost.GetChainInfo(VstChainKind.Rx).Bypass;
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("VST ChainStateChanged console handler exception: " + ex.Message);
             }
         }
 
