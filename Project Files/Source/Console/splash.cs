@@ -153,9 +153,9 @@ namespace Thetis
             // 
             this.pnlStatus.BackColor = System.Drawing.Color.SkyBlue;
             this.pnlStatus.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
-            this.pnlStatus.Location = new System.Drawing.Point(59, 270);
+            this.pnlStatus.Location = new System.Drawing.Point(236, 270);
             this.pnlStatus.Name = "pnlStatus";
-            this.pnlStatus.Size = new System.Drawing.Size(289, 17);
+            this.pnlStatus.Size = new System.Drawing.Size(490, 17);
             this.pnlStatus.TabIndex = 2;
             this.pnlStatus.Paint += new System.Windows.Forms.PaintEventHandler(this.pnlStatus_Paint);
             // 
@@ -167,9 +167,9 @@ namespace Thetis
             // panel1
             // 
             this.panel1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
-            this.panel1.Location = new System.Drawing.Point(50, 249);
+            this.panel1.Location = new System.Drawing.Point(221, 249);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(306, 59);
+            this.panel1.Size = new System.Drawing.Size(520, 59);
             this.panel1.TabIndex = 4;
             // 
             // lblVersion
@@ -178,7 +178,7 @@ namespace Thetis
             this.lblVersion.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.lblVersion.ForeColor = System.Drawing.Color.White;
             this.lblVersion.Image = null;
-            this.lblVersion.Location = new System.Drawing.Point(56, 290);
+            this.lblVersion.Location = new System.Drawing.Point(228, 290);
             this.lblVersion.Name = "lblVersion";
             this.lblVersion.Size = new System.Drawing.Size(205, 13);
             this.lblVersion.TabIndex = 3;
@@ -189,7 +189,7 @@ namespace Thetis
             this.lblTimeRemaining.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.lblTimeRemaining.ForeColor = System.Drawing.Color.White;
             this.lblTimeRemaining.Image = null;
-            this.lblTimeRemaining.Location = new System.Drawing.Point(256, 290);
+            this.lblTimeRemaining.Location = new System.Drawing.Point(649, 290);
             this.lblTimeRemaining.Name = "lblTimeRemaining";
             this.lblTimeRemaining.Size = new System.Drawing.Size(92, 16);
             this.lblTimeRemaining.TabIndex = 1;
@@ -201,9 +201,9 @@ namespace Thetis
             this.lblStatus.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(192)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.lblStatus.ForeColor = System.Drawing.Color.White;
             this.lblStatus.Image = null;
-            this.lblStatus.Location = new System.Drawing.Point(50, 252);
+            this.lblStatus.Location = new System.Drawing.Point(221, 252);
             this.lblStatus.Name = "lblStatus";
-            this.lblStatus.Size = new System.Drawing.Size(306, 16);
+            this.lblStatus.Size = new System.Drawing.Size(520, 16);
             this.lblStatus.TabIndex = 0;
             this.lblStatus.Text = "Status";
             this.lblStatus.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -211,7 +211,7 @@ namespace Thetis
             // Splash
             // 
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
-            this.ClientSize = new System.Drawing.Size(400, 320);
+            this.ClientSize = new System.Drawing.Size(963, 309);
             this.Controls.Add(this.lblVersion);
             this.Controls.Add(this.pnlStatus);
             this.Controls.Add(this.lblTimeRemaining);
@@ -335,8 +335,8 @@ namespace Thetis
         {
 			if (string.IsNullOrEmpty(splash_screen_folder)) return;
 
-			int width = 400;
-			int height = 320;
+			int width = 963;
+			int height = 309;
 
             string[] files = Directory.GetFiles(splash_screen_folder, "*.png");
             string[] matchingFiles = files

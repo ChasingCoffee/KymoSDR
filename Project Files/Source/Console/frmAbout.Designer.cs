@@ -46,6 +46,7 @@
             this.labelTS2 = new System.Windows.Forms.LabelTS();
             this.btnOK = new System.Windows.Forms.ButtonTS();
             this.labelTS1 = new System.Windows.Forms.LabelTS();
+            this.lblVstTrademark = new System.Windows.Forms.LabelTS();
             this.SuspendLayout();
             // 
             // lstContributors
@@ -284,7 +285,7 @@
             this.btnOK.BackColor = System.Drawing.SystemColors.ControlLight;
             this.btnOK.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnOK.Image = null;
-            this.btnOK.Location = new System.Drawing.Point(524, 499);
+            this.btnOK.Location = new System.Drawing.Point(524, 521);
             this.btnOK.Name = "btnOK";
             this.btnOK.Selectable = true;
             this.btnOK.Size = new System.Drawing.Size(88, 23);
@@ -305,12 +306,23 @@
             this.labelTS1.TabIndex = 1;
             this.labelTS1.Text = "Thetis";
             // 
+            // lblVstTrademark
+            // 
+            this.lblVstTrademark.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.lblVstTrademark.Image = null;
+            this.lblVstTrademark.Location = new System.Drawing.Point(16, 529);
+            this.lblVstTrademark.Name = "lblVstTrademark";
+            this.lblVstTrademark.Size = new System.Drawing.Size(493, 20);
+            this.lblVstTrademark.TabIndex = 15;
+            this.lblVstTrademark.Text = "VST is a registered trademark of Steinberg Media Technologies GmbH.";
+            this.lblVstTrademark.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            // 
             // frmAbout
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.Window;
-            this.ClientSize = new System.Drawing.Size(624, 534);
+            this.ClientSize = new System.Drawing.Size(624, 556);
             this.Controls.Add(this.btnReleaseNotes);
             this.Controls.Add(this.btnUpdatedRelease);
             this.Controls.Add(this.labelTS4);
@@ -324,6 +336,7 @@
             this.Controls.Add(this.labelTS2);
             this.Controls.Add(this.lstVersions);
             this.Controls.Add(this.btnOK);
+            this.Controls.Add(this.lblVstTrademark);
             this.Controls.Add(this.labelTS1);
             this.Controls.Add(this.lstContributors);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
@@ -355,5 +368,6 @@
         private System.Windows.Forms.ButtonTS btnUpdatedRelease;
         private System.Windows.Forms.ToolTip toolTip1;
         private System.Windows.Forms.ButtonTS btnReleaseNotes;
+        private System.Windows.Forms.LabelTS lblVstTrademark;
     }
 }
