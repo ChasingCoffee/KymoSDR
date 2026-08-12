@@ -1,3 +1,9 @@
+Here is a link to a video showing you the basics of how it all works
+
+https://www.facebook.com/share/v/198hYDBFQr/
+
+
+
 After a brief discussion with Richie [MW0LGE] who maintains the last version of Thetis v2.10.3.15 which this software fork is based on 
 He suggested a rebrand to keep versions from becoming confusing among other issues.
 He also suggested it should be its own install databases etc. as to be able to run side by side with Thetis and not overwrite it.
