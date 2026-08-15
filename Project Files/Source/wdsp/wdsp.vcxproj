@@ -106,6 +106,19 @@
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <!-- Copy the freshly built wdsp.dll next to Thetis.exe. /D skips when the
+         source and destination resolve to the same file (full-solution build),
+         avoiding the "cannot be copied onto itself" error. pushd normalises the
+         working directory so the relative $(SolutionDir) path resolves in
+         standalone builds. -->
+    <PostBuildEvent>
+      <Command>pushd "$(ProjectDir)"
+if not exist "$(ProjectDir)..\..\bin\$(HPSDR_PLATFORM)\$(Configuration)" mkdir "$(ProjectDir)..\..\bin\$(HPSDR_PLATFORM)\$(Configuration)"
+xcopy /Y /D "$(SolutionDir)..\bin\$(HPSDR_PLATFORM)\$(Configuration)\wdsp.dll" "$(ProjectDir)..\..\bin\$(HPSDR_PLATFORM)\$(Configuration)\wdsp.dll"
+popd</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="amd.h" />
     <ClInclude Include="ammod.h" />
@@ -130,6 +143,7 @@
     <ClInclude Include="emnr.h" />
     <ClInclude Include="emph.h" />
     <ClInclude Include="eq.h" />
+    <ClInclude Include="extrapolate.h" />
     <ClInclude Include="channel.h" />
     <ClInclude Include="comm.h" />
     <ClInclude Include="fcurve.h" />
@@ -155,9 +169,14 @@
     <ClInclude Include="nbp.h" />
     <ClInclude Include="nob.h" />
     <ClInclude Include="nobII.h" />
+    <ClInclude Include="nurbs.h" />
+    <ClInclude Include="nurbs_fit.h" />
+    <ClInclude Include="nurbs_spline.h" />
     <ClInclude Include="osctrl.h" />
     <ClInclude Include="patchpanel.h" />
+    <ClInclude Include="phrot.h" />
     <ClInclude Include="resample.h" />
+    <ClInclude Include="reshb.h" />
     <ClInclude Include="resource1.h" />
     <ClInclude Include="rmatch.h" />
     <ClInclude Include="rnnr.h" />
@@ -174,6 +193,7 @@
     <ClInclude Include="TXA.h" />
     <ClInclude Include="utilities.h" />
     <ClInclude Include="varsamp.h" />
+    <ClInclude Include="wbfm.h" />
     <ClInclude Include="wcpAGC.h" />
     <ClInclude Include="zetaHat.h" />
   </ItemGroup>
@@ -201,6 +221,7 @@
     <ClCompile Include="emnr.c" />
     <ClCompile Include="emph.c" />
     <ClCompile Include="eq.c" />
+    <ClCompile Include="extrapolate.c" />
     <ClCompile Include="channel.c" />
     <ClCompile Include="fcurve.c" />
     <ClCompile Include="FDnoiseIQ.c" />
@@ -224,9 +245,14 @@
     <ClCompile Include="nbp.c" />
     <ClCompile Include="nob.c" />
     <ClCompile Include="nobII.c" />
+    <ClCompile Include="nurbs.c" />
+    <ClCompile Include="nurbs_fit.c" />
+    <ClCompile Include="nurbs_spline.c" />
     <ClCompile Include="osctrl.c" />
     <ClCompile Include="patchpanel.c" />
+    <ClCompile Include="phrot.c" />
     <ClCompile Include="resample.c" />
+    <ClCompile Include="reshb.c" />
     <ClCompile Include="rmatch.c" />
     <ClCompile Include="rnnr.c" />
     <ClCompile Include="RXA.c" />
@@ -237,12 +263,14 @@
     <ClCompile Include="fmsq.c" />
     <ClCompile Include="slew.c" />
     <ClCompile Include="snb.c" />
+    <ClCompile Include="snoop.c" />
     <ClCompile Include="ssql.c" />
     <ClCompile Include="syncbuffs.c" />
     <ClCompile Include="TXA.c" />
     <ClCompile Include="utilities.c" />
     <ClCompile Include="varsamp.c" />
     <ClCompile Include="version.c" />
+    <ClCompile Include="wbfm.c" />
     <ClCompile Include="wcpAGC.c" />
     <ClCompile Include="wisdom.c" />
     <ClCompile Include="zetaHat.c" />

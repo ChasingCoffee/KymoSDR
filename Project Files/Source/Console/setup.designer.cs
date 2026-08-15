@@ -4113,6 +4113,7 @@
             this.timer_RawInputMouseWheel = new System.Windows.Forms.Timer(this.components);
             this.tmrCFCOMPGain = new System.Windows.Forms.Timer(this.components);
             this.tmrCheckProfile = new System.Windows.Forms.Timer(this.components);
+            this.timerPhRot = new System.Windows.Forms.Timer(this.components);
             this.tcMMsettings = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.grpHistoryItem = new System.Windows.Forms.GroupBoxTS();
@@ -46286,7 +46287,7 @@
             this.grpPhRot.Controls.Add(this.chkPHROTEnable);
             this.grpPhRot.Location = new System.Drawing.Point(513, 264);
             this.grpPhRot.Name = "grpPhRot";
-            this.grpPhRot.Size = new System.Drawing.Size(124, 121);
+            this.grpPhRot.Size = new System.Drawing.Size(210, 130);
             this.grpPhRot.TabIndex = 170;
             this.grpPhRot.TabStop = false;
             this.grpPhRot.Text = "Phase Rotator";
@@ -65933,6 +65934,12 @@
             this.tmrCheckProfile.Interval = 1000;
             this.tmrCheckProfile.Tick += new System.EventHandler(this.tmrCheckProfile_Tick);
             // 
+            // timerPhRot
+            // 
+            this.timerPhRot.Enabled = true;
+            this.timerPhRot.Interval = 250;
+            this.timerPhRot.Tick += new System.EventHandler(this.timerPhRot_Tick);
+            // 
             // tcMMsettings
             // 
             this.tcMMsettings.Controls.Add(this.tabPage1);
@@ -72614,6 +72621,43 @@
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDownTS36)).EndInit();
             this.panelTS4.ResumeLayout(false);
             this.panelTS4.PerformLayout();
+            // Yurij_eu2av: hidden persisted target Feedback Level for PureSignal auto-attenuator
+            this.udPSTargetFeedbackLevel = new System.Windows.Forms.NumericUpDownTS();
+            ((System.ComponentModel.ISupportInitialize)(this.udPSTargetFeedbackLevel)).BeginInit();
+            this.udPSTargetFeedbackLevel.Location = new System.Drawing.Point(-100, -100);
+            this.udPSTargetFeedbackLevel.Name = "udPSTargetFeedbackLevel";
+            this.udPSTargetFeedbackLevel.Size = new System.Drawing.Size(50, 20);
+            this.udPSTargetFeedbackLevel.TabIndex = 999;
+            this.udPSTargetFeedbackLevel.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            this.udPSTargetFeedbackLevel.Maximum = new decimal(new int[] { 256, 0, 0, 0 });
+            this.udPSTargetFeedbackLevel.Value = new decimal(new int[] { 152, 0, 0, 0 });
+            this.udPSTargetFeedbackLevel.Visible = false;
+            ((System.ComponentModel.ISupportInitialize)(this.udPSTargetFeedbackLevel)).EndInit();
+            this.Controls.Add(this.udPSTargetFeedbackLevel);
+            // Yurij_eu2av: hidden persisted PureSignal outlier settings
+            this.udPSOutlierSigma = new System.Windows.Forms.NumericUpDownTS();
+            ((System.ComponentModel.ISupportInitialize)(this.udPSOutlierSigma)).BeginInit();
+            this.udPSOutlierSigma.Location = new System.Drawing.Point(-100, -100);
+            this.udPSOutlierSigma.Name = "udPSOutlierSigma";
+            this.udPSOutlierSigma.Size = new System.Drawing.Size(50, 20);
+            this.udPSOutlierSigma.TabIndex = 999;
+            this.udPSOutlierSigma.DecimalPlaces = 1;
+            this.udPSOutlierSigma.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
+            this.udPSOutlierSigma.Minimum = new decimal(new int[] { 1, 0, 0, 65536 });
+            this.udPSOutlierSigma.Maximum = new decimal(new int[] { 50, 0, 0, 65536 });
+            this.udPSOutlierSigma.Value = new decimal(new int[] { 25, 0, 0, 65536 });
+            this.udPSOutlierSigma.Visible = false;
+            ((System.ComponentModel.ISupportInitialize)(this.udPSOutlierSigma)).EndInit();
+            this.Controls.Add(this.udPSOutlierSigma);
+            this.chkPSOutlierEnable = new System.Windows.Forms.CheckBoxTS();
+            this.chkPSOutlierEnable.AutoSize = true;
+            this.chkPSOutlierEnable.Location = new System.Drawing.Point(-100, -100);
+            this.chkPSOutlierEnable.Name = "chkPSOutlierEnable";
+            this.chkPSOutlierEnable.Size = new System.Drawing.Size(80, 17);
+            this.chkPSOutlierEnable.TabIndex = 999;
+            this.chkPSOutlierEnable.Text = "Outlier";
+            this.chkPSOutlierEnable.Visible = false;
+            this.Controls.Add(this.chkPSOutlierEnable);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -75953,6 +75997,7 @@
         private ComboBoxTS comboUsbDevices;
         private LabelTS lblTXProfileWarning;
         private Timer tmrCheckProfile;
+        private Timer timerPhRot;
         private ButtonTS btnClearTCISpots;
         private GroupBoxTS grpQuickSplit;
         private CheckBoxTS chkQuickSplit;
@@ -77114,5 +77159,8 @@
         private NumericUpDownTS nudRecording_monoPlaybackGain;
         private CheckBoxTS chkWaterfall_smear;
         private CheckBoxTS chkN1mm_include_cw_shift;
+        private NumericUpDownTS udPSTargetFeedbackLevel;
+        private NumericUpDownTS udPSOutlierSigma;
+        private CheckBoxTS chkPSOutlierEnable;
     }
 }

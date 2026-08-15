@@ -76,10 +76,10 @@ namespace Thetis
 {
     internal class Firewall
     {
-        private const string _IN_TCP = "Thetis Allow IN TCP";
-        private const string _OUT_TCP = "Thetis Allow OUT TCP";
-        private const string _IN_UDP = "Thetis Allow IN UDP";
-        private const string _OUT_UDP = "Thetis Allow OUT UDP";
+        private const string _IN_TCP = "SDR-VST3 Allow IN TCP";
+        private const string _OUT_TCP = "SDR-VST3 Allow OUT TCP";
+        private const string _IN_UDP = "SDR-VST3 Allow IN UDP";
+        private const string _OUT_UDP = "SDR-VST3 Allow OUT UDP";
 
         public static void Setup()
         {

@@ -713,8 +713,7 @@ namespace Thetis
 
             _use_additional_sas = !Common.HasArg(args, "-nospec"); // prevent the use of additional spec analysers           
             _touch_support = Common.HasArg(args, "-touch"); // configure touch support for mouse down/up/move, used primarily by containers, and ucMeter
-            _vstEnabled = Common.HasArg(args, "-vst") ||
-                !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("THETIS_VST_ENABLE"));
+            _vstEnabled = true;
 
             string splash_screen_folder = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "\\OpenHPSDR\\SplashScreens";
             if (!Directory.Exists(splash_screen_folder))
@@ -1349,7 +1348,7 @@ namespace Thetis
                 s += "  -nospec            do not use additional spectrum analysers from WDSP for filter item display\n";
                 s += "  -touch             provide touch support for containers to simulate mouse down/move/up\n";
                 s += "  -logshutdown       generate shutdown_log.txt when closing down\n";
-                s += "  -vst               enable VST plugin hosting (also enabled by THETIS_VST_ENABLE env var)\n\n";
+                s += "\n";
 
                 s += "  -datapath:c:\\thetisdatafolder\\                  use this data folder for everything\n";
                 s += "  -datapath:c:\\thetisdatafolder\\ -autostart       as above, with autostart\n";

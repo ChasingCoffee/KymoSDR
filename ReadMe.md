@@ -20,12 +20,8 @@ Install the MSI like any other Windows program — the installer will walk you t
 
 
 This version of thetis has a built in vst plugin system it can only use vst3 plugins it can not use .vst or .vst2 plugins
-simply add the -vst flag to you shortcut to activate the plugin system
+the plugin system is enabled by default, no shortcut flag is needed
 it is only for 64bit systems there is no x86 32 bit version.
-
-example:
-
-<img width="536" height="696" alt="Screenshot 2026-07-26 205107" src="https://github.com/user-attachments/assets/c9a2abb9-74e0-482e-b2a7-f755bb30d239" />
 
 
 Special Thanks to chasingcoffee his hard work is what made this vst version possible  

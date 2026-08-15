@@ -337,3 +337,26 @@ proprietary programs.  If your program is a subroutine library, you may
 consider it more useful to permit linking proprietary applications with the
 library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.
+
+---
+
+ADDITIONAL ATTRIBUTION
+======================
+
+This software is based on:
+- Thetis SDR by ramdor/Richard and contributors
+  https://github.com/ramdor/Thetis
+- VST3 plugin host support by ChasingCoffee
+  https://github.com/ChasingCoffee/Thetis/tree/vst-support
+- WDSP 2.00 integration (Q-factor EQ/CFCOMP port, PureSignal advanced
+  controls, Phase Rotator Auto/Reset/asymmetry, DSP P/Invoke updates) by
+  Yurij-eu2av
+  https://github.com/eu2av/OpenHPSDR-Thetis-Enhanced
+
+SDR-VST3 rebranding, VST3 console integration, WDSP 2.00 integration
+porting and maintenance by Freddie Herndon (W4YNY).
+
+Modifications and enhancements by ChasingCoffee, Yurij-eu2av and
+Freddie Herndon (W4YNY) are Copyright (c) 2026.
+All modifications are released under the same GPL-2.0 license terms
+as the original work.

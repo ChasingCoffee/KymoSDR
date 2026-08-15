@@ -94,6 +94,11 @@
     </BootstrapperPackage>
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>if not exist "$(ProjectDir)..\..\bin\x64\$(Configuration)" mkdir "$(ProjectDir)..\..\bin\x64\$(Configuration)"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\..\bin\x64\$(Configuration)\$(TargetFileName)"
+copy /Y "$(TargetDir)$(TargetName).pdb" "$(ProjectDir)..\..\bin\x64\$(Configuration)\$(TargetName).pdb"</PostBuildEvent>
+  </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
