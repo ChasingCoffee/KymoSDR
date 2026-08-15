@@ -65,6 +65,7 @@
     <Feature Id="ProductFeature" Title="SDR-VST3" Level="1" ConfigurableDirectory="INSTALLFOLDER">
       <ComponentGroupRef Id="ProductComponents" />
       <ComponentGroupRef Id="LspComponents" />
+      <ComponentGroupRef Id="SDRVST3SkinComponents" />
       <ComponentRef Id="StartMenuShortcut" />
       <ComponentRef Id="DesktopShortcut" />
     </Feature>
@@ -145,6 +146,9 @@
       </Directory>
 
       <Directory Id="DesktopFolder">
+      </Directory>
+
+      <Directory Id="AppDataFolder">
       </Directory>
       
     </Directory>

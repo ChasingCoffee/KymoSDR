@@ -4747,9 +4747,9 @@ namespace Thetis
             dr["VAC2_Exclusive_In"] = false;
             dr["VAC2_Exclusive_Out"] = false;
             dr["VAC1_Apply_RX_VST"] = false;
-            dr["VAC1_Bypass_TX_VST"] = true;
+            dr["VAC1_Bypass_TX_VST"] = false;
             dr["VAC2_Apply_RX_VST"] = false;
-            dr["VAC2_Bypass_TX_VST"] = true;
+            dr["VAC2_Bypass_TX_VST"] = false;
             //
 
             // CFC
@@ -4985,9 +4985,9 @@ namespace Thetis
             dr["VAC2_Exclusive_In"] = false;
             dr["VAC2_Exclusive_Out"] = false;
             dr["VAC1_Apply_RX_VST"] = false;
-            dr["VAC1_Bypass_TX_VST"] = true;
+            dr["VAC1_Bypass_TX_VST"] = false;
             dr["VAC2_Apply_RX_VST"] = false;
-            dr["VAC2_Bypass_TX_VST"] = true;
+            dr["VAC2_Bypass_TX_VST"] = false;
             //
 
             // CFC
@@ -5224,9 +5224,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -5462,9 +5462,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -5699,9 +5699,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -5936,9 +5936,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -6173,9 +6173,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -6410,9 +6410,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -6647,9 +6647,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -6884,9 +6884,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -7121,9 +7121,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -7358,9 +7358,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -7595,9 +7595,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -7832,9 +7832,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -8069,9 +8069,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -8306,9 +8306,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -8543,9 +8543,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -8780,9 +8780,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -9017,9 +9017,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -9254,9 +9254,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -9491,9 +9491,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC

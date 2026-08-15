@@ -135,6 +135,15 @@ namespace Thetis
 
         [DllImport("ChannelMaster.dll", EntryPoint = "SetTCIRxAudioMonVol", CallingConvention = CallingConvention.Cdecl)]
         public static extern void SetTCIRxAudioMonVol(int id, double vol);
+
+        [DllImport("ChannelMaster.dll", EntryPoint = "SetTCIApplyRxVst", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void SetTCIApplyRxVst(int apply);
+
+        [DllImport("ChannelMaster.dll", EntryPoint = "SetTCIApplyTxVst", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void SetTCIApplyTxVst(int apply);
+
+        [DllImport("ChannelMaster.dll", EntryPoint = "FeedTCIPostRxAudio", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void FeedTCIPostRxAudio(int nsamples, double[] buffer);
         // end tci
 
         // vst
@@ -1201,10 +1210,14 @@ namespace Thetis
         [DllImport("ChannelMaster.dll", EntryPoint = "FeedIVACPostRxAudio", CallingConvention = CallingConvention.Cdecl)]
         private static extern unsafe void NativeFeedIVACPostRxAudio(int nsamples, double* buff);
 
+        [DllImport("ChannelMaster.dll", EntryPoint = "FeedTCIPostRxAudio", CallingConvention = CallingConvention.Cdecl)]
+        private static extern unsafe void NativeFeedTCIPostRxAudio(int nsamples, double* buff);
+
         private static unsafe void OnVstRxProcess(double* buffer, int frames)
         {
             VstHost.ProcessRxAudio(buffer, frames);
             NativeFeedIVACPostRxAudio(frames, buffer);
+            NativeFeedTCIPostRxAudio(frames, buffer);
         }
 
         private static unsafe void OnVstTxProcess(double* buffer, int frames)

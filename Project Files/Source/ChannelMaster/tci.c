@@ -56,6 +56,7 @@ typedef struct _tci_rcvr
 typedef struct _tci
 {
 	void (*OutboundTCIRxAudio)(int id, int nsamples, double* buff);
+	int apply_rx_vst;
 	tci_rcvr rcvr[cmMAXrcvr];
 } tci, *TCI;
 
@@ -212,7 +213,10 @@ void xtciOUT(int id, int stream, double* data)
 		return;
 
 	if (stream == 1)
-		xMixAudio(a->mixer, -1, 0, data);
+	{
+		if (!_InterlockedAnd(&ptci->apply_rx_vst, 1))
+			xMixAudio(a->mixer, -1, 0, data);
+	}
 	else if (stream == 2)
 		xMixAudio(a->mixer, -1, 1, data);
 }
@@ -318,4 +322,26 @@ void SetTCIRxAudioMonVol(int id, double vol)
 		return;
 
 	SetAAudioMixVol(ptci->rcvr[id].mixer, 0, 1, ptci->rcvr[id].mon_scale);
+}
+
+PORT
+void SetTCIApplyRxVst(int apply)
+{
+	_InterlockedExchange(&ptci->apply_rx_vst, apply ? 1 : 0);
+}
+
+PORT
+void FeedTCIPostRxAudio(int nsamples, double* buff)
+{
+	int id;
+
+	if (!_InterlockedAnd(&ptci->apply_rx_vst, 1))
+		return;
+
+	if (nsamples <= 0 || buff == 0)
+		return;
+
+	for (id = 0; id < pcm->cmRCVR; id++)
+		if (ptci->rcvr[id].mixer)
+			xMixAudio(ptci->rcvr[id].mixer, -1, 0, buff);
 }

@@ -358,6 +358,22 @@ void destroy_cmaster()
 		pcm->VstShutdown();
 }
 
+// returns 1 if the TX VST chain should process the TX stream this pass
+// (TCI TX audio and the active TX VAC source can opt out, leaving their audio dry)
+static int vst_tx_chain_active (int tx)
+{
+	int vac;
+
+	if (_InterlockedAnd (&pcm->xmtr[tx].use_tci_audio, 1))				// TCI TX audio is the active source
+		return _InterlockedAnd (&pcm->apply_tci_tx_vst, 1);
+
+	vac = ppip->xmtr[tx].txvac;										// active TX VAC input
+	if (GetIVACFeedTx (vac))										// that VAC is feeding the TX stream this pass
+		return GetIVACApplyTxVst (vac);
+
+	return 1;														// no VAC in use, apply VST as normal
+}
+
 PORT
 void xcmaster (int stream)
 {
@@ -408,7 +424,7 @@ void xcmaster (int stream)
 		}
 		xpipe (stream, 0, pcm->in);
 		xdexp (tx);																				// vox-dexp
-		if (pcm->VstTxProcess)
+		if (pcm->VstTxProcess && vst_tx_chain_active(tx))
 			pcm->VstTxProcess(pcm->in[stream], pcm->xcm_insize[stream]);
 		fexchange0 (chid (stream, 0), pcm->in[stream], pcm->xmtr[tx].out[0], &error);			// dsp
 		// WriteAudio(10.0, pcm->xmtr[tx].ch_outrate, pcm->xmtr[tx].ch_outsize, pcm->xmtr[tx].out[0], 3);
@@ -513,6 +529,12 @@ PORT
 void SetTXTCIAudioRun (int txid, int active)
 {
 	_InterlockedExchange (&pcm->xmtr[txid].use_tci_audio, active);
+}
+
+PORT
+void SetTCIApplyTxVst (int apply)
+{
+	_InterlockedExchange (&pcm->apply_tci_tx_vst, apply);
 }
 //end tci
 

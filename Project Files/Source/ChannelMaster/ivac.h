@@ -77,7 +77,8 @@ typedef struct _ivac
 	int vac_bypass;
 	int vac_combine_input;
 	int vac_apply_rx_vst;
-	int vac_bypass_tx_vst;
+	int vac_apply_tx_vst;
+	volatile long vac_feed_tx;			// 1 while this VAC is feeding the TX stream (updated each TX pass)
 	double vac_preamp;
 	double vac_rx_scale;
 	double vac_mon_scale;		// MW0LGE_21k9d the volume level of the vac mon
@@ -100,6 +101,8 @@ typedef struct _ivac
 void combinebuff (int n, double* a, double* combined);
 void scalebuff (int n, double* in, double k, double* out);
 void xvac_out(int id, int nsamples, double* buff);
+extern int GetIVACFeedTx (int id);
+extern int GetIVACApplyTxVst (int id);
 extern __declspec(dllexport) void FeedIVACPostRxAudio(int nsamples, double* buff);
 
 extern __declspec(dllexport) void *create_resampleV (int samplerate_in, int samplerate_out);
@@ -133,6 +136,6 @@ extern __declspec(dllexport) void SetIVACmicRate (int id, int rate);
 extern __declspec(dllexport) void SetIVACaudioRate (int id, int rate);
 extern __declspec(dllexport) void SetIVACaudioSize (int id, int size);
 extern __declspec(dllexport) void SetIVACApplyRxVst (int id, int apply);
-extern __declspec(dllexport) void SetIVACBypassTxVst (int id, int bypass);
+extern __declspec(dllexport) void SetIVACApplyTxVst (int id, int apply);
 
 #endif

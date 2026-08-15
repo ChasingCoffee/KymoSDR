@@ -58,5 +58,7 @@ void SetTCITxMonitorRate(int id, int rate);
 PORT void SetTCIRxAudioMox(int id, int mox);
 PORT void SetTCIRxAudioMon(int id, int mon);
 PORT void SetTCIRxAudioMonVol(int id, double vol);
+PORT void SetTCIApplyRxVst(int apply);
+PORT void FeedTCIPostRxAudio(int nsamples, double* buff);
 
 #endif
