@@ -426,16 +426,17 @@ namespace Thetis
             if (ampv != null)
             {
                 _ampViewDone.Reset();
-                ampv.Invoke((Action)(() => ampv.CloseDown() ));
+                try
+                {
+                    ampv.Invoke((Action)(() => ampv.CloseDown() ));
+                }
+                catch { }
 
-                _ampViewDone.Wait();
+                _ampViewDone.Wait(2000);
 
                 if (ampvThread != null && ampvThread.IsAlive)
                 {
-                    if (!ampvThread.Join(1000))
-                    {
-                        ampvThread.Abort();
-                    }
+                    ampvThread.Join(1000);
                 }
 
                 ampvThread = null;

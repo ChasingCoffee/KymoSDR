@@ -3566,7 +3566,8 @@ namespace Thetis
                         if (nTmp > nWait) nWait = nTmp;
                     }
                 }
-                _meterThread.Join(nWait + 100); // slightly longer
+                if (nWait > 500) nWait = 500; // cap to prevent overflow and excessive wait
+                _meterThread.Join(nWait + 100);
             }
 
             foreach (KeyValuePair<string, frmMeterDisplay> kvp in _lstMeterDisplayForms)
@@ -42260,7 +42261,7 @@ namespace Thetis
                     _tcpClient.Close();
                 }
                 _tcpListener.Stop();
-                _listenerThread.Join();
+                _listenerThread.Join(2000);
                 ConnectorRunning?.Invoke(_guid, _type, false);
             }
             private bool clientConnected
@@ -42520,7 +42521,7 @@ namespace Thetis
                 {
                     _tcpClient.Close();
                 }
-                _clientThread.Join();
+                _clientThread.Join(2000);
                 ConnectorRunning?.Invoke(_guid, _type, false);
             }
             private bool clientConnected
@@ -42759,7 +42760,7 @@ namespace Thetis
             {
                 _isRunning = false;
                 _udpClient.Close();
-                _listenerThread.Join();
+                _listenerThread.Join(2000);
                 ConnectorRunning?.Invoke(_guid, _type, false);
             }
 
@@ -42956,7 +42957,7 @@ namespace Thetis
                 {
                     _serialPort.Close();
                 }
-                _serialThread.Join();
+                _serialThread.Join(2000);
                 ConnectorRunning?.Invoke(_guid, _type, false);
             }
 
