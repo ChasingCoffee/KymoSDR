@@ -260,10 +260,18 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 - [ ] Output verification: native DLLs (fftw, rnnoise) need manual copy
 
 ### Phase 1.5 — Shutdown Hang Fixes
-- [x] MultiMeterIO: added Join(2000) timeout to all 4 connector Stop() methods (TcpListener, TcpClient, UdpListener, SerialPort)
-- [x] PSForm.CloseAmpView: added Wait(2000) timeout, removed Thread.Abort() (unsupported in .NET 10)
+- [x] MultiMeterIO: added Join(2000) timeout to all 4 connector Stop() methods
+- [x] PSForm.CloseAmpView: added Wait(2000) timeout, removed Thread.Abort()
 - [x] MeterManager.Shutdown: capped nWait at 500ms to prevent overflow
-- [x] Console: set draw_display_thread.IsBackground=true so process can exit if thread hangs
+- [x] Console: set draw_display_thread.IsBackground=true
+- [x] **BinaryFormatter → System.Text.Json** in SerializeToBase64/DeserializeFromBase64 (ROOT CAUSE)
+- [x] Replaced FormatterServices with direct field copy in ucOtherButtonsOptionsGrid
+- [x] Removed all Thread.Abort() calls (15 in console.cs, 4 in TCIServer.cs, 3 in TCPIPcatServer.cs)
+- [x] Set all foreground threads to IsBackground=true (TCIServer, TCPIPcatServer, ampvThread, DXRenderer._dxRenderThread)
+- [x] ampv.Invoke → ampv.BeginInvoke (PSForm.CloseAmpView)
+- [x] _pause_DisplayThread=true before display loop shutdown (releases _objDX2Lock)
+- [x] pollOverloadSyncSeqErr: this.Invoke → this.BeginInvoke (prevents UI deadlock)
+- [x] Added _is_closing_now guard to prevent Console_Closing re-entry loop
 
 ### Phase 2
 - [x] Vortice.Direct2D1 3.8.3 + Vortice.Direct3D11 3.8.3 packages added
@@ -293,6 +301,13 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 - Phase 1: All 5 C# projects converted to SDK-style .NET 10, 0 compile errors
 - Phase 1.5: Fixed shutdown hang — MultiMeterIO infinite Join, PSForm infinite Wait, display thread foreground blocking
 - Phase 2: Added Vortice packages, began DXRenderer migration research
+
+### 2026-08-19 (shutdown debugging session)
+- Root cause of shutdown hang identified: `BinaryFormatter` removed in .NET 10 caused `SaveOptions()` to throw exceptions showing MessageBox dialogs blocking the UI thread for 8-28 seconds per attempt
+- ErrorLog.txt showed identical stack trace repeated 10+ times: `BinaryFormatter.Serialize` → `SerializeToBase64` → `MultiMeterIO.GetSaveData` → `SaveOptions` → `Console_Closing`
+- Shutdown log revealed Console_Closing was re-entering 3 times due to lack of re-entry guard
+- Fixed BinaryFormatter → System.Text.Json in all serialization paths (common.cs, DiversityForm.cs, ucOtherButtonsOptionsGrid.cs)
+- Committed as `f82ce68`
 
 ---
 
