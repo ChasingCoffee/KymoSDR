@@ -535,7 +535,7 @@ namespace Thetis
         private static bool _vstEnabled;
         public static bool VstEnabled { get { return _vstEnabled; } }
 
-        private bool m_bLogShutdown = false; // bool that is set via command line args to log the shutdown stages
+        private bool m_bLogShutdown = true; // bool that is set via command line args to log the shutdown stages
 
         private frmReleaseNotes _frmReleaseNotes;
 
@@ -635,7 +635,7 @@ namespace Thetis
             Thread.CurrentThread.CurrentUICulture = ci;
             //
 
-            m_bLogShutdown = Common.HasArg(args, "-logshutdown");
+            m_bLogShutdown = true; //Common.HasArg(args, "-logshutdown");
 
             // check versions of DLL/etc
             if (!checkVersions())
@@ -21717,10 +21717,11 @@ namespace Thetis
             {
                 if (this.InvokeRequired)
                 {
-                    this.Invoke(new MethodInvoker(() =>
+                    this.BeginInvoke(new MethodInvoker(() =>
                     {
                         run = this.chkPower.Checked;
                     }));
+                    System.Threading.Thread.Sleep(50);
                 }
                 else
                     run = this.chkPower.Checked;
@@ -21739,12 +21740,13 @@ namespace Thetis
                 {
                     if (this.InvokeRequired)
                     {
-                        this.Invoke(new MethodInvoker(() =>
+                        this.BeginInvoke(new MethodInvoker(() =>
                         {
                             checkOverloadsAndSync();
                             if (count == 0) checkSeqErrors();
-                            run = this.chkPower.Checked;
                         }));
+                        System.Threading.Thread.Sleep(100);
+                        run = this.chkPower.Checked;
                     }
                     else
                     {
@@ -27491,80 +27493,65 @@ namespace Thetis
 
                 if (multimeter_thread != null)
                 {
-                    if (!multimeter_thread.Join(/*500*/Math.Max(meter_delay, meter_dig_delay) + 50)) //MW0LGE change to meter delay
-                        multimeter_thread.Abort();
+                    multimeter_thread.Join(Math.Max(meter_delay, meter_dig_delay) + 50);
                 }
                 if (rx2_meter_thread != null)
                 {
-                    if (!rx2_meter_thread.Join(/*500*/Math.Max(meter_delay, meter_dig_delay) + 50)) //MW0LGE change to meter delay
-                        rx2_meter_thread.Abort();
+                    rx2_meter_thread.Join(Math.Max(meter_delay, meter_dig_delay) + 50);
                 }
                 //MW0LGE_[2.9.0.7]
                 if (multimeter2_thread_rx1 != null)
                 {
-                    if (!multimeter2_thread_rx1.Join(MeterManager.QuickestUpdateInterval(1, MOX)))
-                        multimeter2_thread_rx1.Abort();
+                    multimeter2_thread_rx1.Join(MeterManager.QuickestUpdateInterval(1, MOX));
                 }
                 if (multimeter2_thread_rx2 != null)
                 {
-                    if (!multimeter2_thread_rx2.Join(MeterManager.QuickestUpdateInterval(2, MOX)))
-                        multimeter2_thread_rx2.Abort();
+                    multimeter2_thread_rx2.Join(MeterManager.QuickestUpdateInterval(2, MOX));
                 }
                 //
                 if (rx2_sql_update_thread != null)
                 {
-                    if (!rx2_sql_update_thread.Join(500))
-                        rx2_sql_update_thread.Abort();
+                    rx2_sql_update_thread.Join(500);
                 }
                 if (rx2_sql_update_thread != null)
                 {
-                    if (!rx2_sql_update_thread.Join(500))
-                        rx2_sql_update_thread.Abort();
+                    rx2_sql_update_thread.Join(500);
                 }
                 if (sql_update_thread != null)
                 {
-                    if (!sql_update_thread.Join(500))
-                        sql_update_thread.Abort();
+                    sql_update_thread.Join(500);
                 }
                 if (noise_gate_update_thread != null)
                 {
-                    if (!noise_gate_update_thread.Join(500))
-                        noise_gate_update_thread.Abort();
+                    noise_gate_update_thread.Join(500);
                 }
                 if (vox_update_thread != null)
                 {
-                    if (!vox_update_thread.Join(500))
-                        vox_update_thread.Abort();
+                    vox_update_thread.Join(500);
                 }
                 if (poll_ptt_thread != null)
                 {
-                    if (!poll_ptt_thread.Join(500))
-                        poll_ptt_thread.Abort();
+                    poll_ptt_thread.Join(500);
                 }
                 if (poll_cw_thread != null)
                 {
-                    if (!poll_cw_thread.Join(500))
-                        poll_cw_thread.Abort();
+                    poll_cw_thread.Join(500);
                 }
                 if (poll_pa_pwr_thread != null)
                 {
-                    if (!poll_pa_pwr_thread.Join(500))
-                        poll_pa_pwr_thread.Abort();
+                    poll_pa_pwr_thread.Join(500);
                 }
                 if (_overload_thread != null)
                 {
-                    if (!_overload_thread.Join(500))
-                        _overload_thread.Abort();
+                    _overload_thread.Join(500);
                 }
                 if (poll_tx_inhibit_thead != null)
                 {
-                    if (!poll_tx_inhibit_thead.Join(500))
-                        poll_tx_inhibit_thead.Abort();
+                    poll_tx_inhibit_thead.Join(500);
                 }
                 if (display_volts_amps_thead != null)
                 {
-                    if (!display_volts_amps_thead.Join(650)) // there is a sleep 600 in there MW0LGE
-                        display_volts_amps_thead.Abort();
+                    display_volts_amps_thead.Join(650);
                 }
                 if (ATUTunetokenSource != null &&
                     ATUTunetokenSource.IsCancellationRequested == false)
@@ -28091,8 +28078,15 @@ namespace Thetis
         }
         private ShutdownForm _frmShutDownForm = null;
         private bool _is_shutting_down = false;
+        private bool _is_closing_now = false;
         private void Console_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (_is_closing_now)
+            {
+                e.Cancel = true;
+                return;
+            }
+
             if (Display.RunningFPSProfile)
             {
                 MessageBox.Show("Stop the FPS profile test first !",
@@ -28106,12 +28100,12 @@ namespace Thetis
 
             if (!_is_shutting_down)
             {
-                shutdownLogStringToPath("Inside Console_Closing()");
+            shutdownLogStringToPath("Inside Console_Closing()");
 
-                //show the shutdown form and then restart the close process via BeginInvoke
-                //removes the doevents issue and allows the shutdown form to show properly
-                e.Cancel = true;
-                _is_shutting_down = true;
+            //show the shutdown form and then restart the close process via BeginInvoke
+            //removes the doevents issue and allows the shutdown form to show properly
+            e.Cancel = true;
+            _is_shutting_down = true;
 
                 _frmShutDownForm = new ShutdownForm();
                 _frmShutDownForm.StartPosition = FormStartPosition.Manual;
@@ -28132,6 +28126,7 @@ namespace Thetis
                 return;
             }
 
+            _is_closing_now = true;
             shutdownLogStringToPath("Before ThetisBotDiscord.Disconnect()");
             ThetisBotDiscord.Shutdown();
 
@@ -28236,8 +28231,9 @@ namespace Thetis
             cmaster.Hidewb(0);
 
             shutdownLogStringToPath("Before Display.ShutdownDX2D()");
+            _pause_DisplayThread = true; // prevent RenderDX2D from being called, releases _objDX2Lock
             m_bDisplayLoopRunning = false; // will cause the display loop to exit
-            if (draw_display_thread != null && draw_display_thread.IsAlive) draw_display_thread.Join(500); // reduced from 1100 to speed up shutdown
+            if (draw_display_thread != null && draw_display_thread.IsAlive) draw_display_thread.Join(500);
             Display.ShutdownDX2D(); // MW0LGE
 
             shutdownLogStringToPath("Before removeDelegates()");
@@ -28348,10 +28344,14 @@ namespace Thetis
                 using (StreamWriter w = File.AppendText(AppDataPath + "\\shutdown_log.txt"))
                 {
                     //using block will auto close stream
-                    w.WriteLine(entry);
+                    w.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {entry}");
+                    w.Flush();
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Shutdown log write failed: {ex.Message} path={AppDataPath}");
+            }
         }
         private void removeShutdownLog()
         {

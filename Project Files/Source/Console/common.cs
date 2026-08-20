@@ -1123,13 +1123,12 @@ namespace Thetis
         {
             using (MemoryStream memoryStream = new MemoryStream())
             {
+                byte[] jsonBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(obj);
                 using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Compress))
                 {
-                    IFormatter formatter = new BinaryFormatter();
-                    formatter.Serialize(gzipStream, obj);
+                    gzipStream.Write(jsonBytes, 0, jsonBytes.Length);
                 }
-                byte[] compressedArray = memoryStream.ToArray();
-                return Convert.ToBase64String(compressedArray);
+                return Convert.ToBase64String(memoryStream.ToArray());
             }
         }
         public static T DeserializeFromBase64<T>(string base64String)
@@ -1138,19 +1137,10 @@ namespace Thetis
             using (MemoryStream memoryStream = new MemoryStream(compressedArray))
             {
                 using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Decompress))
+                using (MemoryStream decompressed = new MemoryStream())
                 {
-                    BinaryFormatter formatter = new BinaryFormatter();
-
-                    // required to handle renamed types in Thetis.MeterManager.clsFilterItem
-                    // DisplayMode and WaterfallPalette enums
-                    TypeRenameBinder binder = TypeRenameBinder.Create()
-                        .Add("Thetis.MeterManager+clsFilterItem+DisplayMode", typeof(MeterManager.clsFilterItem.FIDisplayMode))
-                        .Add("Thetis.MeterManager+clsFilterItem+WaterfallPalette", typeof(MeterManager.clsFilterItem.FIWaterfallPalette));
-
-                    formatter.Binder = binder;
-
-                    object obj = formatter.Deserialize(gzipStream);
-                    return (T)obj;
+                    gzipStream.CopyTo(decompressed);
+                    return System.Text.Json.JsonSerializer.Deserialize<T>(decompressed.ToArray());
                 }
             }
         }

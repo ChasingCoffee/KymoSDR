@@ -71,6 +71,7 @@ namespace Thetis
                 m_clientListenerThread =
                     new Thread(new ThreadStart(SocketListenerThreadStart));
                 m_clientListenerThread.Name = "TCPIP cat clientListener Thread";
+                m_clientListenerThread.IsBackground = true;
 
                 m_clientListenerThread.Start();
             }
@@ -251,12 +252,8 @@ namespace Thetis
 
                 m_clientListenerThread.Join(50);
 
-                if (m_clientListenerThread.IsAlive)
-                {
-                    m_clientListenerThread.Abort();
-                    m_disconnected = true;
-                    ClientDisconnectedHandlers?.Invoke();
-                }
+                m_disconnected = true;
+                ClientDisconnectedHandlers?.Invoke();
 
                 m_clientListenerThread = null;
                 m_clientSocket = null;
@@ -519,11 +516,13 @@ namespace Thetis
                     m_serverThread = new Thread(new ThreadStart(ServerThreadStart));
                     m_serverThread.Priority = ThreadPriority.BelowNormal;
                     m_serverThread.Name = "TCPIP cat server Thread";
+                    m_serverThread.IsBackground = true;
                     m_serverThread.Start();
 
                     m_purgingThread = new Thread(new ThreadStart(PurgingThreadStart));
                     m_purgingThread.Priority = ThreadPriority.Lowest;
                     m_purgingThread.Name = "TCPIP cat purging Thread";
+                    m_purgingThread.IsBackground = true;
                     m_purgingThread.Start();
                 }
                 catch (SocketException se)
@@ -583,9 +582,7 @@ namespace Thetis
 
                 if (m_serverThread != null)
                 {
-                    m_serverThread.Join(50); // dont need to wait long here, as we are blocking anyway
-                    if (m_serverThread.IsAlive)
-                        m_serverThread.Abort();
+                    m_serverThread.Join(50);
                     m_serverThread = null;
                 }
 
@@ -595,8 +592,6 @@ namespace Thetis
                     if (!m_bSleepingInPurge)
                         m_purgingThread.Join(500);
 
-                    if (m_purgingThread.IsAlive)
-                        m_purgingThread.Abort();
                     m_purgingThread = null;
                 }
 

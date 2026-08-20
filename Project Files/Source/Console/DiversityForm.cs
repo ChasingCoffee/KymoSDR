@@ -1457,25 +1457,17 @@ namespace Thetis
         }
         public string SerializeObjectToString<T>(T obj)
         {
-            using (MemoryStream memoryStream = new MemoryStream())
-            {
-                BinaryFormatter binaryFormatter = new BinaryFormatter();
-                binaryFormatter.Serialize(memoryStream, obj);
-                string tmp = Convert.ToBase64String(memoryStream.ToArray());
-                tmp = tmp.Replace("/", "[backslash]"); // to fix issue with SaveForm/RestoreForm
-                return tmp;
-            }
+            byte[] jsonBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(obj);
+            string tmp = Convert.ToBase64String(jsonBytes);
+            tmp = tmp.Replace("/", "[backslash]"); // to fix issue with SaveForm/RestoreForm
+            return tmp;
         }
 
         public T DeserializeStringToObject<T>(string str)
         {
             str = str.Replace("[backslash]", "/"); // to fix issue with SaveForm/RestoreForm
             byte[] bytes = Convert.FromBase64String(str);
-            using (MemoryStream memoryStream = new MemoryStream(bytes))
-            {
-                BinaryFormatter binaryFormatter = new BinaryFormatter();
-                return (T)binaryFormatter.Deserialize(memoryStream);
-            }
+            return System.Text.Json.JsonSerializer.Deserialize<T>(bytes);
         }
         private memorySettings[] _memories = new memorySettings[8]; //0-7
         private void initMemories()
@@ -1500,9 +1492,9 @@ namespace Thetis
             g.TextRenderingHint = TextRenderingHint.AntiAlias;
             // draw the background of the radar
             g.FillEllipse(new LinearGradientBrush(new Point((int)(size / 2), 0), new Point((int)(size / 2), size - 1), topColor, bottomColor), 0, 0, size - 1, size - 1);
-            // draw the outer ring (0° elevation)
+            // draw the outer ring (0ï¿½ elevation)
             g.DrawEllipse(pen, 0, 0, size - 1, size - 1);
-            // draw the inner ring (60° elevation)
+            // draw the inner ring (60ï¿½ elevation)
             int interval = size / 2;
             // draw the middle ring 
             g.DrawEllipse(pen, (size - interval) / 2, (size - interval) / 2, interval, interval);
@@ -1547,12 +1539,12 @@ namespace Thetis
             //g.TextRenderingHint = TextRenderingHint.AntiAlias;
             //// draw the background of the radar
             //g.FillEllipse(new LinearGradientBrush(new Point((int)(size / 2), 0), new Point((int)(size / 2), size - 1), topColor, bottomColor), 0, 0, size - 1, size - 1);
-            //// draw the outer ring (0° elevation)
+            //// draw the outer ring (0ï¿½ elevation)
             //g.DrawEllipse(pen, 0, 0, size - 1, size - 1);
-            //// draw the inner ring (60° elevation)
+            //// draw the inner ring (60ï¿½ elevation)
             ////int interval = size / 3;
             ////g.DrawEllipse(pen, (size - interval) / 2, (size - interval) / 2, interval, interval);
-            //// draw the middle ring (30° elevation)
+            //// draw the middle ring (30ï¿½ elevation)
             ////interval *= 2;
             ////g.DrawEllipse(pen, (size - interval) / 2, (size - interval) / 2, interval, interval);
             //int interval = size / 2;

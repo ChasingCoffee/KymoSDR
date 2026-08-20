@@ -428,7 +428,7 @@ namespace Thetis
                 _ampViewDone.Reset();
                 try
                 {
-                    ampv.Invoke((Action)(() => ampv.CloseDown() ));
+                    ampv.BeginInvoke((Action)(() => ampv.CloseDown() ));
                 }
                 catch { }
 
@@ -459,6 +459,7 @@ namespace Thetis
                 ampvThread = new Thread(RunAmpv);
                 ampvThread.SetApartmentState(ApartmentState.STA);
                 ampvThread.Name = "Ampv Thread";
+                ampvThread.IsBackground = true;
                 ampvThread.Start();
             }
         }

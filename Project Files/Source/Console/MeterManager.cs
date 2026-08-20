@@ -31842,7 +31842,7 @@ namespace Thetis
                 {
                     Name = "Multimeter DX Render Thread",
                     Priority = ThreadPriority.Lowest,
-                    IsBackground = false
+                    IsBackground = true
                 };
                 //_dxRenderThread.SetApartmentState(ApartmentState.STA); //[2.10.3]
                 _dxRenderThread.Start();
