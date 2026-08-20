@@ -763,9 +763,11 @@ namespace Thetis
         }
         public Color GetColourForDBM(float dbm)
         {
-            float f = GetPercForDBM(dbm);
-
-            return GetColourAtPercent(f);
+            lock (m_objListLocker)
+            {
+                float f = GetPercForDBM(dbm);
+                return GetColourAtPercent(f);
+            }
         }
         public Color GetColourAtPercent(float perc)
         {

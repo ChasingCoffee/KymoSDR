@@ -32261,76 +32261,79 @@ namespace Thetis
                     _dxRenderThread.Join(nWait + 100); // slightly longer
                 }
 
-                try
+                lock (_DXlock)
                 {
-                    if (_device != null && _device.ImmediateContext != null)
+                    try
                     {
-                        _device.ImmediateContext.ClearState();
-                        _device.ImmediateContext.Flush();
+                        if (_device != null && _device.ImmediateContext != null)
+                        {
+                            _device.ImmediateContext.ClearState();
+                            _device.ImmediateContext.Flush();
+                        }
+
+                        RemoveAllDXImages();
+
+                        releaseDXFonts();
+                        releaseDXResources();
+
+                        Utilities.Dispose(ref _rounded_stroke_style);
+                        _rounded_stroke_style = null;
+                        Utilities.Dispose(ref _dash_style);
+                        _dash_style = null;
+
+                        if (_filter_display_waterfall_bmp != null)
+                        {
+                            Utilities.Dispose(ref _filter_display_waterfall_bmp);
+                            _filter_display_waterfall_bmp = null;
+                        }
+                        if (_filter_display_waterfall_bmp_tx != null)
+                        {
+                            Utilities.Dispose(ref _filter_display_waterfall_bmp_tx);
+                            _filter_display_waterfall_bmp_tx = null;
+                        }
+
+                        Utilities.Dispose(ref _renderTarget);
+                        Utilities.Dispose(ref _swapChain1);
+                        Utilities.Dispose(ref _swapChain);
+                        Utilities.Dispose(ref _surface);
+                        Utilities.Dispose(ref _factory);
+                        Utilities.Dispose(ref _factory1);                    
+
+                        _renderTarget = null;
+                        _swapChain1 = null;
+                        _swapChain = null;
+                        _surface = null;
+                        _factory = null;
+                        _factory1 = null;
+
+                        if (_device != null && _device.ImmediateContext != null)
+                        {
+                            SharpDX.Direct3D11.DeviceContext dc = _device.ImmediateContext;
+                            Utilities.Dispose(ref dc);
+                            dc = null;
+                        }
+
+                        SharpDX.Direct3D11.DeviceDebug ddb = null;
+                        if (_device != null && _device.DebugName != "")
+                        {
+                            ddb = new SharpDX.Direct3D11.DeviceDebug(_device);
+                            ddb.ReportLiveDeviceObjects(ReportingLevel.Detail);
+                        }
+
+                        if (ddb != null)
+                        {
+                            Utilities.Dispose(ref ddb);
+                            ddb = null;
+                        }
+                        Utilities.Dispose(ref _device);
+                        _device = null;
+
+                        _bDXSetup = false;
                     }
-
-                    RemoveAllDXImages();
-
-                    releaseDXFonts();
-                    releaseDXResources();
-
-                    Utilities.Dispose(ref _rounded_stroke_style);
-                    _rounded_stroke_style = null;
-                    Utilities.Dispose(ref _dash_style);
-                    _dash_style = null;
-
-                    if (_filter_display_waterfall_bmp != null)
+                    catch (Exception e)
                     {
-                        Utilities.Dispose(ref _filter_display_waterfall_bmp);
-                        _filter_display_waterfall_bmp = null;
+                        MessageBox.Show("Problem Shutting Down Meter DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", "DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                     }
-                    if (_filter_display_waterfall_bmp_tx != null)
-                    {
-                        Utilities.Dispose(ref _filter_display_waterfall_bmp_tx);
-                        _filter_display_waterfall_bmp_tx = null;
-                    }
-
-                    Utilities.Dispose(ref _renderTarget);
-                    Utilities.Dispose(ref _swapChain1);
-                    Utilities.Dispose(ref _swapChain);
-                    Utilities.Dispose(ref _surface);
-                    Utilities.Dispose(ref _factory);
-                    Utilities.Dispose(ref _factory1);                    
-
-                    _renderTarget = null;
-                    _swapChain1 = null;
-                    _swapChain = null;
-                    _surface = null;
-                    _factory = null;
-                    _factory1 = null;
-
-                    if (_device != null && _device.ImmediateContext != null)
-                    {
-                        SharpDX.Direct3D11.DeviceContext dc = _device.ImmediateContext;
-                        Utilities.Dispose(ref dc);
-                        dc = null;
-                    }
-
-                    SharpDX.Direct3D11.DeviceDebug ddb = null;
-                    if (_device != null && _device.DebugName != "")
-                    {
-                        ddb = new SharpDX.Direct3D11.DeviceDebug(_device);
-                        ddb.ReportLiveDeviceObjects(ReportingLevel.Detail);
-                    }
-
-                    if (ddb != null)
-                    {
-                        Utilities.Dispose(ref ddb);
-                        ddb = null;
-                    }
-                    Utilities.Dispose(ref _device);
-                    _device = null;
-
-                    _bDXSetup = false;
-                }
-                catch (Exception e)
-                {
-                    MessageBox.Show("Problem Shutting Down Meter DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", "DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 }
             }
             internal void RemoveAllDXImages()
@@ -32425,6 +32428,11 @@ namespace Thetis
                                     }
                                 }
 
+                                if (_renderTarget == null || _renderTarget.IsDisposed)
+                                {
+                                    _dxDisplayThreadRunning = false;
+                                    continue;
+                                }
                                 _renderTarget.BeginDraw();
 
                                 // middle pixel align shift
@@ -32477,6 +32485,11 @@ namespace Thetis
                                 // note: the only way to have Present non block when using vsync number of blanks 0 , is to use DoNotWait
                                 // however the gpu will error if it is busy doing something and the data can not be queued
                                 // It will error and just ignore everything, we try present and ignore the 0x887A000A error
+                                if (_swapChain1 == null || _swapChain1.IsDisposed)
+                                {
+                                    _dxDisplayThreadRunning = false;
+                                    continue;
+                                }
                                 PresentFlags pf = _nVBlanks == 0 ? _NoVSYNCpresentFlag : PresentFlags.None;
                                 Result r = _swapChain1.TryPresent(_nVBlanks, pf);
 

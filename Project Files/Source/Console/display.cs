@@ -249,6 +249,31 @@ namespace Thetis
 
         private static float[] waterfall_data;
 
+        // 3D panadapter ring buffer
+        private const int Max3DHistoryLines = 60;
+        private static float[][] _3dHistoryBuffer;
+        private static int _3dHistoryCount;
+        private static int _3dHistoryHead;
+
+        // 3D panadapter perspective constants (matched to AetherSDR DssRenderer)
+        private static float _pan3DPerspective = 0.60f;   // back rows = 60% of front width (kBackWidthFrac)
+        private static float _pan3DDepth = 0.58f;         // baseline rises 58% of plot H (kDepthSpanFrac)
+        private static float _pan3DDepthFade = 0.16f;     // atmospheric haze strength (kHaze)
+        private static float _pan3DRidgeHeight = 0.46f;   // front ridge = 46% of plot H (kFrontMaxRidgeFrac)
+
+        // 3D panadapter temporal median filter (impulse rejection)
+        private static float[][] _3dMedianPrev;
+        private static int _3dMedianCount;
+
+        // 3D panadapter row push throttle — configurable FPS
+        private static long _3dLastPushTicks = 0;
+        private static long _3dPushIntervalTicks = 400000; // default ~25 FPS (100ns ticks)
+        public static int Pan3DSpeed
+        {
+            get { return (int)(10000000L / _3dPushIntervalTicks); }
+            set { _3dPushIntervalTicks = 10000000L / Math.Max(1, Math.Min(60, value)); }
+        }
+
         public static float[] current_waterfall_data_copy;
         public static float[] current_waterfall_data_bottom_copy;
 
@@ -494,6 +519,78 @@ namespace Thetis
         {
             get { return pan_fill_color; }
             set { pan_fill_color = value; }
+        }
+
+        private static bool _pan3DEnabled = false;
+        public static bool Pan3DEnabled
+        {
+            get { return _pan3DEnabled; }
+            set
+            {
+                _pan3DEnabled = value;
+                if (!value)
+                {
+                    _3dHistoryCount = 0;
+                    _3dHistoryHead = 0;
+                    _3dMedianCount = 0;
+                }
+            }
+        }
+
+        public static float Pan3DPerspective
+        {
+            get { return _pan3DPerspective; }
+            set { _pan3DPerspective = Math.Max(0.1f, Math.Min(1.0f, value)); }
+        }
+
+        public static float Pan3DDepth
+        {
+            get { return _pan3DDepth; }
+            set { _pan3DDepth = Math.Max(0.0f, Math.Min(1.0f, value)); }
+        }
+
+        public static float Pan3DDepthFade
+        {
+            get { return _pan3DDepthFade; }
+            set { _pan3DDepthFade = Math.Max(0.0f, Math.Min(1.0f, value)); }
+        }
+
+        public static float Pan3DRidgeHeight
+        {
+            get { return _pan3DRidgeHeight; }
+            set { _pan3DRidgeHeight = Math.Max(0.1f, Math.Min(1.0f, value)); }
+        }
+
+        private static bool _pan3DUseWaterfallColor = true;
+        public static bool Pan3DUseWaterfallColor
+        {
+            get { return _pan3DUseWaterfallColor; }
+            set { _pan3DUseWaterfallColor = value; }
+        }
+
+        private static bool _pan3DWaterfallSync = true;
+        public static bool Pan3DWaterfallSync
+        {
+            get { return _pan3DWaterfallSync; }
+            set { _pan3DWaterfallSync = value; }
+        }
+
+        private static int _pan3DLineCount = 35;
+        public static int Pan3DLineCount
+        {
+            get { return _pan3DLineCount; }
+            set { _pan3DLineCount = Math.Max(2, Math.Min(Max3DHistoryLines, value)); }
+        }
+
+        private static Color _pan3DLineColor = Color.Aquamarine;
+        public static Color Pan3DLineColor
+        {
+            get { return _pan3DLineColor; }
+            set
+            {
+                _pan3DLineColor = value;
+                if (m_bDX2_3d_fill_brush != null) Utilities.Dispose(ref m_bDX2_3d_fill_brush);
+            }
         }
 
         private static bool _tx_on_vfob = false;
@@ -3603,6 +3700,19 @@ namespace Thetis
                     buildFontsDX2D();
 
                     SetDX2BackgoundImage(console.PnlDisplayBackgroundImage);
+
+                    // initialize 3D panadapter ring buffer
+                    _3dHistoryBuffer = new float[Max3DHistoryLines][];
+                    for (int i = 0; i < Max3DHistoryLines; i++)
+                        _3dHistoryBuffer[i] = new float[1]; // will be resized on first use
+                    _3dHistoryCount = 0;
+                    _3dHistoryHead = 0;
+
+                    // initialize 3D temporal median filter buffers
+                    _3dMedianPrev = new float[2][];
+                    _3dMedianPrev[0] = new float[1];
+                    _3dMedianPrev[1] = new float[1];
+                    _3dMedianCount = 0;
                 }
                 catch (Exception e)
                 {
@@ -4053,7 +4163,7 @@ namespace Thetis
                                 DrawSpectrumDX2D(1, displayTargetWidth, m_nRX1DisplayHeight, false);
                                 break;
                             case DisplayMode.PANADAPTER:
-                                DrawPanadapterDX2D(0, displayTargetWidth, m_nRX1DisplayHeight, 1, false);
+                                DrawPanadapterDX2D(0, displayTargetWidth, m_nRX1DisplayHeight, 1, false, _pan3DEnabled);
                                 if (_showTCISpots) drawSpots(1, 0, displayTargetWidth, false);
                                 break;
                             case DisplayMode.SCOPE:
@@ -4079,8 +4189,8 @@ namespace Thetis
                                 lock (m_objSplitDisplayLock)
                                 {
                                     m_nRX1DisplayHeight = (int)(displayTargetHeight * m_fPanafallSplitPerc);
-                                    split_display = PanafallSplitBarPos <= (displayTargetHeight / 2); // add more granularity, TODO change based on avaialble height
-                                    DrawPanadapterDX2D(0, displayTargetWidth, m_nRX1DisplayHeight, 1, false);
+                                    split_display = PanafallSplitBarPos <= (displayTargetHeight / 2);
+                                    DrawPanadapterDX2D(0, displayTargetWidth, m_nRX1DisplayHeight, 1, false, _pan3DEnabled);
                                     DrawWaterfallDX2D(PanafallSplitBarPos, displayTargetWidth, displayTargetHeight - m_nRX1DisplayHeight, 1, true);
                                     if (_showTCISpots) drawSpots(1, 0, displayTargetWidth, false);
                                     split_display = false;
@@ -4131,7 +4241,7 @@ namespace Thetis
                                 DrawPhase2DX2D(displayTargetWidth, m_nRX1DisplayHeight, false);
                                 break;
                             case DisplayMode.PANADAPTER:
-                                DrawPanadapterDX2D(0, displayTargetWidth, m_nRX1DisplayHeight, 1, false);
+                                DrawPanadapterDX2D(0, displayTargetWidth, m_nRX1DisplayHeight, 1, false, _pan3DEnabled);
                                 if (_showTCISpots) drawSpots(1, 0, displayTargetWidth, false);
                                 break;
                             case DisplayMode.WATERFALL:
@@ -4143,7 +4253,7 @@ namespace Thetis
                                 break;
                             case DisplayMode.PANAFALL:
                                 m_nRX1DisplayHeight = displayTargetHeight / 4;
-                                DrawPanadapterDX2D(0, displayTargetWidth, m_nRX1DisplayHeight, 1, false);
+                                DrawPanadapterDX2D(0, displayTargetWidth, m_nRX1DisplayHeight, 1, false, _pan3DEnabled);
                                 DrawWaterfallDX2D(m_nRX1DisplayHeight, displayTargetWidth, m_nRX1DisplayHeight, 1, true);
                                 if (_showTCISpots) drawSpots(1, 0, displayTargetWidth, false);
                                 break;
@@ -4155,7 +4265,7 @@ namespace Thetis
                         {
 
                             case DisplayMode.PANADAPTER:
-                                DrawPanadapterDX2D(m_nRX2DisplayHeight, displayTargetWidth, m_nRX2DisplayHeight, 2, true);
+                                DrawPanadapterDX2D(m_nRX2DisplayHeight, displayTargetWidth, m_nRX2DisplayHeight, 2, true, _pan3DEnabled);
                                 if (_showTCISpots) drawSpots(2, m_nRX2DisplayHeight, displayTargetWidth, false);
                                 break;
                             case DisplayMode.WATERFALL:
@@ -4164,7 +4274,7 @@ namespace Thetis
                                 break;
                             case DisplayMode.PANAFALL:
                                 m_nRX2DisplayHeight = displayTargetHeight / 4;
-                                DrawPanadapterDX2D(m_nRX2DisplayHeight * 2, displayTargetWidth, m_nRX2DisplayHeight, 2, false);
+                                DrawPanadapterDX2D(m_nRX2DisplayHeight * 2, displayTargetWidth, m_nRX2DisplayHeight, 2, false, _pan3DEnabled);
                                 DrawWaterfallDX2D(m_nRX2DisplayHeight * 3, displayTargetWidth, m_nRX2DisplayHeight, 2, true);
                                 if (_showTCISpots) drawSpots(2, m_nRX2DisplayHeight * 2, displayTargetWidth, false);
                                 break;
@@ -4343,6 +4453,7 @@ namespace Thetis
 
             _d2dRenderTarget.PopAxisAlignedClip();
         }
+
 
         private static int m_nVBlanks = 0;
         public static int VerticalBlanks
@@ -4973,13 +5084,8 @@ namespace Thetis
         private static float _ema_oip5;
         //
 
-        unsafe static private bool DrawPanadapterDX2D(int nVerticalShift, int W, int H, int rx, bool bottom)
+        unsafe static private bool DrawPanadapterDX2D(int nVerticalShift, int W, int H, int rx, bool bottom, bool draw3DHistory = false)
         {
-            //if (grid_control) //[2.10.3.9]MW0LGE raw grid control option now just turns off the grid, all other elements are shown
-            //{
-                int centre_x = drawPanadapterAndWaterfallGridDX2D(nVerticalShift, W, H, rx, bottom, out long left_edge, out long right_edge, false);
-            //}
-
             float local_max_y = float.MinValue;
             float local_max_x = float.MinValue;
 
@@ -5005,6 +5111,30 @@ namespace Thetis
             bool bDoVisualNotch = false;
 
             bool show_imd_measurements;
+
+            if (rx == 1)
+            {
+                grid_max = local_mox ? tx_spectrum_grid_max : spectrum_grid_max;
+                grid_min = local_mox ? tx_spectrum_grid_min : spectrum_grid_min;
+            }
+            else
+            {
+                grid_max = local_mox ? tx_spectrum_grid_max : rx2_spectrum_grid_max;
+                grid_min = local_mox ? tx_spectrum_grid_min : rx2_spectrum_grid_min;
+            }
+            yRange = grid_max - grid_min;
+
+            // draw 3D history BEFORE the grid, so filters/cursor render on top
+            if (draw3DHistory && !local_mox)
+            {
+                DrawPanadapter3DHistoryDX2D(nVerticalShift, W, H, rx, bottom,
+                    null, 0, grid_max, nDecimatedWidth, m_nDecimation);
+            }
+
+            //if (grid_control) //[2.10.3.9]MW0LGE raw grid control option now just turns off the grid, all other elements are shown
+            //{
+                int centre_x = drawPanadapterAndWaterfallGridDX2D(nVerticalShift, W, H, rx, bottom, out long left_edge, out long right_edge, false);
+            //}
 
             if (rx == 1)
             {
@@ -5049,6 +5179,66 @@ namespace Thetis
                         Win32.memcpy(wptr, rptr, nDecimatedWidth * sizeof(float));
 
                     data_ready = false;
+
+                    // write to 3D panadapter ring buffer — throttled to match waterfall speed when sync is on
+                    long nowTicks = DateTime.UtcNow.Ticks;
+                    long effectiveInterval = _pan3DWaterfallSync
+                        ? (long)(getWaterfallLineIntervalMs(1) * 10000.0) // ms to 100ns ticks
+                        : _3dPushIntervalTicks;
+                    if (effectiveInterval < 10000) effectiveInterval = 10000; // floor at 1ms
+                    if (_pan3DEnabled && _3dHistoryBuffer != null &&
+                        (nowTicks - _3dLastPushTicks >= effectiveInterval))
+                    {
+                        if (_3dHistoryBuffer[_3dHistoryHead] == null ||
+                            _3dHistoryBuffer[_3dHistoryHead].Length < nDecimatedWidth)
+                        {
+                            _3dHistoryBuffer[_3dHistoryHead] = new float[nDecimatedWidth];
+                        }
+
+                        // temporal median filter (impulse rejection)
+                        bool useMedian = _3dMedianCount >= 2 &&
+                            _3dMedianPrev[0] != null && _3dMedianPrev[0].Length >= nDecimatedWidth &&
+                            _3dMedianPrev[1] != null && _3dMedianPrev[1].Length >= nDecimatedWidth;
+
+                        if (useMedian)
+                        {
+                            for (int c = 0; c < nDecimatedWidth; c++)
+                            {
+                                float a = new_display_data[c];
+                                float b = _3dMedianPrev[0][c];
+                                float d = _3dMedianPrev[1][c];
+                                // median of 3
+                                _3dHistoryBuffer[_3dHistoryHead][c] =
+                                    Math.Max(Math.Min(a, b), Math.Min(Math.Max(a, b), d));
+                            }
+                        }
+                        else
+                        {
+                            fixed (void* rptr = &new_display_data[0])
+                            fixed (void* wptr = &_3dHistoryBuffer[_3dHistoryHead][0])
+                                Win32.memcpy(wptr, rptr, nDecimatedWidth * sizeof(float));
+                        }
+
+                        // shift median history
+                        if (_3dMedianPrev[1] == null || _3dMedianPrev[1].Length < nDecimatedWidth)
+                            _3dMedianPrev[1] = new float[nDecimatedWidth];
+                        if (_3dMedianPrev[0] != null && _3dMedianPrev[0].Length >= nDecimatedWidth)
+                        {
+                            fixed (void* rptr = &_3dMedianPrev[0][0])
+                            fixed (void* wptr = &_3dMedianPrev[1][0])
+                                Win32.memcpy(wptr, rptr, nDecimatedWidth * sizeof(float));
+                        }
+                        if (_3dMedianPrev[0] == null || _3dMedianPrev[0].Length < nDecimatedWidth)
+                            _3dMedianPrev[0] = new float[nDecimatedWidth];
+                        fixed (void* rptr2 = &new_display_data[0])
+                        fixed (void* wptr2 = &_3dMedianPrev[0][0])
+                            Win32.memcpy(wptr2, rptr2, nDecimatedWidth * sizeof(float));
+                        if (_3dMedianCount < int.MaxValue) _3dMedianCount++;
+
+                        _3dHistoryHead = (_3dHistoryHead + 1) % Max3DHistoryLines;
+                        if (_3dHistoryCount < Max3DHistoryLines) _3dHistoryCount++;
+                        _3dLastPushTicks = nowTicks;
+                    }
                 }
 
                 data = current_display_data;
@@ -5149,12 +5339,14 @@ namespace Thetis
             {
                 if (rx == 1)
                 {
-                    lineBrush = m_bUseLinearGradientForDataLine && m_bUseLinearGradient ? m_brushLGDataLineRX1 : m_bDX2_data_line_pen_brush;
+                    bool useLineGradient = draw3DHistory ? m_bUseLinearGradient : (m_bUseLinearGradientForDataLine && m_bUseLinearGradient);
+                    lineBrush = useLineGradient ? m_brushLGDataLineRX1 : m_bDX2_data_line_pen_brush;
                     fillBrush = m_bUseLinearGradient ? m_brushLGDataFillRX1 : m_bDX2_data_fill_fpen_brush;
                 }
                 else
                 {
-                    lineBrush = m_bUseLinearGradientForDataLine && m_bUseLinearGradient ? m_brushLGDataLineRX2 : m_bDX2_data_line_pen_brush;
+                    bool useLineGradient = draw3DHistory ? m_bUseLinearGradient : (m_bUseLinearGradientForDataLine && m_bUseLinearGradient);
+                    lineBrush = useLineGradient ? m_brushLGDataLineRX2 : m_bDX2_data_line_pen_brush;
                     fillBrush = m_bUseLinearGradient ? m_brushLGDataFillRX2 : m_bDX2_data_fill_fpen_brush;
                 }
                 fillPeaksBrush = m_bDX2_dataPeaks_fill_fpen_brush;
@@ -5243,6 +5435,21 @@ namespace Thetis
 
                 bool peaks_imds = bPeakBlobs || show_imd_measurements;
 
+                // waterfall sync support for live trace
+                bool liveUseWaterfallSync = _pan3DEnabled && _pan3DWaterfallSync && rx == 1 && !local_mox;
+                float liveWfLow = waterfall_low_threshold;
+                float liveWfHigh = waterfall_high_threshold;
+                if (rx1_waterfall_agc && !m_bRX1_spectrum_thresholds)
+                {
+                    liveWfLow = _RX1waterfallPreviousMinValue;
+                    liveWfLow -= m_fWaterfallAGCOffsetRX1;
+                }
+                float liveWfRange = liveWfHigh - liveWfLow;
+                if (liveWfRange <= 0) liveUseWaterfallSync = false;
+                var liveWfBrushCache = liveUseWaterfallSync
+                    ? new System.Collections.Generic.Dictionary<int, SharpDX.Direct2D1.SolidColorBrush>()
+                    : null;
+
                 // make locals
                 int local_Decimation = m_nDecimation;
                 double local_frame_start = m_dElapsedFrameStart;
@@ -5326,7 +5533,46 @@ namespace Thetis
                     {
                         // draw vertical line, this is so much faster than FillGeometry as the geo created would be so complex any fill alogorthm would struggle
                         bottomPoint.X = point.X;
-                        _d2dRenderTarget.DrawLine(bottomPoint, point, fillBrush, local_Decimation);
+
+                        SharpDX.Direct2D1.Brush activeFillBrush = fillBrush;
+                        if (liveUseWaterfallSync)
+                        {
+                            GetWaterfallColor(max, liveWfLow, liveWfHigh, _rx1_color_scheme,
+                                waterfall_low_color, _rx1_waterfall_grad, _rx1_waterfall_grad_ok, out int wfR, out int wfG, out int wfB);
+                            int wfCacheKey = (wfR << 16) | (wfG << 8) | wfB;
+                            if (!liveWfBrushCache.TryGetValue(wfCacheKey, out var wfBrush))
+                            {
+                                wfBrush = new SharpDX.Direct2D1.SolidColorBrush(_d2dRenderTarget,
+                                    new SharpDX.Color4(wfR / 255f, wfG / 255f, wfB / 255f, 0.55f));
+                                liveWfBrushCache[wfCacheKey] = wfBrush;
+                            }
+                            activeFillBrush = wfBrush;
+                        }
+                        else if (draw3DHistory && !local_mox)
+                        {
+                            if (!m_bUseLinearGradient)
+                            {
+                                if (m_bDX2_3d_fill_brush == null)
+                                {
+                                    // vertical gradient: bright near trace (~55% alpha) fading to bottom (~16% alpha)
+                                    GradientStop[] stops = new GradientStop[]
+                                    {
+                                        new GradientStop() { Color = new SharpDX.Color4(_pan3DLineColor.R / 255f, _pan3DLineColor.G / 255f, _pan3DLineColor.B / 255f, 0.55f), Position = 0.0f },
+                                        new GradientStop() { Color = new SharpDX.Color4(_pan3DLineColor.R / 255f, _pan3DLineColor.G / 255f, _pan3DLineColor.B / 255f, 0.16f), Position = 1.0f },
+                                    };
+                                    var stopsColl = new SharpDX.Direct2D1.GradientStopCollection(_d2dRenderTarget, stops);
+                                    m_bDX2_3d_fill_brush = new SharpDX.Direct2D1.LinearGradientBrush(_d2dRenderTarget, new SharpDX.Direct2D1.LinearGradientBrushProperties()
+                                    {
+                                        StartPoint = new SharpDX.Vector2(0, nVerticalShift),
+                                        EndPoint = new SharpDX.Vector2(0, nVerticalShift + H)
+                                    },
+                                    stopsColl);
+                                }
+                                activeFillBrush = m_bDX2_3d_fill_brush;
+                            }
+                        }
+
+                        _d2dRenderTarget.DrawLine(bottomPoint, point, activeFillBrush, local_Decimation);
                     }
 
                     //spectral peak
@@ -5373,13 +5619,29 @@ namespace Thetis
                         bIgnoringPoints = true;
                         continue;
                     }
+
+                    SharpDX.Direct2D1.Brush activeLineBrush = lineBrush;
+                    if (liveUseWaterfallSync)
+                    {
+                        GetWaterfallColor(max, liveWfLow, liveWfHigh, _rx1_color_scheme,
+                            waterfall_low_color, _rx1_waterfall_grad, _rx1_waterfall_grad_ok, out int wfLR, out int wfLG, out int wfLB);
+                        int wfCacheKey = (0xFF << 24) | (wfLR << 16) | (wfLG << 8) | wfLB;
+                        if (!liveWfBrushCache.TryGetValue(wfCacheKey, out var wfLineBrush))
+                        {
+                            wfLineBrush = new SharpDX.Direct2D1.SolidColorBrush(_d2dRenderTarget,
+                                new SharpDX.Color4(wfLR / 255f, wfLG / 255f, wfLB / 255f, 1.0f));
+                            liveWfBrushCache[wfCacheKey] = wfLineBrush;
+                        }
+                        activeLineBrush = wfLineBrush;
+                    }
+
                     if (bIgnoringPoints)
                     {
-                        _d2dRenderTarget.DrawLine(previousPoint, lastIgnoredPoint, lineBrush, line_width);
+                        _d2dRenderTarget.DrawLine(previousPoint, lastIgnoredPoint, activeLineBrush, line_width);
                         previousPoint = lastIgnoredPoint;
                         bIgnoringPoints = false;
                     }
-                    _d2dRenderTarget.DrawLine(previousPoint, point, lineBrush, line_width);
+                    _d2dRenderTarget.DrawLine(previousPoint, point, activeLineBrush, line_width);
                     previousPoint = point;
                 }
 
@@ -5717,8 +5979,15 @@ namespace Thetis
                     else if (_ema_dbc != -999) _ema_dbc = -999;
                 }
 
-                _d2dRenderTarget.PopAxisAlignedClip();
+            // clean up waterfall sync brushes
+            if (liveWfBrushCache != null)
+            {
+                foreach (var kv in liveWfBrushCache) kv.Value.Dispose();
+                liveWfBrushCache.Clear();
             }
+
+            _d2dRenderTarget.PopAxisAlignedClip();
+        }
 
             if (!bottom)
             {
@@ -5764,6 +6033,335 @@ namespace Thetis
             }
 
             return best_index;
+        }
+
+        private static void DrawPanadapter3DHistoryDX2D(int nVerticalShift, int W, int H, int rx, bool bottom,
+            float[] liveData, float fOffset, int grid_max, int nDecimatedWidth, int local_Decimation)
+        {
+            if (!_pan3DEnabled || _3dHistoryBuffer == null || _3dHistoryCount < 2) return;
+            if (_d2dRenderTarget == null || _d2dRenderTarget.IsDisposed) return;
+
+            int linesToDraw = Math.Min(_3dHistoryCount, _pan3DLineCount);
+            if (linesToDraw < 2) return;
+
+            int grid_min = rx == 1 ? spectrum_grid_min : rx2_spectrum_grid_min;
+            int yRange = grid_max - grid_min;
+            if (yRange <= 0) return;
+
+            // background color for haze blending
+            int bgR = (int)(m_cDX2_display_background_clear_colour.Red * 255);
+            int bgG = (int)(m_cDX2_display_background_clear_colour.Green * 255);
+            int bgB = (int)(m_cDX2_display_background_clear_colour.Blue * 255);
+
+            // perspective geometry — matches AetherSDR DssRenderer constants
+            float backWidthFrac = _pan3DPerspective;
+            float depthSpanFrac = _pan3DDepth;
+            float frontMaxRidgeFrac = _pan3DRidgeHeight;
+            float hazeStrength = _pan3DDepthFade;
+
+            float bottomY = nVerticalShift + H;     // absolute bottom of plot
+            float depthSpan = H * depthSpanFrac;     // total baseline rise
+            float frontMaxRidge = H * frontMaxRidgeFrac; // max ridge height at front
+
+            // waterfall sync support — use the waterfall palette and thresholds
+            bool useWaterfallSync = _pan3DWaterfallSync && rx == 1;
+            float wfLowThreshold = waterfall_low_threshold;
+            float wfHighThreshold = waterfall_high_threshold;
+            if (rx1_waterfall_agc && !m_bRX1_spectrum_thresholds)
+            {
+                wfLowThreshold = _RX1waterfallPreviousMinValue;
+                wfLowThreshold -= m_fWaterfallAGCOffsetRX1;
+            }
+            float wfRange = wfHighThreshold - wfLowThreshold;
+            if (wfRange <= 0) useWaterfallSync = false;
+
+            // gradient support — pre-sample into a palette to avoid per-column brush creation
+            const int gradPaletteSize = 64;
+            System.Drawing.Color[] gradPalette = null;
+            bool useGradient = !useWaterfallSync && m_bUseLinearGradient && console.SetupForm?.RX1GradPicker != null;
+            if (useGradient)
+            {
+                try
+                {
+                    gradPalette = new System.Drawing.Color[gradPaletteSize];
+                    for (int i = 0; i < gradPaletteSize; i++)
+                    {
+                        float t = (float)i / (gradPaletteSize - 1);
+                        float dBm = grid_min + t * yRange;
+                        gradPalette[i] = console.SetupForm.RX1GradPicker.GetColourForDBM(dBm);
+                    }
+                }
+                catch
+                {
+                    useGradient = false;
+                    gradPalette = null;
+                }
+            }
+
+            // clip to panadapter area
+            SharpDX.RectangleF clipRect = new SharpDX.RectangleF(0, nVerticalShift, W, nVerticalShift + H);
+            _d2dRenderTarget.PushAxisAlignedClip(clipRect, AntialiasMode.Aliased);
+
+            // per-frame brush cache — avoids creating/disposing thousands of COM brushes
+            var brushCache = new System.Collections.Generic.Dictionary<int, SharpDX.Direct2D1.SolidColorBrush>();
+
+            try
+            {
+            // draw back-to-front (oldest first, newest last = nearest)
+            // front rows are wider and sit lower, occluding back rows
+            for (int line = linesToDraw - 1; line >= 1; line--)
+            {
+                int idx = (_3dHistoryHead - 1 - line + Max3DHistoryLines * 2) % Max3DHistoryLines;
+                float[] frameData = _3dHistoryBuffer[idx];
+                if (frameData == null || frameData.Length < nDecimatedWidth) continue;
+
+                // perspective depth: 0 = front (newest), 1 = back (oldest)
+                float depthFrac = (float)line / (linesToDraw - 1);
+
+                // non-linear depth curve (smoothstep) — keeps front rows close to live trace
+                // and provides a smooth gradual fade to back instead of hard transition
+                float t = depthFrac;
+                float tSmooth = t * t * (3.0f - 2.0f * t);
+
+                // narrowing width — back rows are narrower
+                float rowWidthFrac = 1.0f - tSmooth * (1.0f - backWidthFrac);
+                float inset = W * (1.0f - rowWidthFrac) * 0.5f;
+                float rowW = W - 2.0f * inset;
+
+                // rising baseline — back rows sit higher on screen
+                float baselineY = bottomY - tSmooth * depthSpan;
+
+                // uniform ridge height — same peak height front to back, only width narrows
+                float maxRidge = frontMaxRidge;
+
+                // depth dimming (1.0 at front, gently fading toward back)
+                float dim = 0.72f + 0.28f * (1.0f - tSmooth);
+
+                // atmospheric haze factor — halved for subtler depth cue
+                float haze = tSmooth * hazeStrength * 0.35f;
+
+                // alpha fade — starts near-opaque, gently fades
+                float alpha = 1.0f - tSmooth * 0.15f;
+
+                // --- PASS 1: Draw solid column fills (trace down to absolute bottom) ---
+                for (int c = 0; c < nDecimatedWidth; c++)
+                {
+                    float xFrac = (float)c / (nDecimatedWidth > 1 ? nDecimatedWidth - 1 : 1);
+                    float xPx = inset + xFrac * rowW;
+
+                    if (xPx < 0 || xPx > W) continue;
+
+                    float dBm = frameData[c] + fOffset;
+
+                    // signal strength: 0 = noise floor, 1 = peak
+                    float strength = (dBm - grid_min) / (float)yRange;
+                    if (strength < 0) strength = 0;
+                    if (strength > 1) strength = 1;
+
+                    // trace Y is RELATIVE to the rising baseline — NOT absolute dBm
+                    float yPx = baselineY - strength * maxRidge;
+                    yPx = Math.Max(nVerticalShift, Math.Min(bottomY, yPx));
+
+                    // color based on signal strength
+                    int R, G, B;
+                    if (useWaterfallSync)
+                    {
+                        GetWaterfallColor(dBm, wfLowThreshold, wfHighThreshold, _rx1_color_scheme,
+                            waterfall_low_color, _rx1_waterfall_grad, _rx1_waterfall_grad_ok, out R, out G, out B);
+                    }
+                    else if (useGradient)
+                    {
+                        int pIdx = (int)(strength * (gradPaletteSize - 1));
+                        if (pIdx < 0) pIdx = 0;
+                        if (pIdx >= gradPaletteSize) pIdx = gradPaletteSize - 1;
+                        R = gradPalette[pIdx].R;
+                        G = gradPalette[pIdx].G;
+                        B = gradPalette[pIdx].B;
+                    }
+                    else
+                    {
+                        float bright = 0.25f + 0.75f * strength;
+                        R = (int)(_pan3DLineColor.R * bright);
+                        G = (int)(_pan3DLineColor.G * bright);
+                        B = (int)(_pan3DLineColor.B * bright);
+                    }
+
+                    // apply depth dimming
+                    R = (int)(R * dim);
+                    G = (int)(G * dim);
+                    B = (int)(B * dim);
+
+                    // atmospheric haze
+                    R = (int)(R * (1 - haze) + bgR * haze);
+                    G = (int)(G * (1 - haze) + bgG * haze);
+                    B = (int)(B * (1 - haze) + bgB * haze);
+
+                    if (R < 0) R = 0; if (R > 255) R = 255;
+                    if (G < 0) G = 0; if (G > 255) G = 255;
+                    if (B < 0) B = 0; if (B > 255) B = 255;
+
+                    int a255 = (int)(alpha * 255);
+                    int cacheKey = (a255 << 24) | (R << 16) | (G << 8) | B;
+                    if (!brushCache.TryGetValue(cacheKey, out var colBrush))
+                    {
+                        colBrush = new SharpDX.Direct2D1.SolidColorBrush(_d2dRenderTarget,
+                            new SharpDX.Color4(R / 255f, G / 255f, B / 255f, alpha));
+                        brushCache[cacheKey] = colBrush;
+                    }
+                    // fill from trace point DOWN to absolute bottom (not baselineY)
+                    SharpDX.Vector2 top = new SharpDX.Vector2(xPx, yPx);
+                    SharpDX.Vector2 bot = new SharpDX.Vector2(xPx, bottomY);
+                    _d2dRenderTarget.DrawLine(bot, top, colBrush, local_Decimation);
+                }
+
+                // --- PASS 2: Draw ridge outline (brighter crest hairline) ---
+                float outlineAlpha = (1.0f - tSmooth * 0.4f) * 0.85f;
+                if (outlineAlpha > 0.05f)
+                {
+                    SharpDX.Vector2 prevPt = new SharpDX.Vector2(-1, -1);
+                    bool hasPrev = false;
+
+                    for (int c = 0; c < nDecimatedWidth; c++)
+                    {
+                        float xFrac = (float)c / (nDecimatedWidth > 1 ? nDecimatedWidth - 1 : 1);
+                        float xPx = inset + xFrac * rowW;
+
+                        if (xPx < 0 || xPx > W) { hasPrev = false; continue; }
+
+                        float dBm = frameData[c] + fOffset;
+
+                        float strength = (dBm - grid_min) / (float)yRange;
+                        if (strength < 0) strength = 0;
+                        if (strength > 1) strength = 1;
+
+                        float yPx = baselineY - strength * maxRidge;
+                        yPx = Math.Max(nVerticalShift, Math.Min(bottomY, yPx));
+
+                        int R, G, B;
+                        if (useWaterfallSync)
+                        {
+                            GetWaterfallColor(dBm, wfLowThreshold, wfHighThreshold, _rx1_color_scheme,
+                                waterfall_low_color, _rx1_waterfall_grad, _rx1_waterfall_grad_ok, out R, out G, out B);
+                            float outlineBright = 0.35f + 0.65f * strength;
+                            R = Math.Min(255, (int)(R * outlineBright * dim * 1.5f));
+                            G = Math.Min(255, (int)(G * outlineBright * dim * 1.5f));
+                            B = Math.Min(255, (int)(B * outlineBright * dim * 1.5f));
+                        }
+                        else if (useGradient)
+                        {
+                            int pIdx = (int)(strength * (gradPaletteSize - 1));
+                            if (pIdx < 0) pIdx = 0;
+                            if (pIdx >= gradPaletteSize) pIdx = gradPaletteSize - 1;
+                            float outlineBright = 0.35f + 0.65f * strength;
+                            R = Math.Min(255, (int)(gradPalette[pIdx].R * outlineBright * dim * 1.5f));
+                            G = Math.Min(255, (int)(gradPalette[pIdx].G * outlineBright * dim * 1.5f));
+                            B = Math.Min(255, (int)(gradPalette[pIdx].B * outlineBright * dim * 1.5f));
+                        }
+                        else
+                        {
+                            float outlineBright = 0.35f + 0.65f * strength;
+                            R = Math.Min(255, (int)(_pan3DLineColor.R * outlineBright * dim * 1.5f));
+                            G = Math.Min(255, (int)(_pan3DLineColor.G * outlineBright * dim * 1.5f));
+                            B = Math.Min(255, (int)(_pan3DLineColor.B * outlineBright * dim * 1.5f));
+                        }
+
+                        R = (int)(R * (1 - haze) + bgR * haze);
+                        G = (int)(G * (1 - haze) + bgG * haze);
+                        B = (int)(B * (1 - haze) + bgB * haze);
+
+                        if (R < 0) R = 0; if (R > 255) R = 255;
+                        if (G < 0) G = 0; if (G > 255) G = 255;
+                        if (B < 0) B = 0; if (B > 255) B = 255;
+
+                        SharpDX.Vector2 pt = new SharpDX.Vector2(xPx, yPx);
+                        if (hasPrev)
+                        {
+                            int oa255 = (int)(outlineAlpha * 255);
+                            int oCacheKey = (oa255 << 24) | (R << 16) | (G << 8) | B;
+                            if (!brushCache.TryGetValue(oCacheKey, out var outlineBrush))
+                            {
+                                outlineBrush = new SharpDX.Direct2D1.SolidColorBrush(_d2dRenderTarget,
+                                    new SharpDX.Color4(R / 255f, G / 255f, B / 255f, outlineAlpha));
+                                brushCache[oCacheKey] = outlineBrush;
+                            }
+                            _d2dRenderTarget.DrawLine(prevPt, pt, outlineBrush, 1.0f);
+                        }
+                        prevPt = pt;
+                        hasPrev = true;
+                    }
+                }
+            }
+
+            }
+            finally
+            {
+                // always pop clip and dispose brushes, even on crash
+                try { _d2dRenderTarget.PopAxisAlignedClip(); } catch { }
+                foreach (var kv in brushCache)
+                {
+                    try { kv.Value.Dispose(); } catch { }
+                }
+                brushCache.Clear();
+            }
+        }
+
+        /// <summary>
+        /// Maps signal strength (0=noise floor, 1=peak) to an enhanced waterfall color.
+        /// Uses the same 9-segment rainbow gradient as the waterfall display.
+        /// </summary>
+        private static void GetEnhancedWaterfallColor(float strength, out int R, out int G, out int B)
+        {
+            float s = Math.Max(0f, Math.Min(1f, strength));
+
+            if (s < (float)2 / 9) // black to blue
+            {
+                float t = s / ((float)2 / 9);
+                R = 0;
+                G = 0;
+                B = (int)(t * 255);
+            }
+            else if (s < (float)3 / 9) // blue to cyan
+            {
+                float t = (s - (float)2 / 9) / ((float)1 / 9);
+                R = 0;
+                G = (int)(t * 255);
+                B = 255;
+            }
+            else if (s < (float)4 / 9) // cyan to green
+            {
+                float t = (s - (float)3 / 9) / ((float)1 / 9);
+                R = 0;
+                G = 255;
+                B = (int)((1 - t) * 255);
+            }
+            else if (s < (float)5 / 9) // green to yellow
+            {
+                float t = (s - (float)4 / 9) / ((float)1 / 9);
+                R = (int)(t * 255);
+                G = 255;
+                B = 0;
+            }
+            else if (s < (float)7 / 9) // yellow to red
+            {
+                float t = (s - (float)5 / 9) / ((float)2 / 9);
+                R = 255;
+                G = (int)((1 - t) * 255);
+                B = 0;
+            }
+            else if (s < (float)8 / 9) // red to magenta
+            {
+                float t = (s - (float)7 / 9) / ((float)1 / 9);
+                R = 255;
+                G = 0;
+                B = (int)(t * 255);
+            }
+            else // magenta to white
+            {
+                float t = (s - (float)8 / 9) / ((float)1 / 9);
+                R = 255;
+                G = (int)(t * 255);
+                B = 255;
+            }
         }
 
         private static float _fNFshiftDBM = 0;
@@ -6349,6 +6947,103 @@ namespace Thetis
             }
             _tx_waterfall_grad_ok = true;
         }
+
+        private static void GetWaterfallColor(float dBm, float lowThreshold, float highThreshold, ColorScheme scheme,
+            Color lowCol, Color[] gradArray, bool gradOk, out int R, out int G, out int B)
+        {
+            R = 0; G = 0; B = 0;
+            if (scheme == ColorScheme.Custom && gradOk && gradArray != null)
+            {
+                float pct;
+                if (dBm <= lowThreshold) pct = 0f;
+                else if (dBm >= highThreshold) pct = 1f;
+                else pct = (dBm - lowThreshold) / (highThreshold - lowThreshold);
+                int idx = (int)(pct * 100f);
+                if (idx < 0) idx = 0; if (idx > 100) idx = 100;
+                R = gradArray[idx].R; G = gradArray[idx].G; B = gradArray[idx].B;
+            }
+            else if (scheme == ColorScheme.enhanced)
+            {
+                if (dBm <= lowThreshold)
+                {
+                    R = lowCol.R; G = lowCol.G; B = lowCol.B;
+                }
+                else if (dBm >= highThreshold)
+                {
+                    R = 192; G = 124; B = 255;
+                }
+                else
+                {
+                    float range = highThreshold - lowThreshold;
+                    float overall_percent = (dBm - lowThreshold) / range;
+                    if (overall_percent < (float)2 / 9)
+                    {
+                        float lp = overall_percent / ((float)2 / 9);
+                        R = (int)((1.0 - lp) * lowCol.R);
+                        G = (int)((1.0 - lp) * lowCol.G);
+                        B = (int)(lowCol.B + lp * (255 - lowCol.B));
+                    }
+                    else if (overall_percent < (float)3 / 9)
+                    {
+                        float lp = (overall_percent - (float)2 / 9) / ((float)1 / 9);
+                        R = 0; G = (int)(lp * 255); B = 255;
+                    }
+                    else if (overall_percent < (float)4 / 9)
+                    {
+                        float lp = (overall_percent - (float)3 / 9) / ((float)1 / 9);
+                        R = 0; G = 255; B = (int)((1.0 - lp) * 255);
+                    }
+                    else if (overall_percent < (float)5 / 9)
+                    {
+                        float lp = (overall_percent - (float)4 / 9) / ((float)1 / 9);
+                        R = (int)(lp * 255); G = 255; B = 0;
+                    }
+                    else if (overall_percent < (float)7 / 9)
+                    {
+                        float lp = (overall_percent - (float)5 / 9) / ((float)2 / 9);
+                        R = 255; G = (int)((1.0 - lp) * 255); B = 0;
+                    }
+                    else if (overall_percent < (float)8 / 9)
+                    {
+                        float lp = (overall_percent - (float)7 / 9) / ((float)1 / 9);
+                        R = 255; G = 0; B = (int)(lp * 255);
+                    }
+                    else
+                    {
+                        float lp = (overall_percent - (float)8 / 9) / ((float)1 / 9);
+                        R = (int)((0.75 + 0.25 * (1.0 - lp)) * 255);
+                        G = (int)(lp * 255 * 0.5);
+                        B = 255;
+                    }
+                }
+            }
+            else if (scheme == ColorScheme.SPECTRAN)
+            {
+                if (dBm <= lowThreshold) { R = 0; G = 0; B = 0; }
+                else if (dBm >= highThreshold) { R = 240; G = 240; B = 240; }
+                else
+                {
+                    float local_percent = 100.0f * (dBm - lowThreshold) / (highThreshold - lowThreshold);
+                    if (local_percent < 22.0f) { R = 0; G = 0; B = (int)local_percent * 5; }
+                    else if (local_percent < 44.0f) { R = 0; G = 0; B = (int)local_percent * 5; }
+                    else if (local_percent < 51.0f) { R = 0; G = 0; B = (int)local_percent * 5; }
+                    else if (local_percent < 66.0f) { R = 0; G = (int)((local_percent - 51) * 6.93); B = 255; }
+                    else if (local_percent < 78.0f) { R = (int)((local_percent - 66) * 8.5); G = 255; B = 255 - (int)((local_percent - 66) * 8.5); }
+                    else { R = 255; G = 255 - (int)((local_percent - 78) * 11.36); B = 0; }
+                }
+            }
+            else
+            {
+                if (dBm <= lowThreshold) { R = 0; G = 0; B = 0; }
+                else if (dBm >= highThreshold) { R = 255; G = 255; B = 255; }
+                else
+                {
+                    int v = (int)(255.0f * (dBm - lowThreshold) / (highThreshold - lowThreshold));
+                    R = v; G = v; B = v;
+                }
+            }
+        }
+
         private static bool _old_power = false;
         private static bool _stopRx1Waterfall = false;
         private static bool _stopRx2Waterfall = false;
@@ -7746,9 +8441,11 @@ namespace Thetis
                                 if (graphicsImage.Width > 0 && graphicsImage.Height > 0)
                                 {
                                     _bitmapBackground = SDXBitmapFromSysBitmap(_d2dRenderTarget, graphicsImage);
-                                }
-                            }
-                        }
+                    }
+                }
+
+                _d2dRenderTarget.PopAxisAlignedClip();
+            }
                     }
                     catch { }
                 }
@@ -7816,6 +8513,7 @@ namespace Thetis
         private static SharpDX.Direct2D1.Brush m_bDX2_dataPeaks_fill_fpen_brush;
         private static SharpDX.Direct2D1.Brush m_bDX2_data_fill_fpen_brush;
         private static SharpDX.Direct2D1.Brush m_bDX2_data_fill_fpen_brush_tx;
+        private static SharpDX.Direct2D1.Brush m_bDX2_3d_fill_brush;
         private static SharpDX.Direct2D1.Brush m_bDX2_data_line_pen_brush;
         private static SharpDX.Direct2D1.Brush m_bDX2_data_line_pen_brush_tx;
         private static SharpDX.Direct2D1.Brush m_bDX2_tx_data_line_fpen_brush;
@@ -8128,6 +8826,7 @@ namespace Thetis
             if (m_bDX2_dataPeaks_fill_fpen_brush != null) Utilities.Dispose(ref m_bDX2_dataPeaks_fill_fpen_brush);
             if (m_bDX2_data_fill_fpen_brush != null) Utilities.Dispose(ref m_bDX2_data_fill_fpen_brush);
             if (m_bDX2_data_fill_fpen_brush_tx != null) Utilities.Dispose(ref m_bDX2_data_fill_fpen_brush_tx);
+            if (m_bDX2_3d_fill_brush != null) Utilities.Dispose(ref m_bDX2_3d_fill_brush);
             if (m_bDX2_data_line_pen_brush != null) Utilities.Dispose(ref m_bDX2_data_line_pen_brush);
             if (m_bDX2_data_line_pen_brush_tx != null) Utilities.Dispose(ref m_bDX2_data_line_pen_brush_tx);
             if (m_bDX2_tx_data_line_fpen_brush != null) Utilities.Dispose(ref m_bDX2_tx_data_line_fpen_brush);
@@ -8193,6 +8892,7 @@ namespace Thetis
             m_bDX2_dataPeaks_fill_fpen_brush = null;
             m_bDX2_data_fill_fpen_brush = null;
             m_bDX2_data_fill_fpen_brush_tx = null;
+            m_bDX2_3d_fill_brush = null;
             m_bDX2_data_line_pen_brush = null;
             m_bDX2_data_line_pen_brush_tx = null;
             m_bDX2_tx_data_line_fpen_brush = null;

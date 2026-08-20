@@ -1142,9 +1142,6 @@ namespace Thetis
             //_rx1SpectrumTestForm = _spectrumProcessor.ShowReceiverTestForm(0, -130, -40);
             ////_rx2SpectrumTestForm = _spectrumProcessor.ShowReceiverTestForm(1, -130, -40);
         }
-        private clsSpectrumProcessor _spectrumProcessor;
-        private Form _rx1SpectrumTestForm;
-        private Form _rx2SpectrumTestForm;
 
         private void initialisePortAudio()
         {

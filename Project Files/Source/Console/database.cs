@@ -259,6 +259,30 @@ namespace Thetis
                 foreach (DataRow row in t.Rows)
                     if (row.IsNull("CFCPhaseRotatorAuto"))
                         row["CFCPhaseRotatorAuto"] = false;
+
+                // Ordinal column for profile ordering
+                if (!t.Columns.Contains("Ordinal"))
+                    t.Columns.Add("Ordinal", typeof(int));
+                // backfill sequential ordinals for existing rows that lack one
+                bool needsBackfill = false;
+                foreach (DataRow row in t.Rows)
+                {
+                    if (row.IsNull("Ordinal"))
+                    {
+                        needsBackfill = true;
+                        break;
+                    }
+                }
+                if (needsBackfill)
+                {
+                    int seq = 0;
+                    foreach (DataRow row in t.Rows)
+                    {
+                        if (row.IsNull("Ordinal"))
+                            row["Ordinal"] = seq;
+                        seq++;
+                    }
+                }
             }
         }
 
@@ -4321,6 +4345,7 @@ namespace Thetis
             DataTable t = ds.Tables[sTableName];
 
             t.Columns.Add("Name", typeof(string));
+            t.Columns.Add("Ordinal", typeof(int));
             t.Columns.Add("FilterLow", typeof(int));
             t.Columns.Add("FilterHigh", typeof(int));
 
@@ -4568,8 +4593,10 @@ namespace Thetis
 
             #region Default
 
+            int ordinal = 0;
             DataRow dr = t.NewRow();
             dr["Name"] = "Default";
+            dr["Ordinal"] = ordinal++;
             dr["FilterLow"] = 100;
             dr["FilterHigh"] = 3000;
             //
@@ -4810,6 +4837,7 @@ namespace Thetis
 
             dr = t.NewRow();
             dr["Name"] = "Default DX";
+            dr["Ordinal"] = ordinal++;
             dr["FilterLow"] = 200;
             dr["FilterHigh"] = 3100;
             //
@@ -5050,6 +5078,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "Digi 1K@1500";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 1000;
                 dr["FilterHigh"] = 2000;
                 //
@@ -5288,6 +5317,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "Digi 1K@2210";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 1710;
                 dr["FilterHigh"] = 2710;
                 //
@@ -5525,6 +5555,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "AM";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 0;
                 dr["FilterHigh"] = 4000;
                 //
@@ -5762,6 +5793,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "Conventional";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3100;
                 //
@@ -5999,6 +6031,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "D-104";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3500;
                 //
@@ -6236,6 +6269,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "D-104+CPDR";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3500;
                 //
@@ -6473,6 +6507,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "D-104+EQ";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3500;
                 //
@@ -6710,6 +6745,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "DX / Contest";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 250;
                 dr["FilterHigh"] = 3250;
                 //
@@ -6947,6 +6983,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "ESSB";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 50;
                 dr["FilterHigh"] = 3650;
                 //
@@ -7184,6 +7221,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "HC4-5";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3100;
                 //
@@ -7421,6 +7459,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "HC4-5+CPDR";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3100;
                 //
@@ -7658,6 +7697,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "PR40+W2IHY";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 50;
                 dr["FilterHigh"] = 3650;
                 //
@@ -7895,6 +7935,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "PR40+W2IHY+CPDR";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 50;
                 dr["FilterHigh"] = 3650;
                 //
@@ -8132,6 +8173,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "PR781+EQ";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3200;
                 //
@@ -8369,6 +8411,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "PR781+EQ+CPDR";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3200;
                 //
@@ -8606,6 +8649,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "SSB 2.8k CFC";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 2900;
                 //
@@ -8843,6 +8887,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "SSB 3.0k CFC";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3100;
                 //
@@ -9080,6 +9125,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "SSB 3.3k CFC";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 50;
                 dr["FilterHigh"] = 3350;
                 //
@@ -9317,6 +9363,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "AM 10k CFC";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 0;
                 dr["FilterHigh"] = 5000;
                 //

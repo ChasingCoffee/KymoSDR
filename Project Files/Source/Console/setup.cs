@@ -314,6 +314,11 @@ namespace Thetis
             chkGridControl.Checked = false;
             chkGridControl_minor.Checked = false;
             chkDisplayPanFill.Checked = true;
+            chkDisplay3DPanadapter.Checked = false;
+            ud3DXOffset.Value = (decimal)0.60m;
+            ud3DYOffset.Value = (decimal)0.58m;
+            ud3DLineCount.Value = 35;
+            clrbtn3DLineColor.Color = System.Drawing.Color.Aquamarine;
             showRegionBandstackWarning(false);
             //
 
@@ -653,6 +658,17 @@ namespace Thetis
 
             //-----------------------------
             initializing = false;
+
+            // push 3D panadapter settings to Display (skipped during init due to 'initializing' guard)
+            Display.Pan3DEnabled = chkDisplay3DPanadapter.Checked;
+            Display.Pan3DPerspective = (float)ud3DXOffset.Value;
+            Display.Pan3DDepth = (float)ud3DYOffset.Value;
+            Display.Pan3DRidgeHeight = (float)ud3DRidgeHeight.Value;
+            Display.Pan3DDepthFade = (float)ud3DHaze.Value;
+            Display.Pan3DLineCount = (int)ud3DLineCount.Value;
+            Display.Pan3DLineColor = clrbtn3DLineColor.Color;
+            Display.Pan3DWaterfallSync = chk3DWaterfallSync.Checked;
+            Display.Pan3DSpeed = (int)ud3DSpeed.Value;
 
             udDisplayScopeTime_ValueChanged(this, EventArgs.Empty);
 
@@ -1069,6 +1085,13 @@ namespace Thetis
             if (needsRecovering(recoveryList, "udTXGridStep")) udTXGridStep.Value = Display.TXSpectrumGridStep;
             if (needsRecovering(recoveryList, "udTXWFAmpMax")) udTXWFAmpMax.Value = Display.TXWFAmpMax;
             if (needsRecovering(recoveryList, "udTXWFAmpMin")) udTXWFAmpMin.Value = Display.TXWFAmpMin;
+            if (needsRecovering(recoveryList, "chkDisplay3DPanadapter")) chkDisplay3DPanadapter.Checked = false;
+            if (needsRecovering(recoveryList, "ud3DXOffset")) ud3DXOffset.Value = (decimal)0.60m;
+            if (needsRecovering(recoveryList, "ud3DYOffset")) ud3DYOffset.Value = (decimal)0.58m;
+            if (needsRecovering(recoveryList, "ud3DRidgeHeight")) ud3DRidgeHeight.Value = (decimal)0.46m;
+            if (needsRecovering(recoveryList, "ud3DHaze")) ud3DHaze.Value = (decimal)0.16m;
+            if (needsRecovering(recoveryList, "ud3DLineCount")) ud3DLineCount.Value = 35;
+            if (needsRecovering(recoveryList, "clrbtn3DLineColor")) clrbtn3DLineColor.Color = System.Drawing.Color.Aquamarine;
 
             // MW0LGE in the case where we don't have a setting in the db, this function (initdisplaytab) is called, use console instead
             SetMultiMeterMode(console.MMMeasureMode);
@@ -1824,6 +1847,15 @@ namespace Thetis
 
             if (getDict.ContainsKey("chkDisableHPFonPS")) // replaced by chkDisableHPFonPSb
                 _oldSettings.Add("chkDisableHPFonPS");
+
+            // 3D panadapter controls repurposed from X/Y pixel offsets to Perspective/Depth ratios (0-1)
+            // Old values (e.g. 2.0, 15.0) exceed new Maximum of 1.0, so remove them to force defaults
+            if (getDict.ContainsKey("ud3DXOffset"))
+                _oldSettings.Add("ud3DXOffset");
+            if (getDict.ContainsKey("ud3DYOffset"))
+                _oldSettings.Add("ud3DYOffset");
+            if (getDict.ContainsKey("ud3DLineCount"))
+                _oldSettings.Add("ud3DLineCount");
 
             handleOldPAGainSettings(ref getDict);
         }
@@ -3106,8 +3138,12 @@ namespace Thetis
 
                 HashSet<string> profile_names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                foreach (DataRow dr in tx_profile_table.Rows)
+                DataView dv = tx_profile_table.DefaultView;
+                dv.Sort = "Ordinal ASC";
+
+                foreach (DataRowView drv in dv)
                 {
+                    DataRow dr = drv.Row;
                     if (dr == null) continue;
                     if (dr.RowState == DataRowState.Deleted) continue;
                     if (dr.IsNull("Name")) continue;
@@ -9862,6 +9898,7 @@ namespace Thetis
             {
                 dr = DB.ds.Tables["TXProfile"].NewRow();
                 dr["Name"] = name;
+                dr["Ordinal"] = comboTXProfileName.Items.Count;
             }
 
             if (dr == null)
@@ -9925,6 +9962,16 @@ namespace Thetis
             int index = comboTXProfileName.SelectedIndex;
             comboTXProfileName.Items.Remove(comboTXProfileName.Text);
 
+            // re-sequence ordinals for remaining profiles
+            int seq = 0;
+            foreach (object item in comboTXProfileName.Items)
+            {
+                DataRow[] remainingRows = getDataRowsForTXProfile((string)item);
+                if (remainingRows.Length == 1)
+                    remainingRows[0]["Ordinal"] = seq;
+                seq++;
+            }
+
             // tell delgates that we changed the tx profile list
             console.TXProfilesChangedHandlers?.Invoke();
 
@@ -9936,6 +9983,35 @@ namespace Thetis
             }
 
             console.UpdateTXProfile(comboTXProfileName.Text);
+        }
+
+        private void btnTXProfileOrder_Click(object sender, EventArgs e)
+        {
+            DataSet data_set = DB.ds;
+            if (data_set == null) return;
+            if (!data_set.Tables.Contains("TXProfile")) return;
+
+            DataTable txProfileTable = data_set.Tables["TXProfile"];
+            if (txProfileTable == null || txProfileTable.Rows.Count == 0) return;
+
+            using (TXProfileReorderForm dlg = new TXProfileReorderForm(txProfileTable))
+            {
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    string currentName = comboTXProfileName.Text;
+
+                    // refresh combos with new order
+                    GetTxProfiles();
+                    console.BuildTXProfileCombos();
+
+                    // reselect same profile
+                    if (!string.IsNullOrEmpty(currentName))
+                    {
+                        comboTXProfileName.Text = currentName;
+                        console.UpdateTXProfile(currentName);
+                    }
+                }
+            }
         }
 
         private void udVOXGain_ValueChanged(object sender, System.EventArgs e)
@@ -12702,10 +12778,14 @@ namespace Thetis
             {
                 dr = DB.ds.Tables["TXProfile"].NewRow();
                 dr["Name"] = name;
+                dr["Ordinal"] = comboTXProfileName.Items.Count;
             }
 
             for (int i = 0; i < dr.ItemArray.Length; i++)
                 dr[i] = rows[0][i];
+
+            // preserve the Ordinal we set (copy loop overwrites it from the source def row)
+            dr["Ordinal"] = comboTXProfileName.Items.Count;
 
             if (!comboTXProfileName.Items.Contains(name))
             {
@@ -12831,6 +12911,92 @@ namespace Thetis
         private void chkTXPanFill_CheckedChanged(object sender, System.EventArgs e)
         {
             Display.TXPanFill = chkTXPanFill.Checked;
+        }
+
+        public bool Display3DPanadapter
+        {
+            get { return chkDisplay3DPanadapter.Checked; }
+            set { chkDisplay3DPanadapter.Checked = value; }
+        }
+        private void chkDisplay3DPanadapter_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DEnabled = chkDisplay3DPanadapter.Checked;
+            if (chkDisplay3DPanadapter.Checked && !chk3DWaterfallSync.Checked)
+            {
+                chk3DWaterfallSync.Checked = true;
+            }
+        }
+
+        private void ud3DXOffset_ValueChanged(object sender, System.EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DPerspective = (float)ud3DXOffset.Value;
+        }
+
+        private void ud3DYOffset_ValueChanged(object sender, System.EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DDepth = (float)ud3DYOffset.Value;
+        }
+
+        private void ud3DLineCount_ValueChanged(object sender, System.EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DLineCount = (int)ud3DLineCount.Value;
+        }
+
+        private void clrbtn3DLineColor_Changed(object sender, System.EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DLineColor = clrbtn3DLineColor.Color;
+        }
+
+        private void ud3DSpeed_ValueChanged(object sender, System.EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DSpeed = (int)ud3DSpeed.Value;
+        }
+
+        private void chk3DWaterfallSync_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DWaterfallSync = chk3DWaterfallSync.Checked;
+        }
+
+        private void ud3DRidgeHeight_ValueChanged(object sender, System.EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DRidgeHeight = (float)ud3DRidgeHeight.Value;
+        }
+
+        private void ud3DHaze_ValueChanged(object sender, System.EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DDepthFade = (float)ud3DHaze.Value;
+        }
+
+        private void btn3DResetDefaults_Click(object sender, EventArgs e)
+        {
+            initializing = true;
+            ud3DXOffset.Value = (decimal)0.60m;
+            ud3DYOffset.Value = (decimal)0.58m;
+            ud3DRidgeHeight.Value = (decimal)0.46m;
+            ud3DHaze.Value = (decimal)0.16m;
+            ud3DLineCount.Value = 35;
+            clrbtn3DLineColor.Color = System.Drawing.Color.Aquamarine;
+            chk3DWaterfallSync.Checked = true;
+            ud3DSpeed.Value = 25;
+            initializing = false;
+
+            Display.Pan3DPerspective = (float)ud3DXOffset.Value;
+            Display.Pan3DDepth = (float)ud3DYOffset.Value;
+            Display.Pan3DRidgeHeight = (float)ud3DRidgeHeight.Value;
+            Display.Pan3DDepthFade = (float)ud3DHaze.Value;
+            Display.Pan3DLineCount = (int)ud3DLineCount.Value;
+            Display.Pan3DLineColor = clrbtn3DLineColor.Color;
+            Display.Pan3DWaterfallSync = true;
+            Display.Pan3DSpeed = 30;
         }
 
         private bool _skinChanging = false;
