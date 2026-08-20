@@ -1,4 +1,4 @@
-﻿/*  MeterManager.cs
+/*  MeterManager.cs
 
 This file is part of a program that implements a Software-Defined Radio.
 
@@ -2370,8 +2370,8 @@ namespace Thetis
                 case Reading.SIGNAL_STRENGTH: return "dBm";
                 case Reading.SWR: return ":1";
                 case Reading.VOLTS: return "V";
-                case Reading.AZ: return "°";
-                case Reading.ELE: return "°";
+                case Reading.AZ: return "?";
+                case Reading.ELE: return "?";
                 case Reading.SIGNAL_MAX_BIN: return "dBm";
                 case Reading.ADC_MAX_MAG: return "";
             }
@@ -37269,7 +37269,7 @@ namespace Thetis
                         plotText(convertDegreesToCardinal(degrees_az), cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText(" cardinal", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                         cy = y + h * 0.7f;
-                        plotText(degrees_az.ToString("f1") + "°", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
+                        plotText(degrees_az.ToString("f1") + "?", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText("  azimuth", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                     }
                     else
@@ -37279,7 +37279,7 @@ namespace Thetis
                         plotText(convertDegreesToCardinal(degrees_az), cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText(" cardinal", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                         cy = y + h * 0.65f;
-                        plotText(degrees_az.ToString("f1") + "°", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
+                        plotText(degrees_az.ToString("f1") + "?", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText("  azimuth", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                     }
 
@@ -37461,14 +37461,14 @@ namespace Thetis
                     {
                         cx = x + w * 0.4f;
                         cy = y + h * 0.75f;
-                        plotText(degrees_ele.ToString("f1") + "°", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
+                        plotText(degrees_ele.ToString("f1") + "?", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText("elevation", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                     }
                     else
                     {
                         cx = x + w * 0.75f;
                         cy = y + h * 0.825f;
-                        plotText(degrees_ele.ToString("f1") + "°", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
+                        plotText(degrees_ele.ToString("f1") + "?", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText("elevation", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                     }
 

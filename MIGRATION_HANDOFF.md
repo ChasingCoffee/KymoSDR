@@ -259,11 +259,17 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 - [ ] NU1701 warnings (4) from SharpDX — expected, resolved in Phase 2
 - [ ] Output verification: native DLLs (fftw, rnnoise) need manual copy
 
+### Phase 1.5 — Shutdown Hang Fixes
+- [x] MultiMeterIO: added Join(2000) timeout to all 4 connector Stop() methods (TcpListener, TcpClient, UdpListener, SerialPort)
+- [x] PSForm.CloseAmpView: added Wait(2000) timeout, removed Thread.Abort() (unsupported in .NET 10)
+- [x] MeterManager.Shutdown: capped nWait at 500ms to prevent overflow
+- [x] Console: set draw_display_thread.IsBackground=true so process can exit if thread hangs
+
 ### Phase 2
-- [ ] SharpDX packages removed
-- [ ] Vortice packages added
+- [x] Vortice.Direct2D1 3.8.3 + Vortice.Direct3D11 3.8.3 packages added
+- [ ] MeterManager.cs DXRenderer ported to Vortice (in progress — 481 SharpDX refs across ~10K lines)
 - [ ] display.cs ported to Vortice
-- [ ] MeterManager.cs DXRenderer ported to Vortice
+- [ ] SharpDX packages removed
 - [ ] All display modes functional
 
 ### Phase 3
@@ -282,3 +288,102 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 - Analyzed AmpView chart replacement scope
 - Documented all build concerns (PreBuild, PostBuild, AssemblyInfo)
 - Created this handoff document
+
+### 2026-08-19 (continued)
+- Phase 1: All 5 C# projects converted to SDK-style .NET 10, 0 compile errors
+- Phase 1.5: Fixed shutdown hang — MultiMeterIO infinite Join, PSForm infinite Wait, display thread foreground blocking
+- Phase 2: Added Vortice packages, began DXRenderer migration research
+
+---
+
+## Shutdown Hang — Root Cause Analysis
+
+### Fixed Issues (Phase 1.5)
+
+| Issue | Location | Fix |
+|---|---|---|
+| MultiMeterIO `Thread.Join()` no timeout | `MeterManager.cs:42263,42523,42762,42959` | Added `Join(2000)` to all 4 Stop() methods |
+| PSForm `_ampViewDone.Wait()` no timeout | `PSForm.cs:431` | Added `Wait(2000)`, removed `Thread.Abort()` (.NET 10 unsupported) |
+| MeterManager.Shutdown nWait overflow | `MeterManager.cs:3558-3569` | Capped nWait at 500ms |
+| Display thread blocks process exit | `console.cs:1090` | Set `IsBackground = true` |
+
+### Remaining Issues (lower priority)
+
+| Issue | Location | Risk |
+|---|---|---|
+| `_objDX2Lock` contention on shutdown | `display.cs:3329` → `console.cs:28241` | After Join(500) times out, ShutdownDX2D blocks on lock held by display thread in GPU Present |
+| PS thread cross-thread UI access | `PSForm.cs:562-587` | `CheckForIllegalCrossThreadCalls=false` suppresses but could crash during disposal |
+| TCIServer `InvokeOnConsole` potential deadlock | `TCIServer.cs:8342` | If using synchronous Invoke during shutdown |
+
+---
+
+## SharpDX → Vortice Migration Reference
+
+### NuGet Packages
+| Package | Version |
+|---|---|
+| `Vortice.Direct2D1` | 3.8.3 |
+| `Vortice.Direct3D11` | 3.8.3 |
+
+### Using Statement Changes
+| SharpDX | Vortice |
+|---|---|
+| `using SharpDX;` | `using SharpGen.Runtime;` |
+| `using SharpDX.Direct2D1;` | `using Vortice.Direct2D1;` |
+| `using SharpDX.Direct3D;` | `using Vortice.Direct3D;` |
+| `using SharpDX.Direct3D11;` | `using Vortice.Direct3D11;` |
+| `using SharpDX.DXGI;` | `using Vortice.DXGI;` |
+| `using SharpDX.Mathematics.Interop;` | `using Vortice.Mathematics;` |
+| `using SharpDX.DirectWrite;` | `using Vortice.DirectWrite;` |
+| `using SharpDX.WIC;` | `using Vortice.WIC;` |
+
+### Type Mapping Table (DXRenderer scope)
+| SharpDX | Vortice | Notes |
+|---|---|---|
+| `SharpDX.Direct3D11.Device` | `ID3D11Device` | Created via `D3D11.D3D11CreateDevice(...)` static method |
+| `SharpDX.DXGI.Factory1` | `IDXGIFactory2` | Created via `DXGI.CreateDXGIFactory1<IDXGIFactory2>()` |
+| `Surface` | `IDXGISurface` | |
+| `SwapChain` | `IDXGISwapChain` | |
+| `SwapChain1` | `IDXGISwapChain1` | |
+| `RenderTarget` | `ID2D1RenderTarget` | Created via `factory.CreateDxgiSurfaceRenderTarget(surface, props)` |
+| `SharpDX.Direct2D1.Factory` | `ID2D1Factory` | Created via `D2D1.D2D1CreateFactory<ID2D1Factory>(FactoryType.SingleThreaded)` |
+| `SharpDX.Direct2D1.Brush` | `ID2D1Brush` | |
+| `SharpDX.Direct2D1.SolidColorBrush` | `ID2D1SolidColorBrush` | Created via `renderTarget.CreateSolidColorBrush(color)` |
+| `SharpDX.Direct2D1.Bitmap` | `ID2D1Bitmap` | Created via `renderTarget.CreateBitmap(...)` |
+| `StrokeStyle` | `ID2D1StrokeStyle` | Created via `factory.CreateStrokeStyle(props)` |
+| `TextFormat` (DirectWrite) | `IDWriteTextFormat` | Created via `factory.CreateTextFormat(name, weight, style, FontStretch.Normal, size)` |
+| `SharpDX.DirectWrite.Factory` | `IDWriteFactory` | Created via `DWrite.DWriteCreateFactory<IDWriteFactory>()` |
+| `SharpDX.WIC.ImagingFactory` | `IWICImagingFactory` | Created via `new IWICImagingFactory()` |
+| `Vector2` | `System.Numerics.Vector2` | |
+| `Matrix3x2` | `System.Numerics.Matrix3x2` | `.TranslationVector` → `.Translation` (Vector3, not Vector2) |
+| `Color4` | `Vortice.Mathematics.Color4` | |
+| `RawVector2` | `Vortice.Mathematics.RawVector2` | |
+| `RawColor4` | `Vortice.Mathematics.RawColor4` | |
+| `RectangleF` | `Vortice.RawRectF` | |
+| `Size2` | `Vortice.Mathematics.SizeI` | |
+| `Utilities.Dispose(ref x)` | `x?.Dispose(); x = null;` | |
+| `SharpDXException` | `SharpGenException` | |
+| `TryPresent(vblanks, flags)` | `Present(vblanks, flags)` | |
+| `Bitmap.FromWicBitmap(rt, converter)` | `rt.CreateBitmapFromWicBitmap(converter)` | |
+| `new SolidColorBrush(rt, color)` | `rt.CreateSolidColorBrush(color)` | |
+| `new Bitmap(rt, size, props)` | `rt.CreateBitmap(size, props)` | |
+| `new Ellipse(center, rx, ry)` | `new Ellipse(center, rx, ry)` | Verify constructor signature |
+
+### Key API Pattern Changes
+1. **Device creation**: `new Device(...)` → `D3D11.D3D11CreateDevice(adapter, driverType, flags, featureLevels, out device, out featureLevel, out context)`
+2. **SwapChain**: `new SwapChain(factory, device, desc)` → `factory2.CreateSwapChainForHwnd(device, hwnd, desc1)` using `SwapChainDescription1` (no nested ModeDescription)
+3. **RenderTarget**: `new RenderTarget(factory, surface, props)` → `factory.CreateDxgiSurfaceRenderTarget(surface, props)`
+4. **Exception handling**: `SharpDXException` → `SharpGenException`, `ex.ResultCode` → `ex.Result`
+5. **FontStyle ambiguity**: Use `using FontStyle = System.Drawing.FontStyle;` alias since both `Vortice.DirectWrite.FontStyle` and `System.Drawing.FontStyle` exist
+6. **WIC**: `IWICStream` wrapper needed for managed `MemoryStream` → `factory.CreateStream(stream, FileAccess.Read)`
+
+### Migration Strategy for DXRenderer
+The DXRenderer inner class (MeterManager.cs:31642-41708) contains **all** SharpDX code in a self-contained ~10K line class with ~481 references. Strategy:
+
+1. **Replace using statements** with Vortice equivalents + `using FontStyle = System.Drawing.FontStyle;`
+2. **Bulk type renames** via script (most are simple namespace swaps)
+3. **Fix field declarations** (types change: `Surface`→`IDXGISurface`, etc.)
+4. **Rewrite `dxInit()`** — device creation, swapchain, D2D factory, render target (most complex)
+5. **Rewrite `ShutdownDX()`** — remove `Utilities.Dispose(ref x)`, use `x?.Dispose(); x = null;`
+6. **Rewrite helper methods** — `convertColour`, `getDXBrushForColour`, `bitmapFromSystemBitmap`, `buildDXFonts`
+7. **Fix render methods** — ~25 methods, mostly mechanical type renames + brush/bitmap creation pattern changes
