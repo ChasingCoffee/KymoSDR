@@ -419,5 +419,10 @@ namespace Thetis
                 _downloadCancellationTokenSource.Cancel();
             }
         }
+        public static void Shutdown()
+        {
+            CancelDownload();
+            _downloadCancellationTokenSource = null;
+        }
     }
 }

@@ -184,7 +184,7 @@ namespace Thetis
             _ps_closing = true;
             _bPSRunning = false;
             Debug.Print(DateTime.UtcNow.Ticks.ToString() + " PSForm: Stopping PS Thread");
-            if (_ps_thread != null && _ps_thread.IsAlive) _ps_thread.Join(1000);
+            if (_ps_thread != null && _ps_thread.IsAlive) _ps_thread.Join(200);
             Debug.Print(DateTime.UtcNow.Ticks.ToString()  + " PSForm: PS Thread Stopped");
 
             if (console != null)

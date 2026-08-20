@@ -28147,6 +28147,8 @@ namespace Thetis
             shutdownLogStringToPath("Before MessageFloodControl.Shutdown()");
             MessageFloodControl.Shutdown();
 
+            ThetisSkinService.Shutdown();
+
             if (m_tcpTCIServer != null)
             {
                 shutdownLogStringToPath("Before m_tcpTCIServer.StopServer()");
@@ -28184,7 +28186,7 @@ namespace Thetis
             if (chkPower.Checked == true)  // If we're quitting without first clicking off the "Power" button            
                 chkPower.Checked = false;
 
-            Thread.Sleep(200); //[2.10.3.12]MW0LGE give some time for power down, increased to 200ms as psform loops were not detecting power off fast enough
+            Thread.Sleep(100); //[2.10.3.12]MW0LGE give some time for power down
 
             if (psform != null)
             {
@@ -28235,7 +28237,7 @@ namespace Thetis
 
             shutdownLogStringToPath("Before Display.ShutdownDX2D()");
             m_bDisplayLoopRunning = false; // will cause the display loop to exit
-            if (draw_display_thread != null && draw_display_thread.IsAlive) draw_display_thread.Join(1100); // added 1100, slightly longer than 1fps MW0LGE [2.9.0.7]
+            if (draw_display_thread != null && draw_display_thread.IsAlive) draw_display_thread.Join(500); // reduced from 1100 to speed up shutdown
             Display.ShutdownDX2D(); // MW0LGE
 
             shutdownLogStringToPath("Before removeDelegates()");
@@ -28256,7 +28258,7 @@ namespace Thetis
 
                 SetupForm.IgnoreButtonState = true; // prevents threads from updating controls in the blocked thead caused by WaitForSaveLoad
                 Debug.Write("waiting existing save/load...");
-                SetupForm.WaitForSaveLoad(10000); // MW0LGE [2.9.0.8] wait 10 seconds, should be enough?
+                SetupForm.WaitForSaveLoad(5000); // reduced from 10000 for faster shutdown
                 if (SetupForm.StillWaitingForSaveLoad)
                 {
                     // save didnt complete
