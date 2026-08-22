@@ -757,7 +757,7 @@ namespace Thetis
             // to the right of CTUN (free slot at 52,51 in panelDisplay2)
             btnDisplay3DPan = new CheckBoxTS();
             btnDisplay3DPan.Name = "chkDisplay3DPan";
-            btnDisplay3DPan.Text = "3D Pan";
+            btnDisplay3DPan.Text = "3D";
             btnDisplay3DPan.Location = new System.Drawing.Point(52, 51);
             btnDisplay3DPan.Size = new System.Drawing.Size(50, 23);
             btnDisplay3DPan.FlatAppearance.BorderSize = 0;
