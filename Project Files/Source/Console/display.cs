@@ -577,7 +577,7 @@ namespace Thetis
         // floor-lift exponent (Aether DssRenderer pow(s, zCurve), their default 0.70):
         // <1 expands the noise-floor band so the floor is visible and rises into the
         // surface instead of collapsing flat at the baseline; 1.0 = plain linear
-        private static float _pan3DZCurve = 0.70f;
+        private static float _pan3DZCurve = 0.90f;
         public static float Pan3DZCurve
         {
             get { return _pan3DZCurve; }

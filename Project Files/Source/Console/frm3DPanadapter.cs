@@ -308,7 +308,7 @@ namespace Thetis
             this.lbl3DZCurve.TabIndex = 18;
             this.lbl3DZCurve.Text = "Floor Lift:";
             //
-            // ud3DZCurve (Floor Lift: 0.05-1.0, default 0.70)
+            // ud3DZCurve (Floor Lift: 0.05-1.0, default 0.90)
             //
             this.ud3DZCurve.DecimalPlaces = 2;
             this.ud3DZCurve.Increment = 0.05m;
@@ -319,7 +319,7 @@ namespace Thetis
             this.ud3DZCurve.Size = new System.Drawing.Size(56, 20);
             this.ud3DZCurve.TabIndex = 19;
             this.toolTip1.SetToolTip(this.ud3DZCurve, "Lifts the noise floor up into the surface (lower = more floor).");
-            this.ud3DZCurve.Value = 0.70m;
+            this.ud3DZCurve.Value = 0.90m;
             this.ud3DZCurve.ValueChanged += new System.EventHandler(this.ud3DZCurve_ValueChanged);
             //
             // btn3DResetDefaults
@@ -475,7 +475,7 @@ namespace Thetis
             ud3DHaze.Value = 0.16m;
             ud3DLineCount.Value = 35;
             ud3DSpeed.Value = 25;
-            ud3DZCurve.Value = 0.70m;
+            ud3DZCurve.Value = 0.90m;
             clrbtn3DLineColor.Color = Color.Aquamarine;
             combo3DColorMap.SelectedIndex = 0;
 
