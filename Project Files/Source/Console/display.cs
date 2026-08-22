@@ -271,6 +271,7 @@ namespace Thetis
         private static bool _pan3DSideWalls = true;       // solid left/right end caps
         private static float[][] _3dLerpRows;             // per-row temporally interpolated frames cache
         private static float[] _3dRowLift;                // per-row floor-lifted strengths scratch (fill + outline passes)
+        private static System.Collections.Generic.Dictionary<int, ID2D1SolidColorBrush> _3dBrushCache; // cross-frame solid brush pool (cleared on device teardown)
         private static byte[] _colormapLUT;               // 3 maps x 256 entries x RGB
 
         // 3D panadapter temporal median filter (impulse rejection)
@@ -6223,7 +6224,17 @@ namespace Thetis
             }
 
             // per-frame brush cache — avoids creating/disposing thousands of COM brushes
-            var brushCache = new System.Collections.Generic.Dictionary<int, ID2D1SolidColorBrush>();
+            // persistent cross-frame brush pool — solid-colour COM brushes are reused
+            // between frames instead of being created/disposed thousands of times per
+            // second; bounded by a hard cap and disposed on device teardown
+            if (_3dBrushCache == null)
+                _3dBrushCache = new System.Collections.Generic.Dictionary<int, ID2D1SolidColorBrush>(4096);
+            else if (_3dBrushCache.Count > 16384)
+            {
+                foreach (var kv in _3dBrushCache) { try { kv.Value.Dispose(); } catch { } }
+                _3dBrushCache.Clear();
+            }
+            var brushCache = _3dBrushCache;
 
             // surface colour selection — shared by fills, outlines and walls
             void SelectSurfaceColour(float dBm, float strength, out int R, out int G, out int B)
@@ -6620,13 +6631,9 @@ namespace Thetis
             }
             finally
             {
-                // always pop clip and dispose brushes, even on crash
+                // always pop clip, even on crash — brushes persist in the
+                // cross-frame pool and must NOT be disposed here
                 try { _d2dRenderTarget.PopAxisAlignedClip(); } catch { }
-                foreach (var kv in brushCache)
-                {
-                    try { kv.Value.Dispose(); } catch { }
-                }
-                brushCache.Clear();
             }
         }
 
@@ -12617,6 +12624,15 @@ namespace Thetis
         }
         private static void clearAllDynamicBrushes()
         {
+            if (_3dBrushCache != null)
+            {
+                foreach (KeyValuePair<int, ID2D1SolidColorBrush> kvp in _3dBrushCache)
+                {
+                    kvp.Value?.Dispose();
+                }
+                _3dBrushCache.Clear();
+            }
+
             if (!_bDX2Setup || _DX2Brushes == null) return;
 
             foreach (KeyValuePair<int, ID2D1Brush> kvp in _DX2Brushes)
