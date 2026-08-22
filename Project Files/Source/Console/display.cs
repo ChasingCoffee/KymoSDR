@@ -290,20 +290,8 @@ namespace Thetis
         public static float[] current_waterfall_data_copy;
         public static float[] current_waterfall_data_bottom_copy;
 
-        private static ID2D1Bitmap _waterfall_bmp_dx2d = null;					// MW0LGE                                
+        private static ID2D1Bitmap _waterfall_bmp_dx2d = null;					// MW0LGE
         private static ID2D1Bitmap _waterfall_bmp2_dx2d = null;
-
-        // 3D panadapter cached-surface rendering — the full translucent stack is drawn
-        // into an offscreen compatible target only when a new history row pushes
-        // (~waterfall speed); every display frame just composites the finished bitmap,
-        // capping GPU rasterisation cost at push rate regardless of Depth Lines count
-        private static ID2D1BitmapRenderTarget _3dOffscreenRT = null;   // offscreen target the stack renders into
-        private static ID2D1Bitmap _3dOffscreenBmp = null;        // finished 3D frame composited each screen refresh
-        private static int _3dBmpW = 0;                           // cached surface size (recreated on change)
-        private static int _3dBmpH = 0;
-        private static bool _3dBmpDirty = true;                   // set when a new row pushes or size changes
-        private static long _3dLastBmpRenderTicks = 0;            // periodic forced re-render so knob changes appear
-        private static ID2D1RenderTarget _rt3D = null;            // drawing-target indirection used by DrawPanadapter3DHistoryDX2D
         private static readonly long[][] _waterfallRowUtcTicks =
         {
             new long[0],
@@ -3402,14 +3390,6 @@ namespace Thetis
                     _waterfall_bmp_dx2d?.Dispose();
                     _waterfall_bmp2_dx2d?.Dispose();
 
-                    // 3D cached-surface resources
-                    _3dOffscreenRT?.Dispose();
-                    _3dOffscreenBmp?.Dispose();
-                    _3dOffscreenRT = null;
-                    _3dOffscreenBmp = null;
-                    _rt3D = null;
-                    _3dBmpDirty = true;
-
                     if (_pause_bitmap != null)
                     {
                         _pause_bitmap?.Dispose();
@@ -5279,7 +5259,6 @@ namespace Thetis
                                 _3dHistoryHead = (head + 1) % Max3DHistoryLines;
                                 if (_3dHistoryCount < Max3DHistoryLines) _3dHistoryCount++;
                                 _3dLastPushTicks = nowTicks;
-                                _3dBmpDirty = true; // cached 3D surface must re-render with the new row
                             }
                             catch (Exception ex)
                             {
@@ -6167,29 +6146,6 @@ namespace Thetis
             int yRange = grid_max - grid_min;
             if (yRange <= 0) return;
 
-            // ---- cached-surface fast path -------------------------------------------
-            // The full translucent stack only redraws when a new history row pushes
-            // (_3dBmpDirty) or every ~300ms so knob/setting changes appear promptly.
-            // Every other display frame simply composites the finished bitmap — near-
-            // free for the GPU, which is what keeps framerate flat at high line counts.
-            long bmpNowTicks = DateTime.UtcNow.Ticks;
-            bool forceRefresh = (bmpNowTicks - _3dLastBmpRenderTicks) > 3000000; // 300ms in 100ns ticks
-            int destShift = nVerticalShift;      // remember where the plot sits on screen
-            nVerticalShift = 0;                  // stack geometry below is built 0-based inside the offscreen surface
-
-            if (!_3dBmpDirty && !forceRefresh &&
-                _3dOffscreenRT != null && _3dOffscreenBmp != null &&
-                _3dBmpW == W && _3dBmpH == H)
-            {
-                if (_d2dRenderTarget != null)
-                {
-                    _d2dRenderTarget.DrawBitmap(_3dOffscreenBmp,
-                        new RectangleF(0, destShift, W, destShift + H), 1f,
-                        BitmapInterpolationMode.Linear);
-                }
-                return;
-            }
-
             // background color for haze blending
             int bgR = (int)(m_cDX2_display_background_clear_colour.R * 255);
             int bgG = (int)(m_cDX2_display_background_clear_colour.G * 255);
@@ -6248,30 +6204,9 @@ namespace Thetis
                 }
             }
 
-            // ---- offscreen pass: ensure the compatible target exists, then redirect ----
-            // (created FROM the main render target so it shares device resources)
-            if (_3dOffscreenRT == null || _3dOffscreenBmp == null || _3dBmpW != W || _3dBmpH != H)
-            {
-                _3dOffscreenRT?.Dispose();
-                _3dOffscreenBmp?.Dispose();
-                _3dOffscreenRT = null;
-                _3dOffscreenBmp = null;
-
-                _3dOffscreenRT = _d2dRenderTarget.CreateCompatibleRenderTarget(
-                    new Vortice.Mathematics.SizeI(W, H), new Vortice.Mathematics.SizeI(W, H),
-                    new SDXPixelFormat(Format.B8G8R8A8_UNorm, AlphaMode.Premultiplied));
-                _3dOffscreenBmp = _3dOffscreenRT.Bitmap;
-                _3dBmpW = W;
-                _3dBmpH = H;
-            }
-
-            _rt3D = _3dOffscreenRT;
-            _rt3D.BeginDraw();
-            _rt3D.Clear(null); // transparent black — premultiplied alpha keeps translucent stacking identical
-
-            // clip to panadapter area (0-based inside the offscreen surface)
-            RectangleF clipRect = new RectangleF(0, 0, W, H);
-            _rt3D.PushAxisAlignedClip(clipRect, AntialiasMode.Aliased);
+            // clip to panadapter area
+            RectangleF clipRect = new RectangleF(0, nVerticalShift, W, nVerticalShift + H);
+            _d2dRenderTarget.PushAxisAlignedClip(clipRect, AntialiasMode.Aliased);
 
             // temporal interpolation phase — fraction of one row-interval elapsed since the
             // last history push; rows sample fractional frame indices so the surface morphs
@@ -6287,7 +6222,6 @@ namespace Thetis
                 if (phase < 0f) phase = 0f;
                 else if (phase > 1f) phase = 1f;
             }
-            phase = 0f; // cached-surface mode renders exactly the pushed state — no sub-row sliding
 
             // per-frame brush cache — avoids creating/disposing thousands of COM brushes
             // persistent cross-frame brush pool — solid-colour COM brushes are reused
@@ -6441,11 +6375,11 @@ namespace Thetis
                     int gKey = (ga << 24) | (_pan3DLineColor.R << 16) | (_pan3DLineColor.G << 8) | _pan3DLineColor.B;
                     if (!brushCache.TryGetValue(gKey, out var gridBrush))
                     {
-                        gridBrush = _rt3D.CreateSolidColorBrush(
+                        gridBrush = _d2dRenderTarget.CreateSolidColorBrush(
                             new Vortice.Mathematics.Color4(_pan3DLineColor.R / 255f, _pan3DLineColor.G / 255f, _pan3DLineColor.B / 255f, aG));
                         brushCache[gKey] = gridBrush;
                     }
-                    _rt3D.DrawLine(new Vector2(insG, yG), new Vector2(W - insG, yG), gridBrush, 1.0f);
+                    _d2dRenderTarget.DrawLine(new Vector2(insG, yG), new Vector2(W - insG, yG), gridBrush, 1.0f);
                 }
 
                 // side rails — insets/baselines are linear in tSmooth, so rails are straight segments
@@ -6454,19 +6388,19 @@ namespace Thetis
                 int raKey = ((int)(ra * 255) << 24) | (_pan3DLineColor.R << 16) | (_pan3DLineColor.G << 8) | _pan3DLineColor.B;
                 if (!brushCache.TryGetValue(raKey, out var railBrush))
                 {
-                    railBrush = _rt3D.CreateSolidColorBrush(
+                    railBrush = _d2dRenderTarget.CreateSolidColorBrush(
                         new Vortice.Mathematics.Color4(_pan3DLineColor.R / 255f, _pan3DLineColor.G / 255f, _pan3DLineColor.B / 255f, ra));
                     brushCache[raKey] = railBrush;
                 }
-                _rt3D.DrawLine(new Vector2(0f, bottomY), new Vector2(backInset, bottomY - depthSpan), railBrush, 1.0f);
-                _rt3D.DrawLine(new Vector2(W, bottomY), new Vector2(W - backInset, bottomY - depthSpan), railBrush, 1.0f);
+                _d2dRenderTarget.DrawLine(new Vector2(0f, bottomY), new Vector2(backInset, bottomY - depthSpan), railBrush, 1.0f);
+                _d2dRenderTarget.DrawLine(new Vector2(W, bottomY), new Vector2(W - backInset, bottomY - depthSpan), railBrush, 1.0f);
             }
 
             // --- side walls / end caps ---
             if (_pan3DSideWalls && rowCount >= 1 && rowSrc[1] != null)
             {
-                AntialiasMode prevAAWall = _rt3D.AntialiasMode;
-                _rt3D.AntialiasMode = AntialiasMode.PerPrimitive;
+                AntialiasMode prevAAWall = _d2dRenderTarget.AntialiasMode;
+                _d2dRenderTarget.AntialiasMode = AntialiasMode.PerPrimitive;
                 try
                 {
                     // wall colour: front-row left-edge surface colour, darkened, blended toward bg by mid fog
@@ -6486,7 +6420,7 @@ namespace Thetis
                     int wKey = (255 << 24) | (wr << 16) | (wg << 8) | wb;
                     if (!brushCache.TryGetValue(wKey, out var wallBrush))
                     {
-                        wallBrush = _rt3D.CreateSolidColorBrush(
+                        wallBrush = _d2dRenderTarget.CreateSolidColorBrush(
                             new Vortice.Mathematics.Color4(wr / 255f, wg / 255f, wb / 255f, 1.0f));
                         brushCache[wKey] = wallBrush;
                     }
@@ -6510,7 +6444,7 @@ namespace Thetis
                         {
                             sink?.Dispose();
                         }
-                        _rt3D.FillGeometry(geo, wallBrush);
+                        _d2dRenderTarget.FillGeometry(geo, wallBrush);
                         geo.Dispose();
                     }
 
@@ -6519,7 +6453,7 @@ namespace Thetis
                 }
                 finally
                 {
-                    _rt3D.AntialiasMode = prevAAWall;
+                    _d2dRenderTarget.AntialiasMode = prevAAWall;
                 }
             }
 
@@ -6615,14 +6549,14 @@ namespace Thetis
                     int cacheKey = (a255 << 24) | (R << 16) | (G << 8) | B;
                     if (!brushCache.TryGetValue(cacheKey, out var colBrush))
                     {
-                        colBrush = _rt3D.CreateSolidColorBrush(
+                        colBrush = _d2dRenderTarget.CreateSolidColorBrush(
                             new Vortice.Mathematics.Color4(R / 255f, G / 255f, B / 255f, alpha));
                         brushCache[cacheKey] = colBrush;
                     }
                     // fill from trace point DOWN to absolute bottom (not baselineY)
                     Vector2 top = new Vector2(xPx, yPx);
                     Vector2 bot = new Vector2(xPx, bottomY);
-                    _rt3D.DrawLine(bot, top, colBrush, local_Decimation);
+                    _d2dRenderTarget.DrawLine(bot, top, colBrush, local_Decimation);
                 }
 
                 // --- PASS 2: Draw ridge outline (brighter crest hairline, anti-aliased) ---
@@ -6631,8 +6565,8 @@ namespace Thetis
                 {
                     // per-primitive AA turns the aliased staircase silhouette into clean
                     // converging edges; the axis-aligned clip above is unaffected
-                    AntialiasMode prevAA = _rt3D.AntialiasMode;
-                    _rt3D.AntialiasMode = AntialiasMode.PerPrimitive;
+                    AntialiasMode prevAA = _d2dRenderTarget.AntialiasMode;
+                    _d2dRenderTarget.AntialiasMode = AntialiasMode.PerPrimitive;
                     try
                     {
                         Vector2 prevPt = new Vector2(-1, -1);
@@ -6677,11 +6611,11 @@ namespace Thetis
                                 int oCacheKey = (oa255 << 24) | (R << 16) | (G << 8) | B;
                                 if (!brushCache.TryGetValue(oCacheKey, out var outlineBrush))
                                 {
-                                    outlineBrush = _rt3D.CreateSolidColorBrush(
+                                    outlineBrush = _d2dRenderTarget.CreateSolidColorBrush(
                                         new Vortice.Mathematics.Color4(R / 255f, G / 255f, B / 255f, outlineAlpha));
                                     brushCache[oCacheKey] = outlineBrush;
                                 }
-                                _rt3D.DrawLine(prevPt, pt, outlineBrush, 1.0f);
+                                _d2dRenderTarget.DrawLine(prevPt, pt, outlineBrush, 1.0f);
                             }
                             prevPt = pt;
                             hasPrev = true;
@@ -6689,7 +6623,7 @@ namespace Thetis
                     }
                     finally
                     {
-                        _rt3D.AntialiasMode = prevAA;
+                        _d2dRenderTarget.AntialiasMode = prevAA;
                     }
                 }
             }
@@ -6697,22 +6631,10 @@ namespace Thetis
             }
             finally
             {
-                // always pop clip and end the offscreen pass, even on crash;
-                // brushes persist in the cross-frame pool and must NOT be disposed here
-                try { _rt3D.PopAxisAlignedClip(); } catch { }
-                try { _rt3D.EndDraw(out ulong tag1, out ulong tag2); } catch { }
-                _rt3D = _d2dRenderTarget; // restore drawing-target indirection
+                // always pop clip, even on crash — brushes persist in the
+                // cross-frame pool and must NOT be disposed here
+                try { _d2dRenderTarget.PopAxisAlignedClip(); } catch { }
             }
-
-            // composite the freshly rendered surface onto the display
-            if (_d2dRenderTarget != null && _3dOffscreenBmp != null)
-            {
-                _d2dRenderTarget.DrawBitmap(_3dOffscreenBmp,
-                    new RectangleF(0, destShift, W, destShift + H), 1f,
-                    BitmapInterpolationMode.Linear);
-            }
-            _3dBmpDirty = false;
-            _3dLastBmpRenderTicks = DateTime.UtcNow.Ticks;
         }
 
         /// <summary>
@@ -9260,14 +9182,6 @@ namespace Thetis
         {
             clearAllDynamicBrushes();
             clearSpotFlagBitmapCache();
-
-            // 3D cached-surface resources (compatible target is bound to the current device)
-            _3dOffscreenRT?.Dispose();
-            _3dOffscreenBmp?.Dispose();
-            _3dOffscreenRT = null;
-            _3dOffscreenBmp = null;
-            _rt3D = null;
-            _3dBmpDirty = true;
 
             if (m_brushLGDataFillRX1 != null) m_brushLGDataFillRX1?.Dispose();
             if (m_brushLGDataFillRX2 != null) m_brushLGDataFillRX2?.Dispose();
