@@ -598,6 +598,73 @@ namespace Thetis
             set { _pan3DWaterfallSync = value; }
         }
 
+        /// <summary>
+        /// Applies persisted 3D panadapter settings straight from the settings store at
+        /// startup. The 3D settings popup is created lazily on first open, so without
+        /// this the engine would run on compiled-in defaults until then — e.g. Waterfall
+        /// Sync appeared ON after a restart even though it was saved OFF, and only
+        /// corrected itself when the popup was opened. Control-name mapping mirrors
+        /// frm3DPanadapter.PushAllSettings / Common.SaveForm("3DPanadapter").
+        /// </summary>
+        public static void RestorePan3DPersisted()
+        {
+            if (DB.ds == null) return;
+
+            try
+            {
+                List<string> vars = DB.GetVars("3DPanadapter").OfType<string>().ToList();
+
+                foreach (string s in vars)
+                {
+                    string[] vals = s.Split('/');
+                    if (vals.Length < 2) continue;
+                    string name = vals[0];
+                    string val = vals[1];
+
+                    try
+                    {
+                        switch (name)
+                        {
+                            case "chk3DWaterfallSync": Pan3DWaterfallSync = bool.Parse(val); break;
+                            case "chk3DSideWalls": Pan3DSideWalls = bool.Parse(val); break;
+                            case "ud3DXOffset": Pan3DPerspective = float.Parse(val); break;
+                            case "ud3DYOffset": Pan3DDepth = float.Parse(val); break;
+                            case "ud3DRidgeHeight": Pan3DRidgeHeight = float.Parse(val); break;
+                            case "ud3DHaze": Pan3DDepthFade = float.Parse(val); break;
+                            case "ud3DLineCount": Pan3DLineCount = int.Parse(val); break;
+                            case "ud3DZCurve": Pan3DZCurve = float.Parse(val); break;
+                            case "ud3DSpeed": Pan3DSpeed = int.Parse(val); break;
+                            case "clrbtn3DLineColor":
+                                {
+                                    string[] c = val.Split('.');
+                                    if (c.Length == 4)
+                                        Pan3DLineColor = Color.FromArgb(
+                                            int.Parse(c[3]), int.Parse(c[0]), int.Parse(c[1]), int.Parse(c[2]));
+                                    break;
+                                }
+                            case "combo3DColorMap":
+                                {
+                                    // stored as combo text; map back to index (Classic/Turbo/Viridis/Inferno)
+                                    switch (val)
+                                    {
+                                        case "Classic": Pan3DColorMap = 0; break;
+                                        case "Turbo": Pan3DColorMap = 1; break;
+                                        case "Viridis": Pan3DColorMap = 2; break;
+                                        case "Inferno": Pan3DColorMap = 3; break;
+                                    }
+                                    break;
+                                }
+                        }
+                    }
+                    catch { } // malformed single entry must not block the rest
+                }
+            }
+            catch (Exception ex)
+            {
+                Common.LogException(ex);
+            }
+        }
+
         private static int _pan3DLineCount = 35;
         public static int Pan3DLineCount
         {

@@ -2024,6 +2024,11 @@ namespace Thetis
 
             Common.RestoreForm(EQForm, "EQForm", false);
 
+            // apply persisted 3D panadapter settings to the engine at startup —
+            // the 3D settings popup is lazy-created, so its saved values would
+            // otherwise only reach the display on first open (waterfall-sync bug)
+            Display.RestorePan3DPersisted();
+
             XVTRForm = new XVTRForm(this);
             //WaveForm = new WaveControl(this) { StartPosition = FormStartPosition.Manual };	// create Wave form
 
