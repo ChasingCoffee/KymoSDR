@@ -247,7 +247,6 @@ namespace Thetis
         _MACRO_28,
         _MACRO_29,
         _MACRO_30,
-        PAN3D,
 
         INFO_TEXT = 998,
         SPLITTER = 999,
@@ -607,7 +606,6 @@ namespace Thetis
             (OtherButtonId.ZOOM_2,         3, 25, "2x", "", "", "2x zoom"),
             (OtherButtonId.ZOOM_4,         3, 26, "4x", "", "", "4x zoom"),
             (OtherButtonId.ACTITVE_PEAK,   3, 27, "A-Peak", "", "", "Active Peak"),
-            (OtherButtonId.PAN3D,          3, 28, "3D Pan", "", "", "3D Panadapter on/off"),
 
             (OtherButtonId.INFO_TEXT,     -1, -1, "Audio / DSP", "", "", ""),
             (OtherButtonId.SPLITTER,      -1, -1, "", "", "", ""),

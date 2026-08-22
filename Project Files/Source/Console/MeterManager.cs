@@ -5265,7 +5265,6 @@ namespace Thetis
             general_settings.Add(OtherButtonId.SPOTS, _console.GetGeneralSetting(m.RX, OtherButtonId.SPOTS));
             general_settings.Add(OtherButtonId.ACTITVE_PEAK, _console.GetGeneralSetting(m.RX, OtherButtonId.ACTITVE_PEAK));
             general_settings.Add(OtherButtonId.FILL_SPECTRUM, _console.GetGeneralSetting(m.RX, OtherButtonId.FILL_SPECTRUM));
-            general_settings.Add(OtherButtonId.PAN3D, _console.GetGeneralSetting(m.RX, OtherButtonId.PAN3D));
             general_settings.Add(OtherButtonId.RIT, _console.GetGeneralSetting(m.RX, OtherButtonId.RIT));
             general_settings.Add(OtherButtonId.XIT, _console.GetGeneralSetting(m.RX, OtherButtonId.XIT));
 
