@@ -244,11 +244,11 @@ namespace Thetis
             //
             this.ud3DSpeed.Location = new System.Drawing.Point(120, 169);
             this.ud3DSpeed.Maximum = new decimal(new int[] { 60, 0, 0, 0 });
-            this.ud3DSpeed.Minimum = new decimal(new int[] { 10, 0, 0, 0 });
+            this.ud3DSpeed.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             this.ud3DSpeed.Name = "ud3DSpeed";
             this.ud3DSpeed.Size = new System.Drawing.Size(56, 20);
             this.ud3DSpeed.TabIndex = 13;
-            this.toolTip1.SetToolTip(this.ud3DSpeed, "How fast new rows are pushed (10-60 FPS).");
+            this.toolTip1.SetToolTip(this.ud3DSpeed, "How fast new rows are pushed (1-60 FPS). Low values give a slow, cinematic scroll.");
             this.ud3DSpeed.Value = new decimal(new int[] { 25, 0, 0, 0 });
             this.ud3DSpeed.ValueChanged += new System.EventHandler(this.ud3DSpeed_ValueChanged);
             //
