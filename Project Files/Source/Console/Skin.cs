@@ -1000,7 +1000,7 @@ namespace Thetis
         private static void SetupCheckBoxImages(CheckBox ctrl)
         {
             string imgName = ctrl.Name;
-            if (imgName == "chkTXVST" || imgName == "chkRXVST")
+            if (imgName == "chkTXVST" || imgName == "chkRXVST" || imgName == "btnDisplay3DPan")
                 imgName = "chkNoiseGate";
 
             string skey = "";
