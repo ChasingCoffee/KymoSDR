@@ -270,6 +270,7 @@ namespace Thetis
         private static int _pan3DColorMap = 0;            // 0=classic, 1=turbo, 2=viridis, 3=inferno
         private static bool _pan3DSideWalls = true;       // solid left/right end caps
         private static float[][] _3dLerpRows;             // per-row temporally interpolated frames cache
+        private static float[] _3dRowLift;                // per-row floor-lifted strengths scratch (fill + outline passes)
         private static byte[] _colormapLUT;               // 3 maps x 256 entries x RGB
 
         // 3D panadapter temporal median filter (impulse rejection)
@@ -570,6 +571,16 @@ namespace Thetis
         {
             get { return _pan3DRidgeHeight; }
             set { _pan3DRidgeHeight = Math.Max(0.1f, Math.Min(1.0f, value)); }
+        }
+
+        // floor-lift exponent (Aether DssRenderer pow(s, zCurve), their default 0.70):
+        // <1 expands the noise-floor band so the floor is visible and rises into the
+        // surface instead of collapsing flat at the baseline; 1.0 = plain linear
+        private static float _pan3DZCurve = 0.70f;
+        public static float Pan3DZCurve
+        {
+            get { return _pan3DZCurve; }
+            set { _pan3DZCurve = Math.Max(0.05f, Math.Min(1.0f, value)); }
         }
 
         private static bool _pan3DUseWaterfallColor = true;
@@ -5454,14 +5465,9 @@ namespace Thetis
 
                 bool peaks_imds = bPeakBlobs || show_imd_measurements;
 
-                // perceptual colormap support for live trace — overrides waterfall sync,
-                // mirroring the 3D surface colouring so the live trace matches the stack
-                bool liveUseColormap = _pan3DEnabled && _pan3DColorMap > 0 && rx == 1 && !local_mox;
-                if (liveUseColormap && _colormapLUT == null) BuildColormapLUT();
-                int liveColorMapIdx = _pan3DColorMap;
-
-                // waterfall sync support for live trace
-                bool liveUseWaterfallSync = !liveUseColormap && _pan3DEnabled && _pan3DWaterfallSync && rx == 1 && !local_mox;
+                // colouring priority for the live trace mirrors the 3D surface:
+                // waterfall sync FIRST, then perceptual colormap, then line colour
+                bool liveUseWaterfallSync = _pan3DEnabled && _pan3DWaterfallSync && rx == 1 && !local_mox;
                 float liveWfLow = waterfall_low_threshold;
                 float liveWfHigh = waterfall_high_threshold;
                 if (rx1_waterfall_agc && !m_bRX1_spectrum_thresholds)
@@ -5471,6 +5477,10 @@ namespace Thetis
                 }
                 float liveWfRange = liveWfHigh - liveWfLow;
                 if (liveWfRange <= 0) liveUseWaterfallSync = false;
+
+                bool liveUseColormap = _pan3DEnabled && _pan3DColorMap > 0 && rx == 1 && !local_mox && !liveUseWaterfallSync;
+                if (liveUseColormap && _colormapLUT == null) BuildColormapLUT();
+                int liveColorMapIdx = _pan3DColorMap;
                 var liveWfBrushCache = liveUseWaterfallSync || liveUseColormap
                     ? new System.Collections.Generic.Dictionary<int, ID2D1SolidColorBrush>()
                     : null;
@@ -5479,6 +5489,15 @@ namespace Thetis
                 int local_Decimation = m_nDecimation;
                 double local_frame_start = m_dElapsedFrameStart;
                 //
+
+                // when the 3D surface is active, draw the live trace with the SAME
+                // vertical mapping as the front row of the stack (Aether-style) so it
+                // becomes the front crest of one continuous surface instead of a
+                // separate full-height overlay (which produced a seam/double image)
+                bool live3DMapping = draw3DHistory && !local_mox && _pan3DEnabled && _3dHistoryCount >= 2;
+                float live3DBottomY = nVerticalShift + H;
+                float live3DRidge = H * _pan3DRidgeHeight;
+                float live3DZCurve = Math.Max(0.05f, _pan3DZCurve);
 
                 for (int i = 0; i < nDecimatedWidth; i++)
                 {
@@ -5495,7 +5514,16 @@ namespace Thetis
                         averageCount++;
                     }
 
-                    Y = (int)((grid_max - max) * dbmToPixel - 0.5f) + nVerticalShift;// -0.5 to mimic floor
+                    if (live3DMapping)
+                    {
+                        float sLive = (max - grid_min) / (float)yRange;
+                        if (sLive < 0) sLive = 0; else if (sLive > 1) sLive = 1;
+                        Y = (int)(live3DBottomY - Math.Pow(sLive, live3DZCurve) * live3DRidge - 0.5f);
+                    }
+                    else
+                    {
+                        Y = (int)((grid_max - max) * dbmToPixel - 0.5f) + nVerticalShift;// -0.5 to mimic floor
+                    }
                     point.Y = Y;
 
                     if (max > local_max_y)
@@ -5630,7 +5658,16 @@ namespace Thetis
                         {
                             // draw to peak, but re-work Y as we might rescale the spectrum vertically
                             spectralPeakPoint.X = point.X;
-                            spectralPeakPoint.Y = (int)((grid_max - peak.max_dBm) * dbmToPixel - 0.5f) + nVerticalShift;// -0.5 to mimic floor
+                            if (live3DMapping)
+                            {
+                                float sPeak = (peak.max_dBm - grid_min) / (float)yRange;
+                                if (sPeak < 0) sPeak = 0; else if (sPeak > 1) sPeak = 1;
+                                spectralPeakPoint.Y = (int)(live3DBottomY - Math.Pow(sPeak, live3DZCurve) * live3DRidge - 0.5f);
+                            }
+                            else
+                            {
+                                spectralPeakPoint.Y = (int)((grid_max - peak.max_dBm) * dbmToPixel - 0.5f) + nVerticalShift;// -0.5 to mimic floor
+                            }
 
                             if (bActivePeakFill)
                             {
@@ -6123,15 +6160,9 @@ namespace Thetis
             float depthSpan = H * depthSpanFrac;     // total baseline rise
             float frontMaxRidge = H * frontMaxRidgeFrac; // max ridge height at front
 
-            // waterfall sync support — use the waterfall palette and thresholds
-            // perceptual colormap — when enabled it overrides waterfall-sync/gradient/line colour
-            // snapshot the map index once per frame — the UI thread can change it mid-frame,
-            // and SelectSurfaceColour must stay consistent with useColormap (avoids negative LUT index)
-            int colorMapIdx = _pan3DColorMap;
-            bool useColormap = colorMapIdx > 0;
-            if (useColormap && _colormapLUT == null) BuildColormapLUT();
-
-            bool useWaterfallSync = !useColormap && _pan3DWaterfallSync && rx == 1;
+            // waterfall sync support — TOP priority: when checked it overrides any
+            // colormap, gradient and line colour so the surface matches the waterfall
+            bool useWaterfallSync = _pan3DWaterfallSync && rx == 1;
             float wfLowThreshold = waterfall_low_threshold;
             float wfHighThreshold = waterfall_high_threshold;
             if (rx1_waterfall_agc && !m_bRX1_spectrum_thresholds)
@@ -6141,6 +6172,13 @@ namespace Thetis
             }
             float wfRange = wfHighThreshold - wfLowThreshold;
             if (wfRange <= 0) useWaterfallSync = false;
+
+            // perceptual colormap — used only when waterfall sync is OFF.
+            // snapshot the map index once per frame — the UI thread can change it mid-frame,
+            // and SelectSurfaceColour must stay consistent with useColormap (avoids negative LUT index)
+            int colorMapIdx = _pan3DColorMap;
+            bool useColormap = colorMapIdx > 0 && !useWaterfallSync;
+            if (useColormap && _colormapLUT == null) BuildColormapLUT();
 
             // gradient support — pre-sample into a palette to avoid per-column brush creation
             const int gradPaletteSize = 64;
@@ -6222,8 +6260,13 @@ namespace Thetis
                 }
             }
 
-            // exponential fog — saturating depth haze (replaces the old linear blend)
-            float FogFor(float tS) => hazeStrength * 0.35f * (1.0f - (float)Math.Exp(-2.5f * tS));
+            // linear depth haze (Aether DssRenderer: lerp toward bg by depth × kHaze)
+            float FogFor(float tS) => tS * hazeStrength;
+
+            // floor-lift curve (Aether DssRenderer pow(s, zCurve)): remaps signal
+            // strength before it scales ridge height
+            float zCurve = Math.Max(0.05f, _pan3DZCurve);
+            float Lift(float s) => (float)Math.Pow(s, zCurve);
 
             try
             {
@@ -6235,6 +6278,7 @@ namespace Thetis
             float[] rowTSmooth = new float[rowCount];
             float[] rowInset = new float[rowCount];
             float[] rowBaseline = new float[rowCount];
+            float[] rowRidge = new float[rowCount];
             float[] edgeLY = new float[rowCount];
             float[] edgeRY = new float[rowCount];
             var rowSrc = new float[linesToDraw][];
@@ -6243,12 +6287,18 @@ namespace Thetis
             {
                 int line = i + 1;
                 float depthFrac = (float)line / (linesToDraw - 1);
-                float tS = depthFrac * depthFrac * (3.0f - 2.0f * depthFrac);
+                // linear depth parametrization (Aether DssRenderer: v = age/rows) —
+                // rows space out evenly into the distance instead of easing at the front
+                float tS = depthFrac;
                 rowTSmooth[i] = tS;
 
                 float rowWidthFrac = 1.0f - tS * (1.0f - backWidthFrac);
                 rowInset[i] = W * (1.0f - rowWidthFrac) * 0.5f;
                 rowBaseline[i] = bottomY - tS * depthSpan;
+                // vertical foreshortening — ridge height scales by the SAME factor as the
+                // row width (uniform perspective scaling, Aether DssRenderer.h:185), so the
+                // surface reads as a flat plane receding to the horizon
+                rowRidge[i] = frontMaxRidge * rowWidthFrac;
 
                 // fractional frame index — slides continuously toward newer frames between
                 // pushes; content is identical across a push boundary, so motion is seamless
@@ -6289,13 +6339,13 @@ namespace Thetis
                 float dL = rowSrc[line][0] + fOffset;
                 float sL = (dL - grid_min) / (float)yRange;
                 if (sL < 0) sL = 0; else if (sL > 1) sL = 1;
-                float yL = rowBaseline[i] - sL * frontMaxRidge;
+                float yL = rowBaseline[i] - Lift(sL) * rowRidge[i];
                 edgeLY[i] = Math.Max(nVerticalShift, Math.Min(bottomY, yL));
 
                 float dR = rowSrc[line][nDecimatedWidth - 1] + fOffset;
                 float sR = (dR - grid_min) / (float)yRange;
                 if (sR < 0) sR = 0; else if (sR > 1) sR = 1;
-                float yR = rowBaseline[i] - sR * frontMaxRidge;
+                float yR = rowBaseline[i] - Lift(sR) * rowRidge[i];
                 edgeRY[i] = Math.Max(nVerticalShift, Math.Min(bottomY, yR));
             }
 
@@ -6404,18 +6454,30 @@ namespace Thetis
                 float[] frameData = rowSrc[line];
                 if (frameData == null || frameData.Length < nDecimatedWidth) continue;
 
+                // per-row lifted strengths — computed once per row, shared by the
+                // fill and outline passes (one pow per column instead of three)
+                if (_3dRowLift == null || _3dRowLift.Length < nDecimatedWidth)
+                    _3dRowLift = new float[nDecimatedWidth];
+                for (int c = 0; c < nDecimatedWidth; c++)
+                {
+                    float sRaw = (frameData[c] + fOffset - grid_min) / (float)yRange;
+                    if (sRaw < 0) sRaw = 0; else if (sRaw > 1) sRaw = 1;
+                    _3dRowLift[c] = Lift(sRaw);
+                }
+
                 float tSmooth = rowTSmooth[i];
                 float inset = rowInset[i];
                 float rowW = W - 2.0f * inset;
                 float baselineY = rowBaseline[i];
 
-                // uniform ridge height — same peak height front to back, only width narrows
-                float maxRidge = frontMaxRidge;
+                // foreshortened ridge height — shrinks with depth by the same factor
+                // as the row width (uniform perspective scaling, Aether-style)
+                float maxRidge = rowRidge[i];
 
                 // depth dimming (1.0 at front, gently fading toward back)
                 float dim = 0.72f + 0.28f * (1.0f - tSmooth);
 
-                // atmospheric haze factor — exponential, saturating with depth
+                // atmospheric haze factor — linear blend toward background
                 float haze = FogFor(tSmooth);
 
                 // alpha fade — starts near-opaque, gently fades
@@ -6431,13 +6493,14 @@ namespace Thetis
 
                     float dBm = frameData[c] + fOffset;
 
-                    // signal strength: 0 = noise floor, 1 = peak
+                    // signal strength (raw, drives colour); height uses the
+                    // floor-lifted value computed above
                     float strength = (dBm - grid_min) / (float)yRange;
                     if (strength < 0) strength = 0;
                     if (strength > 1) strength = 1;
 
                     // trace Y is RELATIVE to the rising baseline — NOT absolute dBm
-                    float yPx = baselineY - strength * maxRidge;
+                    float yPx = baselineY - _3dRowLift[c] * maxRidge;
                     yPx = Math.Max(nVerticalShift, Math.Min(bottomY, yPx));
 
                     // color based on signal strength
@@ -6447,6 +6510,20 @@ namespace Thetis
                     R = (int)(R * dim);
                     G = (int)(G * dim);
                     B = (int)(B * dim);
+
+                    // slope shading (Aether kSlopeGain=0.55, shade 0.68-1.32):
+                    // brighter on rising edges toward the right, darker on falling
+                    {
+                        int cl = c > 0 ? c - 1 : c;
+                        int cr = c < nDecimatedWidth - 1 ? c + 1 : c;
+                        float slope = _3dRowLift[cl] - _3dRowLift[cr]; // + : rises to right
+                        float shade = 1.0f + 0.55f * slope;
+                        if (shade < 0.68f) shade = 0.68f; else if (shade > 1.32f) shade = 1.32f;
+                        shade = (int)(shade * 20) / 20f; // quantize — keeps the brush cache bounded
+                        R = (int)(R * shade);
+                        G = (int)(G * shade);
+                        B = (int)(B * shade);
+                    }
 
                     // atmospheric haze
                     R = (int)(R * (1 - haze) + bgR * haze);
@@ -6497,7 +6574,7 @@ namespace Thetis
                             if (strength < 0) strength = 0;
                             if (strength > 1) strength = 1;
 
-                            float yPx = baselineY - strength * maxRidge;
+                            float yPx = baselineY - _3dRowLift[c] * maxRidge;
                             yPx = Math.Max(nVerticalShift, Math.Min(bottomY, yPx));
 
                             SelectSurfaceColour(dBm, strength, out int R, out int G, out int B);

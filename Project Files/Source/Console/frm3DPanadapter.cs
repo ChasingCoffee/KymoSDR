@@ -46,6 +46,8 @@ namespace Thetis
         private ColorButton clrbtn3DLineColor;
         private LabelTS lbl3DColorMap;
         private ComboBoxTS combo3DColorMap;
+        private LabelTS lbl3DZCurve;
+        private NumericUpDownTS ud3DZCurve;
         private ButtonTS btn3DResetDefaults;
 
         public frm3DPanadapter()
@@ -83,6 +85,8 @@ namespace Thetis
             this.clrbtn3DLineColor = new Thetis.ColorButton();
             this.lbl3DColorMap = new System.Windows.Forms.LabelTS();
             this.combo3DColorMap = new System.Windows.Forms.ComboBoxTS();
+            this.lbl3DZCurve = new System.Windows.Forms.LabelTS();
+            this.ud3DZCurve = new System.Windows.Forms.NumericUpDownTS();
             this.btn3DResetDefaults = new System.Windows.Forms.ButtonTS();
             this.SuspendLayout();
             //
@@ -97,7 +101,7 @@ namespace Thetis
             this.chk3DWaterfallSync.Size = new System.Drawing.Size(105, 17);
             this.chk3DWaterfallSync.TabIndex = 0;
             this.chk3DWaterfallSync.Text = "Waterfall Sync";
-            this.toolTip1.SetToolTip(this.chk3DWaterfallSync, "Use waterfall palette and levels for 3D colors (overrides Color).");
+            this.toolTip1.SetToolTip(this.chk3DWaterfallSync, "Use waterfall palette and levels for 3D colors (overrides Color and Colormap).");
             this.chk3DWaterfallSync.CheckedChanged += new System.EventHandler(this.chk3DWaterfallSync_CheckedChanged);
             //
             // chk3DSideWalls
@@ -146,7 +150,7 @@ namespace Thetis
             this.lbl3DYOffset.TabIndex = 4;
             this.lbl3DYOffset.Text = "Depth:";
             //
-            // ud3DYOffset (Depth: 0.0-1.0, default 0.40)
+            // ud3DYOffset (Depth: 0.0-1.0, default 0.58)
             //
             this.ud3DYOffset.DecimalPlaces = 2;
             this.ud3DYOffset.Increment = 0.05m;
@@ -157,7 +161,7 @@ namespace Thetis
             this.ud3DYOffset.Size = new System.Drawing.Size(56, 20);
             this.ud3DYOffset.TabIndex = 5;
             this.toolTip1.SetToolTip(this.ud3DYOffset, "How far back rows rise (0=flat, 1.0=maximum depth).");
-            this.ud3DYOffset.Value = 0.40m;
+            this.ud3DYOffset.Value = 0.58m;
             this.ud3DYOffset.ValueChanged += new System.EventHandler(this.ud3DYOffset_ValueChanged);
             //
             // lbl3DRidgeHeight
@@ -292,13 +296,36 @@ namespace Thetis
             this.combo3DColorMap.Name = "combo3DColorMap";
             this.combo3DColorMap.Size = new System.Drawing.Size(100, 21);
             this.combo3DColorMap.TabIndex = 17;
-            this.toolTip1.SetToolTip(this.combo3DColorMap, "Perceptual surface colormap (overrides Waterfall Sync, Gradient and Color).");
+            this.toolTip1.SetToolTip(this.combo3DColorMap, "Perceptual surface colormap (ignored while Waterfall Sync is checked).");
             this.combo3DColorMap.SelectedIndexChanged += new System.EventHandler(this.combo3DColorMap_SelectedIndexChanged);
+            //
+            // lbl3DZCurve (Floor Lift)
+            //
+            this.lbl3DZCurve.Image = null;
+            this.lbl3DZCurve.Location = new System.Drawing.Point(12, 250);
+            this.lbl3DZCurve.Name = "lbl3DZCurve";
+            this.lbl3DZCurve.Size = new System.Drawing.Size(90, 16);
+            this.lbl3DZCurve.TabIndex = 18;
+            this.lbl3DZCurve.Text = "Floor Lift:";
+            //
+            // ud3DZCurve (Floor Lift: 0.05-1.0, default 0.70)
+            //
+            this.ud3DZCurve.DecimalPlaces = 2;
+            this.ud3DZCurve.Increment = 0.05m;
+            this.ud3DZCurve.Location = new System.Drawing.Point(120, 247);
+            this.ud3DZCurve.Maximum = 1.00m;
+            this.ud3DZCurve.Minimum = 0.05m;
+            this.ud3DZCurve.Name = "ud3DZCurve";
+            this.ud3DZCurve.Size = new System.Drawing.Size(56, 20);
+            this.ud3DZCurve.TabIndex = 19;
+            this.toolTip1.SetToolTip(this.ud3DZCurve, "Lifts the noise floor up into the surface (lower = more floor).");
+            this.ud3DZCurve.Value = 0.70m;
+            this.ud3DZCurve.ValueChanged += new System.EventHandler(this.ud3DZCurve_ValueChanged);
             //
             // btn3DResetDefaults
             //
             this.btn3DResetDefaults.Image = null;
-            this.btn3DResetDefaults.Location = new System.Drawing.Point(12, 260);
+            this.btn3DResetDefaults.Location = new System.Drawing.Point(12, 285);
             this.btn3DResetDefaults.Name = "btn3DResetDefaults";
             this.btn3DResetDefaults.Size = new System.Drawing.Size(208, 26);
             this.btn3DResetDefaults.TabIndex = 18;
@@ -310,7 +337,7 @@ namespace Thetis
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(232, 298);
+            this.ClientSize = new System.Drawing.Size(232, 323);
             this.Controls.Add(this.chk3DWaterfallSync);
             this.Controls.Add(this.chk3DSideWalls);
             this.Controls.Add(this.lbl3DXOffset);
@@ -329,6 +356,8 @@ namespace Thetis
             this.Controls.Add(this.clrbtn3DLineColor);
             this.Controls.Add(this.lbl3DColorMap);
             this.Controls.Add(this.combo3DColorMap);
+            this.Controls.Add(this.lbl3DZCurve);
+            this.Controls.Add(this.ud3DZCurve);
             this.Controls.Add(this.btn3DResetDefaults);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
@@ -351,6 +380,7 @@ namespace Thetis
             Display.Pan3DRidgeHeight = (float)ud3DRidgeHeight.Value;
             Display.Pan3DDepthFade = (float)ud3DHaze.Value;
             Display.Pan3DLineCount = (int)ud3DLineCount.Value;
+            Display.Pan3DZCurve = (float)ud3DZCurve.Value;
             Display.Pan3DSpeed = (int)ud3DSpeed.Value;
             Display.Pan3DLineColor = clrbtn3DLineColor.Color;
             Display.Pan3DColorMap = Math.Max(0, combo3DColorMap.SelectedIndex);
@@ -409,6 +439,12 @@ namespace Thetis
             Display.Pan3DLineCount = (int)ud3DLineCount.Value;
         }
 
+        private void ud3DZCurve_ValueChanged(object sender, EventArgs e)
+        {
+            if (_initializing) return;
+            Display.Pan3DZCurve = (float)ud3DZCurve.Value;
+        }
+
         private void ud3DSpeed_ValueChanged(object sender, EventArgs e)
         {
             if (_initializing) return;
@@ -434,11 +470,12 @@ namespace Thetis
             chk3DWaterfallSync.Checked = true;
             chk3DSideWalls.Checked = true;
             ud3DXOffset.Value = 0.60m;
-            ud3DYOffset.Value = 0.40m;
+            ud3DYOffset.Value = 0.58m;
             ud3DRidgeHeight.Value = 0.46m;
             ud3DHaze.Value = 0.16m;
             ud3DLineCount.Value = 35;
             ud3DSpeed.Value = 25;
+            ud3DZCurve.Value = 0.70m;
             clrbtn3DLineColor.Color = Color.Aquamarine;
             combo3DColorMap.SelectedIndex = 0;
 
