@@ -26,6 +26,7 @@ namespace Thetis
     public partial class frm3DPanadapter : Form
     {
         private bool _initializing;
+        private int _lineCountBeforeCap = -1;
         private ToolTip toolTip1;
 
         private CheckBoxTS chk3DWaterfallSync;
@@ -62,6 +63,41 @@ namespace Thetis
             _initializing = false;
 
             PushAllSettings();
+
+            ApplyRenderPathLimits();
+        }
+
+        public void ApplyRenderPathLimits()
+        {
+            bool bCap = Display.RenderPath == Display.DXRenderPath.WarpSoftware;
+
+            _initializing = true;
+
+            if (bCap)
+            {
+                if (ud3DLineCount.Maximum > Display.Max3DLinesSoftwareRender)
+                {
+                    if (ud3DLineCount.Value > Display.Max3DLinesSoftwareRender)
+                        _lineCountBeforeCap = (int)ud3DLineCount.Value;
+                    ud3DLineCount.Maximum = Display.Max3DLinesSoftwareRender;
+                }
+                toolTip1.SetToolTip(ud3DLineCount, "Number of historical spectrum traces receding into the distance.\nLimited to " + Display.Max3DLinesSoftwareRender + " while software rendering is active (WARP rasterises every stroke on the CPU).");
+            }
+            else
+            {
+                if (ud3DLineCount.Maximum == Display.Max3DLinesSoftwareRender)
+                {
+                    ud3DLineCount.Maximum = Display.Max3DHistoryLines;
+                    if (_lineCountBeforeCap > 0)
+                    {
+                        ud3DLineCount.Value = _lineCountBeforeCap;
+                        _lineCountBeforeCap = -1;
+                    }
+                }
+                toolTip1.SetToolTip(ud3DLineCount, "Number of historical spectrum traces receding into the distance.");
+            }
+
+            _initializing = false;
         }
 
         private void InitializeComponent()
@@ -436,6 +472,7 @@ namespace Thetis
         private void ud3DLineCount_ValueChanged(object sender, EventArgs e)
         {
             if (_initializing) return;
+            _lineCountBeforeCap = -1;
             Display.Pan3DLineCount = (int)ud3DLineCount.Value;
         }
 

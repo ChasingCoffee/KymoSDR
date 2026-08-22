@@ -31808,6 +31808,7 @@ namespace Thetis
         {
             private const D2DAlphaMode _ALPHA_MODE = D2DAlphaMode.Premultiplied;
             private bool _bDXSetup;
+            private Display.DXRenderPath m_eRenderPath;
             private bool _dxDisplayThreadRunning;
             private Thread _dxRenderThread;
             private PresentFlags _NoVSYNCpresentFlag;
@@ -32166,148 +32167,214 @@ namespace Thetis
                         _NoVSYNCpresentFlag = PresentFlags.None;
                     }
 
-                    _factory1 = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
-
-                    IDXGIAdapter1 selectedAdapter = null;
-                    if (adaptorInfo != null)
+                    List<Tuple<DriverType, Display.AdaptorInfo>> attempts = new List<Tuple<DriverType, Display.AdaptorInfo>>();
+                    if (Display.ForceCPURendering)
                     {
-                        int an = 0;
-                        while (_factory1.EnumAdapters1((uint)an, out IDXGIAdapter1 adapter1).Success)
-                        {
-                            AdapterDescription1 addesc = adapter1.Description1;
-                            if (addesc.VendorId == adaptorInfo.VendorId && addesc.DeviceId == adaptorInfo.DeviceId)
-                            {
-                                selectedAdapter = adapter1;
-                                break;
-                            }
-                            adapter1?.Dispose();
-                            an++;
-                        }
-                    }
-
-                    if (selectedAdapter != null)
-                    {
-                        // when an adapter is supplied the driver type must be unknown
-                        D3D11.D3D11CreateDevice(selectedAdapter, DriverType.Unknown, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
-                        selectedAdapter?.Dispose();
+                        attempts.Add(Tuple.Create(DriverType.Warp, (Display.AdaptorInfo)null));
                     }
                     else
                     {
-                        D3D11.D3D11CreateDevice(null, driverType, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
+                        if (adaptorInfo != null)
+                            attempts.Add(Tuple.Create(DriverType.Unknown, adaptorInfo));
+                        attempts.Add(Tuple.Create(DriverType.Hardware, (Display.AdaptorInfo)null));
+                        attempts.Add(Tuple.Create(DriverType.Warp, (Display.AdaptorInfo)null));
                     }
 
-                    IDXGIDevice1 device1 = _device.QueryInterfaceOrNull<IDXGIDevice1>();
-                    if (device1 != null)
+                    bool bCreated = false;
+                    Exception lastError = null;
+                    Tuple<DriverType, Display.AdaptorInfo> okAttempt = null;
+                    foreach (Tuple<DriverType, Display.AdaptorInfo> attempt in attempts)
                     {
-                        device1.MaximumFrameLatency = 1;
-                        device1?.Dispose();
-                        device1 = null;
+                        try
+                        {
+                            createMeterDXDevice(attempt.Item1, attempt.Item2, featureLevels, debug);
+                            bCreated = true;
+                            okAttempt = attempt;
+                            break;
+                        }
+                        catch (Exception e)
+                        {
+                            lastError = e;
+                            releasePartialMeterDX();
+                            Common.LogString("Meter DirectX init failed using " + Display.describeDXAttempt(attempt.Item1, attempt.Item2) + " : " + e.Message);
+                        }
                     }
 
-                    //this code should ideally be used to prevent use of flip if vsync is 0
-                    //but is not used at this time
-                    //SharpDX.DXGI.Factory5 f5 = factory.QueryInterfaceOrNull<SharpDX.DXGI.Factory5>();
-                    //bool bAllowTearing = false;
-                    //if(f5 != null)
-                    //{
-                    //    int size = Marshal.SizeOf(typeof(bool));
-                    //    IntPtr pBool = Marshal.AllocHGlobal(size);
-
-                    //    f5.CheckFeatureSupport(SharpDX.DXGI.Feature.PresentAllowTearing, pBool, size);
-
-                    //    bAllowTearing = Marshal.ReadInt32(pBool) == 1;
-
-                    //    Marshal.FreeHGlobal(pBool);
-                    //}
-                    //
-
-                    // check if the device has a factory4 interface
-                    // if not, then we need to use old bitplit swapeffect
-                    SwapEffect swapEffect;
-
-                    IDXGIFactory4 factory4 = _factory1.QueryInterfaceOrNull<IDXGIFactory4>();
-                    bool bFlipPresent = false;
-                    if (factory4 != null)
-                    {
-                        /*if (!_bUseLegacyBuffers)*/ bFlipPresent = true;
-                        factory4?.Dispose();
-                        factory4 = null;
-                    }
-
-                    //https://walbourn.github.io/care-and-feeding-of-modern-swapchains/
-                    swapEffect = bFlipPresent ? SwapEffect.FlipDiscard : SwapEffect.Discard; //NOTE: FlipSequential should work, but is mostly used for storeapps
-                    _nBufferCount = bFlipPresent ? 2 : 1;
-
-                    //int multiSample = 2; // eg 2 = MSAA_2, 2 times multisampling
-                    //int maxQuality = _device.CheckMultisampleQualityLevels(Format.B8G8R8A8_UNorm, multiSample) - 1;
-                    //maxQuality = Math.Max(0, maxQuality);
-
-                    //20 fps is the fastest that any meter can be defined as 50ms is update limit
-                    _oldRedrawDelay = 20;
-
-                    SwapChainDescription1 desc = new SwapChainDescription1()
-                    {
-                        BufferCount = (uint)_nBufferCount,
-                        Width = (uint)targetWidth,
-                        Height = (uint)targetHeight,
-                        Format = Format.B8G8R8A8_UNorm,
-                        Stereo = false,
-                        //SampleDescription = new SampleDescription(multiSample, maxQuality),
-                        SampleDescription = new SampleDescription(1, 0), // no multi sampling (1 sample), no antialiasing
-                        BufferUsage = Usage.RenderTargetOutput,// | Usage.BackBuffer,  // dont need usage.backbuffer as it is implied
-                        Scaling = bFlipPresent ? Scaling.None : Scaling.Stretch, // stretch must be used for legacy bitblt present
-                        SwapEffect = swapEffect,
-                        AlphaMode = Vortice.DXGI.AlphaMode.Ignore, // swapchain alpha mode must be ignore
-                        Flags = SwapChainFlags.None,
-                    };
-
-                    _factory1.MakeWindowAssociation(_displayTarget.Handle, WindowAssociationFlags.IgnoreAll);
-                    IDXGIFactory2 factory2 = _factory1.QueryInterface<IDXGIFactory2>();
-                    _swapChain1 = factory2.CreateSwapChainForHwnd(_device, _displayTarget.Handle, desc, null, null);
-                    factory2?.Dispose();
-                    _backBufferFormat = Format.B8G8R8A8_UNorm;
-
-                    _factory = D2D1.D2D1CreateFactory<ID2D1Factory>(Vortice.Direct2D1.FactoryType.SingleThreaded);
-
-                    _surface = _swapChain1.GetBuffer<IDXGISurface>(0);
-
-                    RenderTargetProperties rtp = new RenderTargetProperties(new D2DPixelFormat(_backBufferFormat, _ALPHA_MODE));
-                    _renderTarget = _factory.CreateDxgiSurfaceRenderTarget(_surface, rtp);
-
-                    //setup a rounded stroke style to be used by items that want a smooth end to lines
-                    StrokeStyleProperties stroke_style_rounded = new StrokeStyleProperties
-                    {
-                        StartCap = CapStyle.Round,
-                        EndCap = CapStyle.Round,
-                        DashCap = CapStyle.Round
-                    };
-                    _rounded_stroke_style = _factory.CreateStrokeStyle(stroke_style_rounded);
-
-                    //setup dashed style
-                    StrokeStyleProperties stroke_style_dash = new StrokeStyleProperties
-                    {
-                        DashStyle = DashStyle.Dash,
-                        DashOffset = 2
-                    };
-                    _dash_style = _factory.CreateStrokeStyle(stroke_style_dash);
-
-                    _dpi_width = _renderTarget.Dpi.Width;
-                    _dpi_height = _renderTarget.Dpi.Width;
-                    _pixels_per_point_width = _dpi_width / 72f;
-                    _pixels_per_point_height = _dpi_height / 72f;
-
-                    _bDXSetup = true;
+                    if (!bCreated)
+                        throw new Exception("No usable DirectX render path" + (lastError != null ? " : " + lastError.Message : ""), lastError);
 
                     setupAliasing();
 
                     buildDXFonts();
+
+                    m_eRenderPath = okAttempt.Item1 == DriverType.Warp ? Display.DXRenderPath.WarpSoftware : Display.DXRenderPath.Hardware;
+
+                    Common.LogString("Meter DirectX initialised : render path=" + (m_eRenderPath == Display.DXRenderPath.WarpSoftware ? "WARP software" : "Hardware") + " [" + Display.describeDXAttempt(okAttempt.Item1, okAttempt.Item2) + "], feature level=" + Display.featureLevelString() + (Display.ForceCPURendering ? " (forced CPU)" : ""));
                 }
                 catch (Exception e)
                 {
                     // issue setting up dx
+                    if (!_bDXSetup) releasePartialMeterDX();
                     ShutdownDX();
                     MessageBox.Show("Problem initialising Meter DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", "DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 }
+            }
+            private void createMeterDXDevice(DriverType driverType, Display.AdaptorInfo adaptorInfo, FeatureLevel[] featureLevels, DeviceCreationFlags debug)
+            {
+                _factory1 = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+
+                IDXGIAdapter1 selectedAdapter = null;
+                if (adaptorInfo != null)
+                {
+                    int an = 0;
+                    while (_factory1.EnumAdapters1((uint)an, out IDXGIAdapter1 adapter1).Success)
+                    {
+                        AdapterDescription1 addesc = adapter1.Description1;
+                        if (addesc.VendorId == adaptorInfo.VendorId && addesc.DeviceId == adaptorInfo.DeviceId)
+                        {
+                            selectedAdapter = adapter1;
+                            break;
+                        }
+                        adapter1?.Dispose();
+                        an++;
+                    }
+                }
+
+                if (selectedAdapter != null)
+                {
+                    // when an adapter is supplied the driver type must be unknown
+                    D3D11.D3D11CreateDevice(selectedAdapter, DriverType.Unknown, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
+                    selectedAdapter?.Dispose();
+                }
+                else
+                {
+                    DriverType dt = adaptorInfo != null ? DriverType.Hardware : driverType;
+                    D3D11.D3D11CreateDevice(null, dt, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
+                }
+
+                IDXGIDevice1 device1 = _device.QueryInterfaceOrNull<IDXGIDevice1>();
+                if (device1 != null)
+                {
+                    device1.MaximumFrameLatency = 1;
+                    device1?.Dispose();
+                    device1 = null;
+                }
+
+                //this code should ideally be used to prevent use of flip if vsync is 0
+                //but is not used at this time
+                //SharpDX.DXGI.Factory5 f5 = factory.QueryInterfaceOrNull<SharpDX.DXGI.Factory5>();
+                //bool bAllowTearing = false;
+                //if(f5 != null)
+                //{
+                //    int size = Marshal.SizeOf(typeof(bool));
+                //    IntPtr pBool = Marshal.AllocHGlobal(size);
+
+                //    f5.CheckFeatureSupport(SharpDX.DXGI.Feature.PresentAllowTearing, pBool, size);
+
+                //    bAllowTearing = Marshal.ReadInt32(pBool) == 1;
+
+                //    Marshal.FreeHGlobal(pBool);
+                //}
+                //
+
+                // check if the device has a factory4 interface
+                // if not, then we need to use old bitplit swapeffect
+                SwapEffect swapEffect;
+
+                IDXGIFactory4 factory4 = _factory1.QueryInterfaceOrNull<IDXGIFactory4>();
+                bool bFlipPresent = false;
+                if (factory4 != null)
+                {
+                    /*if (!_bUseLegacyBuffers)*/ bFlipPresent = true;
+                    factory4?.Dispose();
+                    factory4 = null;
+                }
+
+                //https://walbourn.github.io/care-and-feeding-of-modern-swapchains/
+                swapEffect = bFlipPresent ? SwapEffect.FlipDiscard : SwapEffect.Discard; //NOTE: FlipSequential should work, but is mostly used for storeapps
+                _nBufferCount = bFlipPresent ? 2 : 1;
+
+                //int multiSample = 2; // eg 2 = MSAA_2, 2 times multisampling
+                //int maxQuality = _device.CheckMultisampleQualityLevels(Format.B8G8R8A8_UNorm, multiSample) - 1;
+                //maxQuality = Math.Max(0, maxQuality);
+
+                //20 fps is the fastest that any meter can be defined as 50ms is update limit
+                _oldRedrawDelay = 20;
+
+                SwapChainDescription1 desc = new SwapChainDescription1()
+                {
+                    BufferCount = (uint)_nBufferCount,
+                    Width = (uint)targetWidth,
+                    Height = (uint)targetHeight,
+                    Format = Format.B8G8R8A8_UNorm,
+                    Stereo = false,
+                    //SampleDescription = new SampleDescription(multiSample, maxQuality),
+                    SampleDescription = new SampleDescription(1, 0), // no multi sampling (1 sample), no antialiasing
+                    BufferUsage = Usage.RenderTargetOutput,// | Usage.BackBuffer,  // dont need usage.backbuffer as it is implied
+                    Scaling = bFlipPresent ? Scaling.None : Scaling.Stretch, // stretch must be used for legacy bitblt present
+                    SwapEffect = swapEffect,
+                    AlphaMode = Vortice.DXGI.AlphaMode.Ignore, // swapchain alpha mode must be ignore
+                    Flags = SwapChainFlags.None,
+                };
+
+                _factory1.MakeWindowAssociation(_displayTarget.Handle, WindowAssociationFlags.IgnoreAll);
+                IDXGIFactory2 factory2 = _factory1.QueryInterface<IDXGIFactory2>();
+                _swapChain1 = factory2.CreateSwapChainForHwnd(_device, _displayTarget.Handle, desc, null, null);
+                factory2?.Dispose();
+                _backBufferFormat = Format.B8G8R8A8_UNorm;
+
+                _factory = D2D1.D2D1CreateFactory<ID2D1Factory>(Vortice.Direct2D1.FactoryType.SingleThreaded);
+
+                _surface = _swapChain1.GetBuffer<IDXGISurface>(0);
+
+                RenderTargetProperties rtp = new RenderTargetProperties(new D2DPixelFormat(_backBufferFormat, _ALPHA_MODE));
+                _renderTarget = _factory.CreateDxgiSurfaceRenderTarget(_surface, rtp);
+
+                //setup a rounded stroke style to be used by items that want a smooth end to lines
+                StrokeStyleProperties stroke_style_rounded = new StrokeStyleProperties
+                {
+                    StartCap = CapStyle.Round,
+                    EndCap = CapStyle.Round,
+                    DashCap = CapStyle.Round
+                };
+                _rounded_stroke_style = _factory.CreateStrokeStyle(stroke_style_rounded);
+
+                //setup dashed style
+                StrokeStyleProperties stroke_style_dash = new StrokeStyleProperties
+                {
+                    DashStyle = DashStyle.Dash,
+                    DashOffset = 2
+                };
+                _dash_style = _factory.CreateStrokeStyle(stroke_style_dash);
+
+                _dpi_width = _renderTarget.Dpi.Width;
+                _dpi_height = _renderTarget.Dpi.Width;
+                _pixels_per_point_width = _dpi_width / 72f;
+                _pixels_per_point_height = _dpi_height / 72f;
+
+                _bDXSetup = true;
+            }
+            private void releasePartialMeterDX()
+            {
+                _rounded_stroke_style?.Dispose();
+                _dash_style?.Dispose();
+                _renderTarget?.Dispose();
+                _swapChain1?.Dispose();
+                _surface?.Dispose();
+                _factory?.Dispose();
+                _device?.Dispose();
+                _factory1?.Dispose();
+
+                _rounded_stroke_style = null;
+                _dash_style = null;
+                _renderTarget = null;
+                _swapChain1 = null;
+                _surface = null;
+                _factory = null;
+                _device = null;
+                _factory1 = null;
+
+                _bDXSetup = false;
             }
             private void setupFilterWaterfallBitmap()
             {

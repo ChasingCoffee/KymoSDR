@@ -13538,6 +13538,18 @@ namespace Thetis
             if (oldDecimation != Display.Decimation) DisplayDecimationChangedHanders?.Invoke(oldDecimation, Display.Decimation);
         }
 
+        public void RestartDisplayDX()
+        {
+            if (!Display.IsDX2DSetup) return;
+
+            _pause_DisplayThread = true;
+
+            Display.ShutdownDX2D();
+            Display.Target = pnlDisplay;
+
+            _pause_DisplayThread = false;
+        }
+
         private bool diversity_rx_ref;
         public bool DiversityRXRef
         {

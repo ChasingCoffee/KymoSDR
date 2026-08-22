@@ -255,7 +255,8 @@ namespace Thetis
         private static float[] waterfall_data;
 
         // 3D panadapter ring buffer
-        private const int Max3DHistoryLines = 60;
+        public const int Max3DHistoryLines = 60;
+        public const int Max3DLinesSoftwareRender = 15; // WARP rasterises every stroke on the CPU, keep the row count sane
         private static float[][] _3dHistoryBuffer;
         private static int _3dHistoryCount;
         private static int _3dHistoryHead;
@@ -3411,6 +3412,34 @@ namespace Thetis
         private static PresentFlags _NoVSYNCpresentFlag = PresentFlags.None;
         private static int _nBufferCount = 1;
 
+        public enum DXRenderPath
+        {
+            Unknown,
+            Hardware,
+            WarpSoftware
+        }
+        private static DXRenderPath m_eRenderPath = DXRenderPath.Unknown;
+        private static bool m_bForceCPURendering = false;
+        private static bool m_bWarpDowngradeAttempted = false;
+        public static DXRenderPath RenderPath
+        {
+            get { return m_eRenderPath; }
+        }
+        public static bool ForceCPURendering
+        {
+            get { return m_bForceCPURendering; }
+            set { m_bForceCPURendering = value; }
+        }
+        public static string RenderPathString()
+        {
+            switch (m_eRenderPath)
+            {
+                case DXRenderPath.Hardware: return "Hardware";
+                case DXRenderPath.WarpSoftware: return "WARP software";
+                default: return "Unknown";
+            }
+        }
+
         private static bool m_bHighlightNumberScaleRX1 = false;
         private static bool m_bHighlightNumberScaleRX2 = false;
         public static bool HighlightNumberScaleRX1
@@ -3662,115 +3691,39 @@ namespace Thetis
                         _NoVSYNCpresentFlag = PresentFlags.None;
                     }
 
-                    _factory1 = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
-
-                    IDXGIAdapter selectedAdapter = null;
-                    if (adaptorInfo != null)
+                    List<Tuple<DriverType, AdaptorInfo>> attempts = new List<Tuple<DriverType, AdaptorInfo>>();
+                    if (m_bForceCPURendering)
                     {
-                        int an = 0;
-                        while (_factory1.EnumAdapters1((uint)an, out IDXGIAdapter1 adapter1).Success)
-                        {
-                            AdapterDescription1 addesc = adapter1.Description1;
-                            if (addesc.VendorId == adaptorInfo.VendorId && addesc.DeviceId == adaptorInfo.DeviceId)
-                            {
-                                selectedAdapter = adapter1;
-                                break;
-                            }
-                            adapter1?.Dispose();
-                            an++;
-                        }
-                    }
-
-                    if (selectedAdapter != null)
-                    {
-                        D3D11.D3D11CreateDevice(selectedAdapter, DriverType.Unknown, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
-                        selectedAdapter?.Dispose();
+                        attempts.Add(Tuple.Create(DriverType.Warp, (AdaptorInfo)null));
                     }
                     else
                     {
-                        D3D11.D3D11CreateDevice(null, driverType, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
+                        if (adaptorInfo != null)
+                            attempts.Add(Tuple.Create(DriverType.Unknown, adaptorInfo));
+                        attempts.Add(Tuple.Create(DriverType.Hardware, (AdaptorInfo)null));
+                        attempts.Add(Tuple.Create(DriverType.Warp, (AdaptorInfo)null));
                     }
 
-                    IDXGIDevice1 device1 = _device.QueryInterfaceOrNull<IDXGIDevice1>();
-                    if (device1 != null)
+                    bool bCreated = false;
+                    Exception lastError = null;
+                    foreach (Tuple<DriverType, AdaptorInfo> attempt in attempts)
                     {
-                        device1.MaximumFrameLatency = 1;
-                        device1?.Dispose();
-                        device1 = null;
+                        try
+                        {
+                            createDX2DDevice(attempt.Item1, attempt.Item2, featureLevels, debug);
+                            bCreated = true;
+                            break;
+                        }
+                        catch (Exception e)
+                        {
+                            lastError = e;
+                            releasePartialDX2DDevice();
+                            Common.LogString("DirectX init failed using " + describeDXAttempt(attempt.Item1, attempt.Item2) + " : " + e.Message);
+                        }
                     }
 
-                    //this code should ideally be used to prevent use of flip if vsync is 0, but is not used at this time
-                    //IDXGIFactory5 f5 = factory.QueryInterfaceOrNull<IDXGIFactory5>();
-                    //bool bAllowTearing = false;
-                    //if(f5 != null)
-                    //{
-                    //    int size = Marshal.SizeOf(typeof(bool));
-                    //    IntPtr pBool = Marshal.AllocHGlobal(size);
-
-                    //    f5.CheckFeatureSupport(SharpDX.DXGI.Feature.PresentAllowTearing, pBool, size);
-
-                    //    bAllowTearing = Marshal.ReadInt32(pBool) == 1;
-
-                    //    Marshal.FreeHGlobal(pBool);
-                    //}
-
-                    // check if the device has a factory4 interface
-                    // if not, then we need to use old bitplit swapeffect
-                    SwapEffect swapEffect;
-
-                    IDXGIFactory4 factory4 = _factory1.QueryInterfaceOrNull<IDXGIFactory4>();
-                    bool bFlipPresent = false;
-                    if (factory4 != null)
-                    {
-                        if (!_bUseLegacyBuffers) bFlipPresent = true;
-                        factory4?.Dispose();
-                        factory4 = null;
-                    }
-
-                    //https://walbourn.github.io/care-and-feeding-of-modern-swapchains/
-                    swapEffect = bFlipPresent ? SwapEffect.FlipDiscard : SwapEffect.Discard; //NOTE: FlipSequential should work, but is mostly used for storeapps
-                    _nBufferCount = bFlipPresent ? 2 : 1;
-
-                    //int multiSample = 8; // eg 2 = MSAA_2, 2 times multisampling
-                    //int maxQuality = device.CheckMultisampleQualityLevels(Format.B8G8R8A8_UNorm, multiSample) - 1; 
-                    //maxQuality = Math.Max(0, maxQuality);
-
-                    ModeDescription md = new ModeDescription((uint)displayTarget.Width, (uint)displayTarget.Height,
-                                                               new Rational((uint)console.DisplayFPS, 1u), Format.B8G8R8A8_UNorm);
-                    md.ScanlineOrdering = ModeScanlineOrder.Progressive;
-                    md.Scaling = ModeScaling.Centered;
-
-                    SwapChainDescription desc = new SwapChainDescription()
-                    {
-                        BufferCount = (uint)_nBufferCount,
-                        BufferDescription = md,
-                        Windowed = true,
-                        OutputWindow = displayTarget.Handle,
-                        //SampleDescription = new SampleDescription(multiSample, maxQuality),
-                        SampleDescription = new SampleDescription(1, 0), // no multi sampling (1 sample), no antialiasing
-                        SwapEffect = swapEffect,
-                        BufferUsage = Usage.RenderTargetOutput,// | Usage.BackBuffer,  // dont need usage.backbuffer as it is implied
-                        Flags = SwapChainFlags.None,
-                    };
-
-                    _factory1.MakeWindowAssociation(displayTarget.Handle, WindowAssociationFlags.IgnoreAll);
-
-                    using (IDXGIFactory2 factory2 = _factory1.QueryInterface<IDXGIFactory2>())
-                    {
-                        _swapChain = factory2.CreateSwapChain(_device, desc);
-                    }
-                    _swapChain1 = _swapChain.QueryInterface<IDXGISwapChain1>();
-
-                    _d2dFactory = D2D1.D2D1CreateFactory<ID2D1Factory>(Vortice.Direct2D1.FactoryType.SingleThreaded);
-
-                    _surface = _swapChain1.GetBuffer<IDXGISurface>(0);
-
-                    RenderTargetProperties rtp = new RenderTargetProperties(new SDXPixelFormat(_swapChain.Description.BufferDescription.Format, ALPHA_MODE));
-                    _d2dRenderTarget = _d2dFactory.CreateDxgiSurfaceRenderTarget(_surface, rtp);
-
-                    _bDX2Setup = true;
-
-                    _gpu = getGPUNameInUse(); // get the directX gpu
+                    if (!bCreated)
+                        throw new Exception("No usable DirectX render path" + (lastError != null ? " : " + lastError.Message : ""), lastError);
 
                     setupAliasing();
 
@@ -3798,6 +3751,8 @@ namespace Thetis
                     medBuf[1] = new float[1];
                     _3dMedianPrev = medBuf;
                     _3dMedianCount = 0;
+
+                    Common.LogString("DirectX initialised : render path=" + RenderPathString() + ", adapter='" + _gpu + "', feature level=" + featureLevelString() + (m_bForceCPURendering ? " (forced CPU)" : ""));
                 }
                 catch (Exception e)
                 {
@@ -3806,6 +3761,147 @@ namespace Thetis
                     MessageBox.Show("Problem initialising DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 }
             }
+        }
+        private static void createDX2DDevice(DriverType driverType, AdaptorInfo adaptorInfo, FeatureLevel[] featureLevels, DeviceCreationFlags debug)
+        {
+            _factory1 = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+
+            IDXGIAdapter selectedAdapter = null;
+            if (adaptorInfo != null)
+            {
+                int an = 0;
+                while (_factory1.EnumAdapters1((uint)an, out IDXGIAdapter1 adapter1).Success)
+                {
+                    AdapterDescription1 addesc = adapter1.Description1;
+                    if (addesc.VendorId == adaptorInfo.VendorId && addesc.DeviceId == adaptorInfo.DeviceId)
+                    {
+                        selectedAdapter = adapter1;
+                        break;
+                    }
+                    adapter1?.Dispose();
+                    an++;
+                }
+            }
+
+            if (selectedAdapter != null)
+            {
+                D3D11.D3D11CreateDevice(selectedAdapter, DriverType.Unknown, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
+                selectedAdapter?.Dispose();
+            }
+            else
+            {
+                DriverType dt = adaptorInfo != null ? DriverType.Hardware : driverType;
+                D3D11.D3D11CreateDevice(null, dt, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
+            }
+
+            IDXGIDevice1 device1 = _device.QueryInterfaceOrNull<IDXGIDevice1>();
+            if (device1 != null)
+            {
+                device1.MaximumFrameLatency = 1;
+                device1?.Dispose();
+                device1 = null;
+            }
+
+            // check if the device has a factory4 interface
+            // if not, then we need to use old bitplit swapeffect
+            SwapEffect swapEffect;
+
+            IDXGIFactory4 factory4 = _factory1.QueryInterfaceOrNull<IDXGIFactory4>();
+            bool bFlipPresent = false;
+            if (factory4 != null)
+            {
+                if (!_bUseLegacyBuffers) bFlipPresent = true;
+                factory4?.Dispose();
+                factory4 = null;
+            }
+
+            //https://walbourn.github.io/care-and-feeding-of-modern-swapchains/
+            swapEffect = bFlipPresent ? SwapEffect.FlipDiscard : SwapEffect.Discard; //NOTE: FlipSequential should work, but is mostly used for storeapps
+            _nBufferCount = bFlipPresent ? 2 : 1;
+
+            ModeDescription md = new ModeDescription((uint)displayTarget.Width, (uint)displayTarget.Height,
+                                                       new Rational((uint)console.DisplayFPS, 1u), Format.B8G8R8A8_UNorm);
+            md.ScanlineOrdering = ModeScanlineOrder.Progressive;
+            md.Scaling = ModeScaling.Centered;
+
+            SwapChainDescription desc = new SwapChainDescription()
+            {
+                BufferCount = (uint)_nBufferCount,
+                BufferDescription = md,
+                Windowed = true,
+                OutputWindow = displayTarget.Handle,
+                SampleDescription = new SampleDescription(1, 0), // no multi sampling (1 sample), no antialiasing
+                SwapEffect = swapEffect,
+                BufferUsage = Usage.RenderTargetOutput,// | Usage.BackBuffer,  // dont need usage.backbuffer as it is implied
+                Flags = SwapChainFlags.None,
+            };
+
+            _factory1.MakeWindowAssociation(displayTarget.Handle, WindowAssociationFlags.IgnoreAll);
+
+            using (IDXGIFactory2 factory2 = _factory1.QueryInterface<IDXGIFactory2>())
+            {
+                _swapChain = factory2.CreateSwapChain(_device, desc);
+            }
+            _swapChain1 = _swapChain.QueryInterface<IDXGISwapChain1>();
+
+            _d2dFactory = D2D1.D2D1CreateFactory<ID2D1Factory>(Vortice.Direct2D1.FactoryType.SingleThreaded);
+
+            _surface = _swapChain1.GetBuffer<IDXGISurface>(0);
+
+            RenderTargetProperties rtp = new RenderTargetProperties(new SDXPixelFormat(_swapChain.Description.BufferDescription.Format, ALPHA_MODE));
+            _d2dRenderTarget = _d2dFactory.CreateDxgiSurfaceRenderTarget(_surface, rtp);
+
+            _bDX2Setup = true;
+
+            m_eRenderPath = driverType == DriverType.Warp ? DXRenderPath.WarpSoftware : DXRenderPath.Hardware;
+
+            _gpu = getGPUNameInUse(); // get the directX gpu
+        }
+        private static void releasePartialDX2DDevice()
+        {
+            _d2dRenderTarget?.Dispose();
+            _surface?.Dispose();
+            _swapChain1?.Dispose();
+            _swapChain?.Dispose();
+            _d2dFactory?.Dispose();
+            _device?.Dispose();
+            _factory1?.Dispose();
+
+            _d2dRenderTarget = null;
+            _surface = null;
+            _swapChain1 = null;
+            _swapChain = null;
+            _d2dFactory = null;
+            _device = null;
+            _factory1 = null;
+
+            _bDX2Setup = false;
+        }
+        public static string describeDXAttempt(DriverType driverType, AdaptorInfo adaptorInfo)
+        {
+            if (driverType == DriverType.Warp) return "WARP software rendering";
+            if (adaptorInfo != null) return "preferred adaptor '" + adaptorInfo.Description + "'";
+            return "default hardware adaptor";
+        }
+        public static string featureLevelString()
+        {
+            int v = DXVersion();
+            return v < 0 ? "unknown" : (v / 10).ToString() + "." + (v % 10).ToString();
+        }
+        private static bool tryWarpDowngrade(string reason)
+        {
+            if (m_bForceCPURendering || m_bWarpDowngradeAttempted || m_eRenderPath != DXRenderPath.Hardware || displayTarget == null) return false;
+
+            m_bWarpDowngradeAttempted = true;
+            Common.LogString("DirectX hardware rendering failed (" + reason + ") - switching to WARP software rendering");
+
+            ShutdownDX2D();
+            initDX2D(DriverType.Warp, null);
+
+            if (!_bDX2Setup) return false;
+
+            _dx_fail_retry = 0;
+            return true;
         }
         public static int DXVersion()
         {
@@ -4450,6 +4546,7 @@ namespace Thetis
                             Thread.Sleep(50);
                             return;
                         }
+                        if (tryWarpDowngrade("RecreateTarget retries exhausted")) return;
                     }
 
                     // render
@@ -4464,12 +4561,16 @@ namespace Thetis
                         r == 0x087A0001/*DXGI_STATUS_OCCLUDED*/
                         ))
                     {
-                        if ((r == Vortice.DXGI.ResultCode.DeviceRemoved || r == Vortice.DXGI.ResultCode.DeviceReset) && _dx_fail_retry < 10)
+                        if (r == Vortice.DXGI.ResultCode.DeviceRemoved || r == Vortice.DXGI.ResultCode.DeviceReset)
                         {
-                            resizeDX2D(out _);
-                            _dx_fail_retry++;
-                            Thread.Sleep(50);
-                            return;
+                            if (_dx_fail_retry < 10)
+                            {
+                                resizeDX2D(out _);
+                                _dx_fail_retry++;
+                                Thread.Sleep(50);
+                                return;
+                            }
+                            if (tryWarpDowngrade("Present failure : " + r.ToString())) return;
                         }
 
                         string sMsg = "";
@@ -4490,8 +4591,11 @@ namespace Thetis
             }
             catch (Exception e)
             {
-                ShutdownDX2D();
-                MessageBox.Show("Problem in DirectX Renderer !" + System.Environment.NewLine + System.Environment.NewLine + "[ " + e.ToString() + " ]", "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                if (!tryWarpDowngrade(e.Message))
+                {
+                    ShutdownDX2D();
+                    MessageBox.Show("Problem in DirectX Renderer !" + System.Environment.NewLine + System.Environment.NewLine + "[ " + e.ToString() + " ]", "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                }
             }
         }
         private static readonly List<int> _fps_profile_data = new List<int>();
@@ -6206,7 +6310,8 @@ namespace Thetis
             if (!_pan3DEnabled || histBuf == null || histCount < 2) return;
             if (_d2dRenderTarget == null) return;
 
-            int linesToDraw = Math.Min(histCount, _pan3DLineCount);
+            int nLineLimit = m_eRenderPath == DXRenderPath.WarpSoftware ? Math.Min(_pan3DLineCount, Max3DLinesSoftwareRender) : _pan3DLineCount;
+            int linesToDraw = Math.Min(histCount, nLineLimit);
             if (linesToDraw < 2) return;
 
             int grid_min = rx == 1 ? spectrum_grid_min : rx2_spectrum_grid_min;

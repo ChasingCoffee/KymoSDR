@@ -2511,6 +2511,7 @@ namespace Thetis
             setupTuneAnd2ToneRadios(); //MW0LGE_22b
 
             // Display Tab
+            chkForceCPURendering_CheckedChanged(this, e);
             udDisplayDecimation_ValueChanged(this, e);
             udDisplayGridMax_ValueChanged(this, e);
             udDisplayGridMin_ValueChanged(this, e);
@@ -19879,6 +19880,15 @@ namespace Thetis
                 Display.VerticalBlanks = 0;
                 MeterManager.SetVsync(false);
             }
+        }
+
+        private void chkForceCPURendering_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.ForceCPURendering = chkForceCPURendering.Checked;
+            console.RestartDisplayDX();
+            if (_frm3DPanadapter != null && !_frm3DPanadapter.IsDisposed)
+                _frm3DPanadapter.ApplyRenderPathLimits();
         }
 
         private void chkBlobPeakHold_CheckedChanged(object sender, EventArgs e)

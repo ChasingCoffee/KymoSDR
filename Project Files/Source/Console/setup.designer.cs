@@ -2007,6 +2007,7 @@
             this.chkANAN8000DLEDisplayVoltsAmps = new System.Windows.Forms.CheckBoxTS();
             this.grpDisplayDriverEngine = new System.Windows.Forms.GroupBoxTS();
             this.chkVSyncDX = new System.Windows.Forms.CheckBoxTS();
+            this.chkForceCPURendering = new System.Windows.Forms.CheckBoxTS();
             this.chkAccurateFrameTiming = new System.Windows.Forms.CheckBoxTS();
             this.chkAntiAlias = new System.Windows.Forms.CheckBoxTS();
             this.comboDisplayThreadPriority = new System.Windows.Forms.ComboBoxTS();
@@ -32925,7 +32926,7 @@
             // 
             this.grpSpectralWarningLeds.Controls.Add(this.chkSpecWarningLEDGetPixels);
             this.grpSpectralWarningLeds.Controls.Add(this.chkSpecWarningLEDRenderDelay);
-            this.grpSpectralWarningLeds.Location = new System.Drawing.Point(566, 300);
+            this.grpSpectralWarningLeds.Location = new System.Drawing.Point(394, 200);
             this.grpSpectralWarningLeds.Name = "grpSpectralWarningLeds";
             this.grpSpectralWarningLeds.Size = new System.Drawing.Size(147, 97);
             this.grpSpectralWarningLeds.TabIndex = 94;
@@ -33217,13 +33218,14 @@
             // grpDisplayDriverEngine
             // 
             this.grpDisplayDriverEngine.Controls.Add(this.chkVSyncDX);
+            this.grpDisplayDriverEngine.Controls.Add(this.chkForceCPURendering);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAccurateFrameTiming);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAntiAlias);
             this.grpDisplayDriverEngine.Controls.Add(this.comboDisplayThreadPriority);
             this.grpDisplayDriverEngine.Controls.Add(this.chkShowFPS);
             this.grpDisplayDriverEngine.Location = new System.Drawing.Point(566, 166);
             this.grpDisplayDriverEngine.Name = "grpDisplayDriverEngine";
-            this.grpDisplayDriverEngine.Size = new System.Drawing.Size(147, 130);
+            this.grpDisplayDriverEngine.Size = new System.Drawing.Size(147, 145);
             this.grpDisplayDriverEngine.TabIndex = 46;
             this.grpDisplayDriverEngine.TabStop = false;
             this.grpDisplayDriverEngine.Text = "DirectX Display Settings";
@@ -33243,11 +33245,24 @@
             this.chkVSyncDX.UseVisualStyleBackColor = true;
             this.chkVSyncDX.CheckedChanged += new System.EventHandler(this.chkVSyncDX_CheckedChanged);
             // 
+            // chkForceCPURendering
+            // 
+            this.chkForceCPURendering.AutoSize = true;
+            this.chkForceCPURendering.Image = null;
+            this.chkForceCPURendering.Location = new System.Drawing.Point(8, 119);
+            this.chkForceCPURendering.Name = "chkForceCPURendering";
+            this.chkForceCPURendering.Size = new System.Drawing.Size(120, 17);
+            this.chkForceCPURendering.TabIndex = 51;
+            this.chkForceCPURendering.Text = "Force CPU rendering";
+            this.toolTip1.SetToolTip(this.chkForceCPURendering, "Render via the WARP software rasteriser instead of the GPU.\n\nUse if the graphics driver causes problems, e.g. over remote desktop.\nIf automatic mode fails on startup it also falls back to this automatically.");
+            this.chkForceCPURendering.UseVisualStyleBackColor = true;
+            this.chkForceCPURendering.CheckedChanged += new System.EventHandler(this.chkForceCPURendering_CheckedChanged);
+            // 
             // chkAccurateFrameTiming
             // 
             this.chkAccurateFrameTiming.AutoSize = true;
             this.chkAccurateFrameTiming.Image = null;
-            this.chkAccurateFrameTiming.Location = new System.Drawing.Point(8, 119);
+            this.chkAccurateFrameTiming.Location = new System.Drawing.Point(8, 143);
             this.chkAccurateFrameTiming.Name = "chkAccurateFrameTiming";
             this.chkAccurateFrameTiming.Size = new System.Drawing.Size(128, 17);
             this.chkAccurateFrameTiming.TabIndex = 49;
@@ -75281,6 +75296,7 @@
         private ColorButton clrbtnSignalHistoryColour;
         private LabelTS labelTS518;
         private CheckBoxTS chkVSyncDX;
+        private CheckBoxTS chkForceCPURendering;
         private LabelTS lblBlobMS;
         private NumericUpDownTS udBlobPeakHoldMS;
         private CheckBoxTS chkBlobPeakHold;
