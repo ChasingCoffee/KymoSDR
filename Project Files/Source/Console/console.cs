@@ -761,6 +761,9 @@ namespace Thetis
             btnDisplay3DPan.Location = new System.Drawing.Point(52, 51);
             btnDisplay3DPan.Size = new System.Drawing.Size(50, 23);
             btnDisplay3DPan.FlatAppearance.BorderSize = 0;
+            btnDisplay3DPan.Appearance = Appearance.Button;
+            btnDisplay3DPan.FlatStyle = FlatStyle.Flat;
+            btnDisplay3DPan.UseVisualStyleBackColor = false;
             btnDisplay3DPan.TextAlign = ContentAlignment.MiddleCenter;
             btnDisplay3DPan.TabIndex = 10;
             toolTip1.SetToolTip(btnDisplay3DPan, "3D Panadapter on/off");
