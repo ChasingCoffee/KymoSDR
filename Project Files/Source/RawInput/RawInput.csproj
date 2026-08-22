@@ -46,9 +46,9 @@
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="Build">
-    <Exec Command="if not exist &quot;$(ProjectDir)..\..\bin\x64\$(Configuration)&quot; mkdir &quot;$(ProjectDir)..\..\bin\x64\$(Configuration)&quot;" />
-    <Exec Command="copy /Y &quot;$(TargetPath)&quot; &quot;$(ProjectDir)..\..\bin\x64\$(Configuration)\$(TargetFileName)&quot;" />
-    <Exec Command="copy /Y &quot;$(TargetDir)$(TargetName).pdb&quot; &quot;$(ProjectDir)..\..\bin\x64\$(Configuration)\$(TargetName).pdb&quot;" />
+    <MakeDir Directories="$(ProjectDir)..\..\bin\x64\$(Configuration)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ProjectDir)..\..\bin\x64\$(Configuration)" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ProjectDir)..\..\bin\x64\$(Configuration)" />
   </Target>
 
 </Project>

@@ -2043,24 +2043,8 @@
             this.labelTS608 = new System.Windows.Forms.LabelTS();
             this.udDisplayDecimation = new System.Windows.Forms.NumericUpDownTS();
             this.chkDisplayPanFill = new System.Windows.Forms.CheckBoxTS();
-            this.grp3DPanadapter = new System.Windows.Forms.GroupBoxTS();
             this.chkDisplay3DPanadapter = new System.Windows.Forms.CheckBoxTS();
-            this.chk3DWaterfallSync = new System.Windows.Forms.CheckBoxTS();
-            this.lbl3DXOffset = new System.Windows.Forms.LabelTS();
-            this.ud3DXOffset = new System.Windows.Forms.NumericUpDownTS();
-            this.lbl3DYOffset = new System.Windows.Forms.LabelTS();
-            this.ud3DYOffset = new System.Windows.Forms.NumericUpDownTS();
-            this.lbl3DLineCount = new System.Windows.Forms.LabelTS();
-            this.ud3DLineCount = new System.Windows.Forms.NumericUpDownTS();
-            this.lbl3DSpeed = new System.Windows.Forms.LabelTS();
-            this.ud3DSpeed = new System.Windows.Forms.NumericUpDownTS();
-            this.lbl3DLineColor = new System.Windows.Forms.LabelTS();
-            this.clrbtn3DLineColor = new Thetis.ColorButton();
-            this.btn3DResetDefaults = new System.Windows.Forms.ButtonTS();
-            this.lbl3DRidgeHeight = new System.Windows.Forms.LabelTS();
-            this.ud3DRidgeHeight = new System.Windows.Forms.NumericUpDownTS();
-            this.lbl3DHaze = new System.Windows.Forms.LabelTS();
-            this.ud3DHaze = new System.Windows.Forms.NumericUpDownTS();
+            this.btn3DSettings = new System.Windows.Forms.ButtonTS();
             this.udDisplayCPUMeter = new System.Windows.Forms.NumericUpDownTS();
             this.lblDisplayCPUMeter = new System.Windows.Forms.LabelTS();
             this.udDisplayPeakText = new System.Windows.Forms.NumericUpDownTS();
@@ -4908,10 +4892,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.udDisplayPhasePtSize)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.udDisplayPhasePts)).BeginInit();
             this.grpDisplayRefreshRates.SuspendLayout();
-            this.grp3DPanadapter.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.ud3DXOffset)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.ud3DYOffset)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.ud3DLineCount)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.udDisplayDecimation)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.udDisplayCPUMeter)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.udDisplayPeakText)).BeginInit();
@@ -32923,7 +32903,8 @@
             // tpDisplayGeneral
             // 
             this.tpDisplayGeneral.BackColor = System.Drawing.SystemColors.Control;
-            this.tpDisplayGeneral.Controls.Add(this.grp3DPanadapter);
+            this.tpDisplayGeneral.Controls.Add(this.chkDisplay3DPanadapter);
+            this.tpDisplayGeneral.Controls.Add(this.btn3DSettings);
             this.tpDisplayGeneral.Controls.Add(this.grpSpectralWarningLeds);
             this.tpDisplayGeneral.Controls.Add(this.groupBoxTS13);
             this.tpDisplayGeneral.Controls.Add(this.groupBoxTS11);
@@ -33891,313 +33872,28 @@
             this.toolTip1.SetToolTip(this.chkDisplayPanFill, "Check to fill the panadapter display line below the data.");
             this.chkDisplayPanFill.CheckedChanged += new System.EventHandler(this.chkDisplayPanFill_CheckedChanged);
             // 
-            // grp3DPanadapter
-            // 
-            this.grp3DPanadapter.Controls.Add(this.chkDisplay3DPanadapter);
-            this.grp3DPanadapter.Controls.Add(this.chk3DWaterfallSync);
-            this.grp3DPanadapter.Controls.Add(this.lbl3DXOffset);
-            this.grp3DPanadapter.Controls.Add(this.ud3DXOffset);
-            this.grp3DPanadapter.Controls.Add(this.lbl3DYOffset);
-            this.grp3DPanadapter.Controls.Add(this.ud3DYOffset);
-            this.grp3DPanadapter.Controls.Add(this.lbl3DRidgeHeight);
-            this.grp3DPanadapter.Controls.Add(this.ud3DRidgeHeight);
-            this.grp3DPanadapter.Controls.Add(this.lbl3DHaze);
-            this.grp3DPanadapter.Controls.Add(this.ud3DHaze);
-            this.grp3DPanadapter.Controls.Add(this.lbl3DLineCount);
-            this.grp3DPanadapter.Controls.Add(this.ud3DLineCount);
-            this.grp3DPanadapter.Controls.Add(this.lbl3DSpeed);
-            this.grp3DPanadapter.Controls.Add(this.ud3DSpeed);
-            this.grp3DPanadapter.Controls.Add(this.lbl3DLineColor);
-            this.grp3DPanadapter.Controls.Add(this.clrbtn3DLineColor);
-            this.grp3DPanadapter.Controls.Add(this.btn3DResetDefaults);
-            this.grp3DPanadapter.Location = new System.Drawing.Point(394, 148);
-            this.grp3DPanadapter.Name = "grp3DPanadapter";
-            this.grp3DPanadapter.Size = new System.Drawing.Size(166, 244);
-            this.grp3DPanadapter.TabIndex = 95;
-            this.grp3DPanadapter.TabStop = false;
-            this.grp3DPanadapter.Text = "3D Panadapter";
-            // 
             // chkDisplay3DPanadapter
             // 
             this.chkDisplay3DPanadapter.AutoSize = true;
             this.chkDisplay3DPanadapter.Image = null;
-            this.chkDisplay3DPanadapter.Location = new System.Drawing.Point(10, 18);
+            this.chkDisplay3DPanadapter.Location = new System.Drawing.Point(394, 150);
             this.chkDisplay3DPanadapter.Name = "chkDisplay3DPanadapter";
             this.chkDisplay3DPanadapter.Size = new System.Drawing.Size(65, 17);
-            this.chkDisplay3DPanadapter.TabIndex = 0;
+            this.chkDisplay3DPanadapter.TabIndex = 95;
             this.chkDisplay3DPanadapter.Text = "Enabled";
             this.toolTip1.SetToolTip(this.chkDisplay3DPanadapter, "Enable 3D stacked-trace panadapter with perspective and solid ridges.");
             this.chkDisplay3DPanadapter.CheckedChanged += new System.EventHandler(this.chkDisplay3DPanadapter_CheckedChanged);
             // 
-            // chk3DWaterfallSync
+            // btn3DSettings
             // 
-            this.chk3DWaterfallSync.AutoSize = true;
-            this.chk3DWaterfallSync.Checked = true;
-            this.chk3DWaterfallSync.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.chk3DWaterfallSync.Image = null;
-            this.chk3DWaterfallSync.Location = new System.Drawing.Point(10, 38);
-            this.chk3DWaterfallSync.Name = "chk3DWaterfallSync";
-            this.chk3DWaterfallSync.Size = new System.Drawing.Size(105, 17);
-            this.chk3DWaterfallSync.TabIndex = 10;
-            this.chk3DWaterfallSync.Text = "Waterfall Sync";
-            this.toolTip1.SetToolTip(this.chk3DWaterfallSync, "Use waterfall palette and levels for 3D colors (overrides Color).");
-            this.chk3DWaterfallSync.CheckedChanged += new System.EventHandler(this.chk3DWaterfallSync_CheckedChanged);
-            // 
-            // lbl3DXOffset (now Perspective)
-            // 
-            this.lbl3DXOffset.Image = null;
-            this.lbl3DXOffset.Location = new System.Drawing.Point(7, 60);
-            this.lbl3DXOffset.Name = "lbl3DXOffset";
-            this.lbl3DXOffset.Size = new System.Drawing.Size(70, 16);
-            this.lbl3DXOffset.TabIndex = 1;
-            this.lbl3DXOffset.Text = "Perspective:";
-            // 
-            // ud3DXOffset (now Perspective: 0.1-1.0, default 0.60)
-            // 
-            this.ud3DXOffset.DecimalPlaces = 2;
-            this.ud3DXOffset.Increment = new decimal(new int[] {
-            5,
-            0,
-            0,
-            131072});
-            this.ud3DXOffset.Location = new System.Drawing.Point(80, 58);
-            this.ud3DXOffset.Maximum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
-            this.ud3DXOffset.Minimum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            65536});
-            this.ud3DXOffset.Name = "ud3DXOffset";
-            this.ud3DXOffset.Size = new System.Drawing.Size(56, 20);
-            this.ud3DXOffset.TabIndex = 2;
-            this.toolTip1.SetToolTip(this.ud3DXOffset, "How much back rows narrow (0.1=wide, 1.0=no narrowing).");
-            this.ud3DXOffset.Value = new decimal(new int[] {
-            60,
-            0,
-            0,
-            131072});
-            this.ud3DXOffset.ValueChanged += new System.EventHandler(this.ud3DXOffset_ValueChanged);
-            // 
-            // lbl3DYOffset (now Depth)
-            // 
-            this.lbl3DYOffset.Image = null;
-            this.lbl3DYOffset.Location = new System.Drawing.Point(7, 80);
-            this.lbl3DYOffset.Name = "lbl3DYOffset";
-            this.lbl3DYOffset.Size = new System.Drawing.Size(70, 16);
-            this.lbl3DYOffset.TabIndex = 3;
-            this.lbl3DYOffset.Text = "Depth:";
-            // 
-            // ud3DYOffset (now Depth: 0.0-1.0, default 0.40)
-            // 
-            this.ud3DYOffset.DecimalPlaces = 2;
-            this.ud3DYOffset.Increment = new decimal(new int[] {
-            5,
-            0,
-            0,
-            131072});
-            this.ud3DYOffset.Location = new System.Drawing.Point(80, 78);
-            this.ud3DYOffset.Maximum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
-            this.ud3DYOffset.Minimum = new decimal(new int[] {
-            0,
-            0,
-            0,
-            0});
-            this.ud3DYOffset.Name = "ud3DYOffset";
-            this.ud3DYOffset.Size = new System.Drawing.Size(56, 20);
-            this.ud3DYOffset.TabIndex = 4;
-            this.toolTip1.SetToolTip(this.ud3DYOffset, "How far back rows rise (0=flat, 1.0=maximum depth).");
-            this.ud3DYOffset.Value = new decimal(new int[] {
-            58,
-            0,
-            0,
-            131072});
-            this.ud3DYOffset.ValueChanged += new System.EventHandler(this.ud3DYOffset_ValueChanged);
-            // 
-            // lbl3DRidgeHeight
-            // 
-            this.lbl3DRidgeHeight.Image = null;
-            this.lbl3DRidgeHeight.Location = new System.Drawing.Point(7, 100);
-            this.lbl3DRidgeHeight.Name = "lbl3DRidgeHeight";
-            this.lbl3DRidgeHeight.Size = new System.Drawing.Size(70, 16);
-            this.lbl3DRidgeHeight.TabIndex = 10;
-            this.lbl3DRidgeHeight.Text = "Ridge Ht:";
-            // 
-            // ud3DRidgeHeight
-            // 
-            this.ud3DRidgeHeight.DecimalPlaces = 2;
-            this.ud3DRidgeHeight.Increment = new decimal(new int[] {
-            5,
-            0,
-            0,
-            131072});
-            this.ud3DRidgeHeight.Location = new System.Drawing.Point(80, 98);
-            this.ud3DRidgeHeight.Maximum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
-            this.ud3DRidgeHeight.Minimum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            65536});
-            this.ud3DRidgeHeight.Name = "ud3DRidgeHeight";
-            this.ud3DRidgeHeight.Size = new System.Drawing.Size(56, 20);
-            this.ud3DRidgeHeight.TabIndex = 11;
-            this.toolTip1.SetToolTip(this.ud3DRidgeHeight, "Height of the front ridge as a fraction of plot height (0.1-1.0).");
-            this.ud3DRidgeHeight.Value = new decimal(new int[] {
-            46,
-            0,
-            0,
-            131072});
-            this.ud3DRidgeHeight.ValueChanged += new System.EventHandler(this.ud3DRidgeHeight_ValueChanged);
-            // 
-            // lbl3DHaze
-            // 
-            this.lbl3DHaze.Image = null;
-            this.lbl3DHaze.Location = new System.Drawing.Point(7, 120);
-            this.lbl3DHaze.Name = "lbl3DHaze";
-            this.lbl3DHaze.Size = new System.Drawing.Size(70, 16);
-            this.lbl3DHaze.TabIndex = 12;
-            this.lbl3DHaze.Text = "Haze:";
-            // 
-            // ud3DHaze
-            // 
-            this.ud3DHaze.DecimalPlaces = 2;
-            this.ud3DHaze.Increment = new decimal(new int[] {
-            5,
-            0,
-            0,
-            131072});
-            this.ud3DHaze.Location = new System.Drawing.Point(80, 118);
-            this.ud3DHaze.Maximum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
-            this.ud3DHaze.Minimum = new decimal(new int[] {
-            0,
-            0,
-            0,
-            0});
-            this.ud3DHaze.Name = "ud3DHaze";
-            this.ud3DHaze.Size = new System.Drawing.Size(56, 20);
-            this.ud3DHaze.TabIndex = 13;
-            this.toolTip1.SetToolTip(this.ud3DHaze, "Atmospheric haze strength - dims back rows (0=none, 1.0=full haze).");
-            this.ud3DHaze.Value = new decimal(new int[] {
-            16,
-            0,
-            0,
-            131072});
-            this.ud3DHaze.ValueChanged += new System.EventHandler(this.ud3DHaze_ValueChanged);
-            // 
-            // lbl3DLineCount
-            // 
-            this.lbl3DLineCount.Image = null;
-            this.lbl3DLineCount.Location = new System.Drawing.Point(7, 140);
-            this.lbl3DLineCount.Name = "lbl3DLineCount";
-            this.lbl3DLineCount.Size = new System.Drawing.Size(70, 16);
-            this.lbl3DLineCount.TabIndex = 5;
-            this.lbl3DLineCount.Text = "Depth Lines:";
-            // 
-            // ud3DLineCount
-            // 
-            this.ud3DLineCount.Location = new System.Drawing.Point(80, 138);
-            this.ud3DLineCount.Maximum = new decimal(new int[] {
-            60,
-            0,
-            0,
-            0});
-            this.ud3DLineCount.Minimum = new decimal(new int[] {
-            2,
-            0,
-            0,
-            0});
-            this.ud3DLineCount.Name = "ud3DLineCount";
-            this.ud3DLineCount.Size = new System.Drawing.Size(56, 20);
-            this.ud3DLineCount.TabIndex = 6;
-            this.toolTip1.SetToolTip(this.ud3DLineCount, "Number of historical spectrum traces receding into the distance.");
-            this.ud3DLineCount.Value = new decimal(new int[] {
-            35,
-            0,
-            0,
-            0});
-            this.ud3DLineCount.ValueChanged += new System.EventHandler(this.ud3DLineCount_ValueChanged);
-            // 
-            // lbl3DSpeed
-            // 
-            this.lbl3DSpeed.Image = null;
-            this.lbl3DSpeed.Location = new System.Drawing.Point(7, 160);
-            this.lbl3DSpeed.Name = "lbl3DSpeed";
-            this.lbl3DSpeed.Size = new System.Drawing.Size(70, 16);
-            this.lbl3DSpeed.TabIndex = 14;
-            this.lbl3DSpeed.Text = "Speed:";
-            // 
-            // ud3DSpeed
-            // 
-            this.ud3DSpeed.Location = new System.Drawing.Point(80, 158);
-            this.ud3DSpeed.Maximum = new decimal(new int[] {
-            60,
-            0,
-            0,
-            0});
-            this.ud3DSpeed.Minimum = new decimal(new int[] {
-            10,
-            0,
-            0,
-            0});
-            this.ud3DSpeed.Name = "ud3DSpeed";
-            this.ud3DSpeed.Size = new System.Drawing.Size(56, 20);
-            this.ud3DSpeed.TabIndex = 15;
-            this.toolTip1.SetToolTip(this.ud3DSpeed, "How fast new rows are pushed (10-60 FPS).");
-            this.ud3DSpeed.Value = new decimal(new int[] {
-            25,
-            0,
-            0,
-            0});
-            this.ud3DSpeed.ValueChanged += new System.EventHandler(this.ud3DSpeed_ValueChanged);
-            // 
-            // lbl3DLineColor
-            // 
-            this.lbl3DLineColor.Image = null;
-            this.lbl3DLineColor.Location = new System.Drawing.Point(7, 180);
-            this.lbl3DLineColor.Name = "lbl3DLineColor";
-            this.lbl3DLineColor.Size = new System.Drawing.Size(70, 16);
-            this.lbl3DLineColor.TabIndex = 7;
-            this.lbl3DLineColor.Text = "Color:";
-            // 
-            // clrbtn3DLineColor
-            // 
-            this.clrbtn3DLineColor.Automatic = "Automatic";
-            this.clrbtn3DLineColor.Color = System.Drawing.Color.Aquamarine;
-            this.clrbtn3DLineColor.Image = null;
-            this.clrbtn3DLineColor.Location = new System.Drawing.Point(80, 177);
-            this.clrbtn3DLineColor.MoreColors = "More Colors...";
-            this.clrbtn3DLineColor.Name = "clrbtn3DLineColor";
-            this.clrbtn3DLineColor.Selectable = true;
-            this.clrbtn3DLineColor.Size = new System.Drawing.Size(40, 23);
-            this.clrbtn3DLineColor.TabIndex = 8;
-            this.toolTip1.SetToolTip(this.clrbtn3DLineColor, "Ridge outline color (used when waterfall palette is off).");
-            this.clrbtn3DLineColor.Changed += new System.EventHandler(this.clrbtn3DLineColor_Changed);
-            // 
-            // btn3DResetDefaults
-            // 
-            this.btn3DResetDefaults.Image = null;
-            this.btn3DResetDefaults.Location = new System.Drawing.Point(10, 200);
-            this.btn3DResetDefaults.Name = "btn3DResetDefaults";
-            this.btn3DResetDefaults.Size = new System.Drawing.Size(146, 23);
-            this.btn3DResetDefaults.TabIndex = 9;
-            this.btn3DResetDefaults.Text = "Reset Defaults";
-            this.toolTip1.SetToolTip(this.btn3DResetDefaults, "Reset all 3D panadapter settings to defaults.");
-            this.btn3DResetDefaults.Click += new System.EventHandler(this.btn3DResetDefaults_Click);
+            this.btn3DSettings.Image = null;
+            this.btn3DSettings.Location = new System.Drawing.Point(394, 172);
+            this.btn3DSettings.Name = "btn3DSettings";
+            this.btn3DSettings.Size = new System.Drawing.Size(146, 23);
+            this.btn3DSettings.TabIndex = 96;
+            this.btn3DSettings.Text = "3D Settings...";
+            this.toolTip1.SetToolTip(this.btn3DSettings, "Open the 3D panadapter settings window.");
+            this.btn3DSettings.Click += new System.EventHandler(this.btn3DSettings_Click);
             // 
             // udDisplayCPUMeter
             // 
@@ -72086,11 +71782,6 @@
             ((System.ComponentModel.ISupportInitialize)(this.udDisplayPhasePts)).EndInit();
             this.grpDisplayRefreshRates.ResumeLayout(false);
             this.grpDisplayRefreshRates.PerformLayout();
-            this.grp3DPanadapter.ResumeLayout(false);
-            this.grp3DPanadapter.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.ud3DXOffset)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.ud3DYOffset)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.ud3DLineCount)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.udDisplayDecimation)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.udDisplayCPUMeter)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.udDisplayPeakText)).EndInit();
@@ -73387,24 +73078,8 @@
         private CheckBoxTS chkTXExpert;
         private ButtonTS btnTXProfileDefImport;
         private CheckBoxTS chkDisplayPanFill;
-        private GroupBoxTS grp3DPanadapter;
         private CheckBoxTS chkDisplay3DPanadapter;
-        private CheckBoxTS chk3DWaterfallSync;
-        private LabelTS lbl3DXOffset;
-        private NumericUpDownTS ud3DXOffset;
-        private LabelTS lbl3DYOffset;
-        private NumericUpDownTS ud3DYOffset;
-        private LabelTS lbl3DLineCount;
-        private NumericUpDownTS ud3DLineCount;
-        private LabelTS lbl3DSpeed;
-        private NumericUpDownTS ud3DSpeed;
-        private LabelTS lbl3DLineColor;
-        private Thetis.ColorButton clrbtn3DLineColor;
-        private ButtonTS btn3DResetDefaults;
-        private LabelTS lbl3DHaze;
-        private NumericUpDownTS ud3DHaze;
-        private LabelTS lbl3DRidgeHeight;
-        private NumericUpDownTS ud3DRidgeHeight;
+        private ButtonTS btn3DSettings;
         private GroupBoxTS grpAppSkins;
         private ComboBoxTS comboAppSkin;
         private ButtonTS btnSkinExport;

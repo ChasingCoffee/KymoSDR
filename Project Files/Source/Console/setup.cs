@@ -315,10 +315,6 @@ namespace Thetis
             chkGridControl_minor.Checked = false;
             chkDisplayPanFill.Checked = true;
             chkDisplay3DPanadapter.Checked = false;
-            ud3DXOffset.Value = (decimal)0.60m;
-            ud3DYOffset.Value = (decimal)0.58m;
-            ud3DLineCount.Value = 35;
-            clrbtn3DLineColor.Color = System.Drawing.Color.Aquamarine;
             showRegionBandstackWarning(false);
             //
 
@@ -659,16 +655,9 @@ namespace Thetis
             //-----------------------------
             initializing = false;
 
-            // push 3D panadapter settings to Display (skipped during init due to 'initializing' guard)
+            // push 3D panadapter enable state to Display (skipped during init due to 'initializing' guard)
+            // remaining 3D settings are pushed by the 3D Panadapter Settings window
             Display.Pan3DEnabled = chkDisplay3DPanadapter.Checked;
-            Display.Pan3DPerspective = (float)ud3DXOffset.Value;
-            Display.Pan3DDepth = (float)ud3DYOffset.Value;
-            Display.Pan3DRidgeHeight = (float)ud3DRidgeHeight.Value;
-            Display.Pan3DDepthFade = (float)ud3DHaze.Value;
-            Display.Pan3DLineCount = (int)ud3DLineCount.Value;
-            Display.Pan3DLineColor = clrbtn3DLineColor.Color;
-            Display.Pan3DWaterfallSync = chk3DWaterfallSync.Checked;
-            Display.Pan3DSpeed = (int)ud3DSpeed.Value;
 
             udDisplayScopeTime_ValueChanged(this, EventArgs.Empty);
 
@@ -1086,12 +1075,6 @@ namespace Thetis
             if (needsRecovering(recoveryList, "udTXWFAmpMax")) udTXWFAmpMax.Value = Display.TXWFAmpMax;
             if (needsRecovering(recoveryList, "udTXWFAmpMin")) udTXWFAmpMin.Value = Display.TXWFAmpMin;
             if (needsRecovering(recoveryList, "chkDisplay3DPanadapter")) chkDisplay3DPanadapter.Checked = false;
-            if (needsRecovering(recoveryList, "ud3DXOffset")) ud3DXOffset.Value = (decimal)0.60m;
-            if (needsRecovering(recoveryList, "ud3DYOffset")) ud3DYOffset.Value = (decimal)0.58m;
-            if (needsRecovering(recoveryList, "ud3DRidgeHeight")) ud3DRidgeHeight.Value = (decimal)0.46m;
-            if (needsRecovering(recoveryList, "ud3DHaze")) ud3DHaze.Value = (decimal)0.16m;
-            if (needsRecovering(recoveryList, "ud3DLineCount")) ud3DLineCount.Value = 35;
-            if (needsRecovering(recoveryList, "clrbtn3DLineColor")) clrbtn3DLineColor.Color = System.Drawing.Color.Aquamarine;
 
             // MW0LGE in the case where we don't have a setting in the db, this function (initdisplaytab) is called, use console instead
             SetMultiMeterMode(console.MMMeasureMode);
@@ -1848,14 +1831,24 @@ namespace Thetis
             if (getDict.ContainsKey("chkDisableHPFonPS")) // replaced by chkDisableHPFonPSb
                 _oldSettings.Add("chkDisableHPFonPS");
 
-            // 3D panadapter controls repurposed from X/Y pixel offsets to Perspective/Depth ratios (0-1)
-            // Old values (e.g. 2.0, 15.0) exceed new Maximum of 1.0, so remove them to force defaults
-            if (getDict.ContainsKey("ud3DXOffset"))
-                _oldSettings.Add("ud3DXOffset");
-            if (getDict.ContainsKey("ud3DYOffset"))
-                _oldSettings.Add("ud3DYOffset");
-            if (getDict.ContainsKey("ud3DLineCount"))
-                _oldSettings.Add("ud3DLineCount");
+            // 3D panadapter settings moved from this form to the frm3DPanadapter window
+            // (stored under its own "3DPanadapter" table) - remove stale entries here
+            string[] moved3DSettings = new string[]
+            {
+                "ud3DXOffset",
+                "ud3DYOffset",
+                "ud3DLineCount",
+                "ud3DRidgeHeight",
+                "ud3DHaze",
+                "ud3DSpeed",
+                "clrbtn3DLineColor",
+                "chk3DWaterfallSync",
+                "chk3DSideWalls",
+                "combo3DColorMap"
+            };
+            foreach (string s in moved3DSettings)
+                if (getDict.ContainsKey(s))
+                    _oldSettings.Add(s);
 
             handleOldPAGainSettings(ref getDict);
         }
@@ -2194,13 +2187,13 @@ namespace Thetis
                 }
                 if (!ok)
                 {
-                    MessageBox.Show("There was an issue restoring the settings for MultiMeterIO. Existing settings will be lost.", "MultiMeterIO RestoreSaveData",
+                    MessageBox.Show("This version of SDR-VST3 requires restoring the settings for MultiMeterIO.\n\nAny existing meter input/output connections (UDP, TCP/IP or serial) will need to be removed and re-added.", "MultiMeterIO RestoreSaveData",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 }
 
                 if (!MeterManager.RestoreSettings(ref a)) // pass this dictionary of settings to the meter manager to restore from
                 {
-                    MessageBox.Show("There was an issue restoring the settings for MultiMeter. Please remove all meters, re-add, and restart Thetis.", "MultiMeter RestoreSettings",
+                    MessageBox.Show("There was an issue restoring the settings for MultiMeter. Please remove all meters, re-add, and restart SDR-VST3.", "MultiMeter RestoreSettings",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 }
             }
@@ -12922,81 +12915,25 @@ namespace Thetis
         {
             if (initializing) return;
             Display.Pan3DEnabled = chkDisplay3DPanadapter.Checked;
-            if (chkDisplay3DPanadapter.Checked && !chk3DWaterfallSync.Checked)
+        }
+
+        private frm3DPanadapter _frm3DPanadapter = null;
+        private void btn3DSettings_Click(object sender, EventArgs e)
+        {
+            if (_frm3DPanadapter == null || _frm3DPanadapter.IsDisposed)
             {
-                chk3DWaterfallSync.Checked = true;
+                _frm3DPanadapter = new frm3DPanadapter();
             }
-        }
 
-        private void ud3DXOffset_ValueChanged(object sender, System.EventArgs e)
-        {
-            if (initializing) return;
-            Display.Pan3DPerspective = (float)ud3DXOffset.Value;
-        }
-
-        private void ud3DYOffset_ValueChanged(object sender, System.EventArgs e)
-        {
-            if (initializing) return;
-            Display.Pan3DDepth = (float)ud3DYOffset.Value;
-        }
-
-        private void ud3DLineCount_ValueChanged(object sender, System.EventArgs e)
-        {
-            if (initializing) return;
-            Display.Pan3DLineCount = (int)ud3DLineCount.Value;
-        }
-
-        private void clrbtn3DLineColor_Changed(object sender, System.EventArgs e)
-        {
-            if (initializing) return;
-            Display.Pan3DLineColor = clrbtn3DLineColor.Color;
-        }
-
-        private void ud3DSpeed_ValueChanged(object sender, System.EventArgs e)
-        {
-            if (initializing) return;
-            Display.Pan3DSpeed = (int)ud3DSpeed.Value;
-        }
-
-        private void chk3DWaterfallSync_CheckedChanged(object sender, System.EventArgs e)
-        {
-            if (initializing) return;
-            Display.Pan3DWaterfallSync = chk3DWaterfallSync.Checked;
-        }
-
-        private void ud3DRidgeHeight_ValueChanged(object sender, System.EventArgs e)
-        {
-            if (initializing) return;
-            Display.Pan3DRidgeHeight = (float)ud3DRidgeHeight.Value;
-        }
-
-        private void ud3DHaze_ValueChanged(object sender, System.EventArgs e)
-        {
-            if (initializing) return;
-            Display.Pan3DDepthFade = (float)ud3DHaze.Value;
-        }
-
-        private void btn3DResetDefaults_Click(object sender, EventArgs e)
-        {
-            initializing = true;
-            ud3DXOffset.Value = (decimal)0.60m;
-            ud3DYOffset.Value = (decimal)0.58m;
-            ud3DRidgeHeight.Value = (decimal)0.46m;
-            ud3DHaze.Value = (decimal)0.16m;
-            ud3DLineCount.Value = 35;
-            clrbtn3DLineColor.Color = System.Drawing.Color.Aquamarine;
-            chk3DWaterfallSync.Checked = true;
-            ud3DSpeed.Value = 25;
-            initializing = false;
-
-            Display.Pan3DPerspective = (float)ud3DXOffset.Value;
-            Display.Pan3DDepth = (float)ud3DYOffset.Value;
-            Display.Pan3DRidgeHeight = (float)ud3DRidgeHeight.Value;
-            Display.Pan3DDepthFade = (float)ud3DHaze.Value;
-            Display.Pan3DLineCount = (int)ud3DLineCount.Value;
-            Display.Pan3DLineColor = clrbtn3DLineColor.Color;
-            Display.Pan3DWaterfallSync = true;
-            Display.Pan3DSpeed = 30;
+            if (!_frm3DPanadapter.Visible)
+            {
+                _frm3DPanadapter.Show(this);
+                _frm3DPanadapter.Focus();
+            }
+            else
+            {
+                _frm3DPanadapter.BringToFront();
+            }
         }
 
         private bool _skinChanging = false;

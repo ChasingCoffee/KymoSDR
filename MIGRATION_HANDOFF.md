@@ -66,11 +66,25 @@ Migrate the entire solution from .NET Framework 4.8 to .NET 10, replacing SharpD
 
 ### Phase 3: Display Improvements (future)
 
-**Goal**: Modern GPU-accelerated rendering leveraging Vortice.
+**Goal**: Modern GPU-accelerated rendering leveraging Vortice. Tiered roadmap — see "3D Panadapter Modernization Plan" section below for full detail.
 
+- [ ] Tier 1: Quick visual wins inside existing D2D renderer (temporal interpolation, edge smoothing, side walls, perceptual colormaps, grid floor, exponential fog)
+- [ ] **MANDATORY: GPU→CPU fallback architecture (applies to ALL GPU features below)** — see "GPU Fallback Architecture Requirement" section
+- [ ] Tier 2: Bloom/glow via ID2D1DeviceContext effects graph
+- [ ] Tier 3: GPU mesh-based 3D panadapter (replacing per-column DrawLine; fixes edge stepping geometrically)
 - [ ] GPU compute shaders for spectrum/waterfall
-- [ ] GPU mesh-based 3D panadapter (replacing per-column DrawLine)
-- [ ] Fix edge stepping in 3D panadapter (open issue from HANDOFF.md)
+
+### GPU Fallback Architecture Requirement (added 2026-08-22)
+
+End users may have no discrete/integrated GPU, an underpowered GPU, a remote-desktop session, or broken drivers. Every GPU-accelerated feature added in Phase 2+ MUST degrade gracefully to a CPU path. Rules for all future display work:
+
+1. **Never delete the D2D line-based renderer when the GPU mesh path (Tier 3) lands** — it becomes the permanent CPU fallback and must stay maintained.
+2. **Capability detection at DX init** (display.cs `initDX2D` / existing `DX2Adaptors()`): probe adapter + feature level; on failure OR user override setting → set a render-path flag (`_renderPath = GpuMesh | D2DCpu | WarpSoftware`). Re-validate on device-lost events; auto-downgrade mid-session if DeviceRemoved persists past the retry budget.
+3. **Single draw entry point**: `DrawPanadapter3DHistoryDX2D` dispatches to mesh or line path behind one interface/local function so fallback is a branch, not a fork of the whole render pipeline.
+4. **WARP as middle tier**: Microsoft's software rasterizer (`D3D_DRIVER_TYPE_WARP`) can back Tier 2 effects and even the Tier 3 mesh on GPU-less machines — try HW → WARP → pure-D2D-CPU in order.
+5. **Compute shaders (final item) are optional acceleration only** — spectrum/waterfall data must always be produced on CPU too; compute result feeds the same buffers.
+6. **User-visible setting**: "Display rendering: Automatic / Force CPU" in setup, persisted like other display options; plus log the chosen path at startup to ErrorLog.txt for support.
+7. **Test matrix before shipping any GPU feature**: hardware GPU, WARP-only, D2D-CPU forced, and remote-desktop session.
 
 ---
 
@@ -220,6 +234,7 @@ Must be preserved. SDK-style handles these differently — verify `<ApplicationM
 | 2026-08-19 | Keep manual versioning in AssemblyInfo.cs | Existing workflow, no reason to change |
 | 2026-08-19 | Tackle AmpView chart replacement in Phase 1 | Small scope, validates charting library choice before Phase 2 |
 | 2026-08-19 | Three-phase approach | Separates mechanical migration from graphics rewrite |
+| 2026-08-22 | All GPU features (Tier 2/3, compute) must have CPU fallback path | Users without GPUs / RDP sessions must keep full functionality — see "GPU Fallback Architecture Requirement" |
 
 ---
 
@@ -256,8 +271,8 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 - [x] Clean build: 0 C# errors on all 5 C# projects
 - [x] Suppressed SYSLIB0011 (BinaryFormatter obsolete) — needs proper fix later
 - [x] Suppressed NU1510 (NuGet pruning) — resolved packages redundant with .NET 10
-- [ ] NU1701 warnings (4) from SharpDX — expected, resolved in Phase 2
-- [ ] Output verification: native DLLs (fftw, rnnoise) need manual copy
+- [x] NU1701 warnings (4) from SharpDX — resolved: SharpDX packages removed in Phase 2
+- [x] Output verification: native DLLs now copied by MSBuild `<Copy>` tasks (PostBuild target rewritten; lib path corrected to `Project Files\lib`)
 
 ### Phase 1.5 — Shutdown Hang Fixes
 - [x] MultiMeterIO: added Join(2000) timeout to all 4 connector Stop() methods
@@ -275,15 +290,28 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 
 ### Phase 2
 - [x] Vortice.Direct2D1 3.8.3 + Vortice.Direct3D11 3.8.3 packages added
-- [ ] MeterManager.cs DXRenderer ported to Vortice (in progress — 481 SharpDX refs across ~10K lines)
-- [ ] display.cs ported to Vortice
-- [ ] SharpDX packages removed
-- [ ] All display modes functional
+- [x] MeterManager.cs DXRenderer ported to Vortice — builds clean x64 Release
+- [x] display.cs ported to Vortice (~322 refs; only 1 remains, in a comment)
+- [x] SharpDX packages removed (all 6 PackageReferences deleted from Thetis.csproj; NU1701 warnings gone)
+- [ ] All display modes functional (runtime verification pending)
+
+### Post-Migration Polish (settings + branding)
+- [x] GetSetting JsonElement fix (ConvertLegacyJsonValue) — user verified meters round-trip
+- [x] "2|" typed IG-settings blob format; "1|" legacy blobs still readable
+- [x] `_default_settings` regenerated as JSON (932 entries)
+- [x] `Resources\cty.txt` regenerated as JSON (346 entries) — DXCC/prefix lookups restored
+- [x] Old-DB import tested end-to-end: structure auto-upgrades, TX profiles/meters survive, one-time MMIO blob loss warned
+- [x] MultiMeterIO warning reworded (actionable: remove & re-add UDP/TCP/serial connections)
+- [x] Database Manager fully rebranded to SDR-VST3 (prompts, messages, export filenames) + "sucessfully" typos fixed
+- [ ] Broader rebrand sweep — OPEN DECISION (see 2026-08-20 session history: Bucket A safe UI text / Bucket B functional identifiers / Bucket C upstream refs)
+- [ ] DXCC/country prefix lookup runtime verification (validates cty.txt regen)
 
 ### Phase 3
+- [ ] Tier 1: temporal interpolation, edge smoothing, side walls, Turbo/Viridis colormaps, grid floor, exponential fog — **CODE COMPLETE 2026-08-20 (below), runtime verification pending**
+- [x] **BLOCKER RESOLVED 2026-08-22: uncheck-Waterfall-Sync crash — root cause was `Pan3DLineColor` setter disposing `m_bDX2_3d_fill_brush` WITHOUT nulling it → Classic+Sync-OFF frame drew through a disposed COM brush. Fixed (dispose+null + stopsColl leak); user verified "seems fixed so far". Dumps/WER key intentionally left in place for now. See 2026-08-22 session entries**
+- [ ] Tier 2: bloom/glow (ID2D1DeviceContext effects graph)
+- [ ] Tier 3: GPU mesh 3D panadapter (replaces per-column DrawLine; fixes edge stepping)
 - [ ] GPU compute shaders for spectrum
-- [ ] GPU mesh 3D panadapter
-- [ ] Edge stepping fix
 
 ---
 
@@ -301,6 +329,201 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 - Phase 1: All 5 C# projects converted to SDK-style .NET 10, 0 compile errors
 - Phase 1.5: Fixed shutdown hang — MultiMeterIO infinite Join, PSForm infinite Wait, display thread foreground blocking
 - Phase 2: Added Vortice packages, began DXRenderer migration research
+
+### 2026-08-20 (MeterManager.cs Vortice port)
+- Created `DXVorticeCompat.cs` (namespace Thetis): `DXRectF` struct (SharpDX.RectangleF-compatible: settable X/Y/Width/Height + Left/Top/Right/Bottom, Inflate, Offset, Contains, implicit→RawRectF) + `DrawText`/`DrawBitmap` extension methods; added to Thetis.csproj Compile items
+- Ported MeterManager.cs DXRenderer (~10K lines) SharpDX→Vortice via bulk regex transform + manual rewrites of dxInit/dxRender/ShutdownDX/bitmapFromSystemBitmap/resizeDX/buildDXFonts
+- bitmapFromSystemBitmap rewritten dropping WIC entirely: GDI+ LockBits Format32bppPArgb → CreateBitmap(SizeI, scan0, pitch, BitmapProperties); stream cache preserved
+- Key API findings (verified by reflection dumps in %TEMP%\opencode\vorticedump\):
+  - `RawRectF.Left/Top/Right/Bottom` are readonly FIELDS — assign whole struct, never mutate
+  - `Matrix3x2.Translation` is Vector2; no TranslationVector property
+  - No `ID2D1Factory.CreateRenderTarget` — use `CreateDxgiSurfaceRenderTarget(IDXGISurface, RenderTargetProperties)`
+  - `IDXGIFactory2.CreateSwapChainForHwnd` returns the swap chain (no out param); QI from factory1
+  - `Vortice.Direct2D1.FeatureLevel` also exists — bare `FeatureLevel` is ambiguous with Direct3D's; alias required
+  - `EndDraw()` returns Result; RecreateTarget retry loop preserved (≤10 attempts)
+- Fixed Thetis.csproj PostBuild: Exec+cmd copy broke under .NET SDK (cmd can't resolve literal `..` segments in absolute paths; trailing `\";` quoting fragile). Replaced with MSBuild `<Copy>` tasks and corrected lib path (`..\..\lib`, lib lives at Project Files\lib not repo-root\lib)
+- Build now succeeds x64 Release. Next: port display.cs (~322 refs), then remove SharpDX packages
+
+### 2026-08-20 (display.cs Vortice port — Phase 2 code complete)
+- Ported display.cs (~12.7K lines) via bulk transform script (`%TEMP%\opencode\transform_display.ps1`) + manual rewrites of initDX2D/ShutdownDX2D/DX2Adaptors/getGPUNameInUse/resizeDX2D/pauseDisplay/ResetWaterfallBmp(2)/SDXBitmapFromSysBitmap/buildFontsDX2D/present section
+- SDXBitmapFromSysBitmap rewritten dropping WIC/DataStream: GDI+ LockBits Format32bppPArgb → CreateBitmap(SizeI, scan0, |stride|, BitmapProperties); old per-pixel loop was a byte-order no-op
+- pauseDisplay: staging texture via `_device.CreateTexture2D(desc)`; snapshot via `CreateSharedBitmap(dxgiSurface, props)` (Vortice has NO CreateBitmapFromDxgiSurface on render targets)
+- Additional API findings:
+  - `Vortice.Direct2D1` has NO AlphaMode — it's `Vortice.DCommon.AlphaMode`; bare `FeatureLevel`/`FactoryType`/`TextAntialiasMode` ambiguous between Direct2D1/Direct3D(DirectWrite) namespaces → qualify or alias
+  - Legacy `SwapChainDescription` fields: `BufferDescription`, `BufferUsage`, `OutputWindow` (IntPtr), `Windowed` (not SharpDX's ModeDescription/Usage/OutputHandle/IsWindowed); BufferCount is uint
+  - `ModeDescription(uint, uint, Rational(uint,uint), Format)`; enums are `ModeScanlineOrder`/`ModeScaling` (not DisplayMode*)
+  - `IDXGIFactory2.CreateSwapChain(device, desc)` by value; `GetBuffer<T>` not GetBackBuffer; `ID2D1RenderTarget.Dpi` returns Vortice.Mathematics.Size; `Texture2DDescription.CPUAccessFlags` (capital CPU)
+  - `CppObject.IsDisposed` is protected in Vortice — drop the checks
+  - Vortice.Mathematics.Color4 has R/G/B/A props (not Red/Green/Blue)
+  - **Vortice.Mathematics.Rect ctor is (left, top, right, bottom)** — SharpDX RectangleF was (x,y,w,h); DXRectF implicit→Rect extension fixed accordingly
+  - Do NOT add implicit DXRectF→Rect conversion: makes DrawRectangle(Rect vs RawRectF overloads) ambiguous CS0121; use explicit DrawText extension overloads instead
+  - D3D11CreateDevice(adapter overload) requires adapter typed as IDXGIAdapter (not IDXGIAdapter1) for overload resolution
+- Removed all 6 SharpDX PackageReferences from Thetis.csproj; solution builds clean x64 Release with zero NU1701 warnings
+- Also converted RawInput.csproj + Midi2Cat.csproj PostBuild from Exec+cmd copy to MakeDir/Copy tasks (same cmd `..` path bug surfaced when building full .sln with VS MSBuild.exe; dotnet CLI had masked it). Full-solution build via VS MSBuild.exe: 0 errors, 6 pre-existing warnings (MSB8012 C++ TargetPath mismatches, MSB3277 test-assembly version conflicts)
+- Note: `dotnet build` cannot build the C++ vcxproj projects (MSB4278) — use VS MSBuild.exe (`C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe`) for full-solution builds
+- Phase 2 remaining: runtime verification of all display modes only
+
+### 2026-08-20 (settings serialization fixes — BinaryFormatter→JSON fallout)
+- User-verified: meter settings now round-trip (save→restart→restore) after these fixes
+- **GetSetting JsonElement bug fixed** (MeterManager.cs clsIGSettings): System.Text.Json deserializing `ConcurrentDictionary<string, object>` boxes values as `JsonElement`; the old hard cast `(T)_settings[setting]` threw InvalidCastException on every read → RestoreSettings failed at startup ("issue restoring MultiMeter" error). Added `ConvertLegacyJsonValue(object, Type)` which unboxes JsonElement per target type (int/uint/long/float/double/bool/string/Color/Guid/enums/string[]/Guid[], generic JSON fallback otherwise); wired into both GetSetting overloads
+- **Version "2|" typed blob format for IG settings**: ToString2 now emits `"2|"` + base64(JSON of List<SettingBlobEntry>{k,t,v}) where t is a compact type token (int/float/bool/color/guid/fontstyle/reading/barstyle/units/strings/guids, or `aq:<AssemblyQualifiedName>` fallback) so Color/Guid/enums survive the JSON round trip; TryParse2 materializes values eagerly. Version "1|" still parsed (lazy conversion via ConvertLegacyJsonValue)
+- **Regenerated `_default_settings`** (database.cs:11387): was a BinaryFormatter payload decoded only during ImportAndMergeDatabase State-table merge — silently failing (`catch {}`) since the serializer switch. Decoded old blob via PS 5.1 (.NET Framework) BinaryFormatter → re-encoded as JSON+gzip+base64 matching Common.SerializeToBase64; 932 entries preserved
+- **Regenerated `Resources\cty.txt`** (country/prefix data): was also a stale BinaryFormatter payload (`Thetis, Version=2.10.3.13` reference) → clsCountryData static ctor silently failed → all DXCC/prefix lookups dead. Decoded with SerializationBinder shim redirecting Thetis.CountryData+PrefixData to a local type; re-encoded as JSON; 346 entries / prefix lists intact. File rewritten BOM-less UTF8
+- Discord token blob: fails gracefully (bot just doesn't connect, user re-logs in). MultiMeterIO connections from pre-upgrade DBs: warning box shown, one-time loss accepted (no legacy BinaryFormatter reader shipped — disabled/risky on modern .NET)
+- Upgrade path summary: DataSet XML structure auto-upgrades (VerifyTables/VerifyTXProfileColumns); TX profiles import cleanly via ExpandOldTxProfileTable; serialized blobs from .NET 4.8 era are lost once with warnings
+- Regen script kept at %TEMP%\opencode\regen_blobs.ps1 (PS 5.1 required for BinaryFormatter decode; note: single-quoted here-string needed so PS doesn't eat the backtick in List`1)
+
+### 2026-08-20 (runtime verification + UI text/branding fixes)
+- User runtime testing confirmed:
+  - Meter settings round-trip verified ("meters make the round trip now")
+  - Old (.NET 4.8-era) database imported via DB Manager, made active, restart auto-upgraded DB version as expected
+  - During that test the MultiMeterIO warning appeared but meter settings were intact — explained: Options-table merge special-cases meter keys (`meterContData_*`/`meterData_*`/`meterIGData_*`/`meterIGSettings_*`, database.cs ~11167–11230): current-in-use rows win, old DB only fills missing keys. The warning was `multimeter_io2` only — a regular key where old wins the merge — holding an unreadable BinaryFormatter blob (the accepted one-time loss)
+  - Stuck meter container that couldn't be deleted was simply LOCKED (`chkLockContainer` disables btnContainerDelete, setup.cs ~32975) — not a bug
+- Upgrade-path clarification: data dir is fixed (`%APPDATA%\OpenHPSDR\SDR-VST3-x64\`, console.cs ~692) so installing a new build over an old SDR-VST3 upgrades the same database in place (no manual import). Pre-serializer-switch installs get the same one-time blob loss; post-f82ce68 installs are seamless (their `"1|"` blobs restore correctly thanks to ConvertLegacyJsonValue and get re-saved as `"2|"`)
+- UI text changes (all rebuilt clean):
+  - setup.cs:2197 MultiMeterIO warning reworded per user: "This version of SDR-VST3 requires restoring the settings for MultiMeterIO.\n\nAny existing meter input/output connections (UDP, TCP/IP or serial) will need to be removed and re-added."
+  - setup.cs:2203 "restart Thetis" → "restart SDR-VST3"
+  - clsDBMan.cs:477 DB-upgrade prompt "...of Thetis requires your database..." → "...of SDR-VST3..."
+  - clsDBMan.cs:510 "sucessfully" → "successfully"; clsDBMan.cs:1419 same typo + "Thetis will now restart" → "SDR-VST3 will now restart"
+  - clsDBMan.cs:964 activate-database prompt "cause Thetis to restart" → "cause SDR-VST3 to restart"
+  - clsDBMan.cs:1736/1785/1787 export filename defaults `Thetis_database_export_*` → `SDR-VST3_database_export_*`
+- Database Manager is now fully rebranded (no remaining user-facing "Thetis" strings in clsDBMan.cs)
+- OPEN DECISION — broader rebrand sweep paused: ~96 "Thetis" strings remain codebase-wide, categorized:
+  - Bucket A (~40, safe): dialog texts/tooltips/window titles ("Thetis DirectX" titles in display.cs/MeterManager.cs, "Thetis Meter [#####]" title, "Thetis Startup Log", shutdown splash, console.cs DB-misconfig dialogs, radio.cs wisdom prompt, setup.cs radio-model dialog, firewall/admin prompts, Midi2Cat startup messages, setup tooltips)
+  - Bucket B (functional, risky): exe still named Thetis.exe (AssemblyName=Thetis — firewall rules/shortcuts/installers reference it); TCI/CAT protocol strings (`sendPongFrame("Thetis")`, `"#Thetis TCP/IP Cat"`); N1MM defaults `Thetis_1/2`; VST editor window class; embedded resource names tied to RootNamespace
+  - Bucket C (keep): upstream GitHub URLs (version.json/discord.json/skin_servers.json/manuals live in ramdor/Thetis repos), About-box credits
+  - Note: `dotnet build` handles the 5 C# projects only; the 5 native vcxprojs always require VS MSBuild.exe/toolchain (MSB4278 otherwise). Prebuilt native DLLs would be the way to hide C++ behind dotnet build if ever wanted
+
+### 2026-08-20 (Phase 3 Tier 1 — 3D panadapter visual upgrades, code complete)
+All six Tier-1 items implemented in `DrawPanadapter3DHistoryDX2D` (display.cs) + setup UI; builds clean x64 Release (0 errors, only pre-existing CA1416 noise). Runtime verification pending.
+- **Temporal interpolation**: rows now sample a *fractional* frame index `fIdx = line - phase` where `phase = (now - _3dLastPushTicks)/interval` (same interval calc as the push throttle). Lerps between adjacent ring frames into cached `_3dLerpRows[line][]`; content is continuous across push boundaries so the surface morphs at display rate instead of jumping at ~25 FPS. Zero extra draw calls (one lerp pass per row).
+- **Edge smoothing**: ridge outline pass (PASS 2) wrapped in `AntialiasMode.PerPrimitive` (save/restore around pass); aliased axis-aligned clip kept. Kills the staircase silhouette on converging edges.
+- **Side walls / end caps** (`_pan3DSideWalls`, default ON): per side, `ID2D1PathGeometry` filled with front-row edge-colour darkened ×0.32 + mid-depth fog blend; polygon = edge-trace polyline → back bottom → front bottom → close (walls extend to absolute bottomY to match column fills). Drawn under PerPrimitive AA before row fills so rows occlude correctly. Uses `_d2dFactory.CreatePathGeometry()` + sink pattern from MeterManager.
+- **Perceptual colormaps** (`Pan3DColorMap`: 0=Classic/1=Turbo/2=Viridis/3=Inferno): lazy-built static LUT `_colormapLUT` (3×256×RGB bytes); Turbo+Viridis via published polynomial approximations, Inferno via 11-stop matplotlib landmark table with linear interp. When ≠0 it overrides waterfall-sync/gradient/line-colour branches; outline brightening still applies. Shared colour selection factored into local function `SelectSurfaceColour(dBm, strength, out RGB)` used by fills, outlines and walls.
+- **Perspective grid floor**: 6 receding gridlines along smoothstep baselines (alpha 0.10→0.03, line colour) + 2 straight side rails (insets/baselines are linear in tSmooth ⇒ rails are single segments); drawn first so surface occludes.
+- **Exponential fog**: `haze = strength * 0.35 * (1 - exp(-2.5·tSmooth))` replaces linear `t*strength*0.35` — saturating, more natural mid-depth falloff; applied consistently to fills/outlines/walls via `FogFor(tS)`.
+- **Setup UI** (grp3DPanadapter, tpDisplayGeneral): added `chk3DSideWalls` ("Side Walls") + `lbl3DColorMap`/`combo3DColorMap` (DropDownList: Classic/Turbo/Viridis/Inferno); group regrown 244→255 px (fits tab, nothing below), existing controls repositioned to 17–18px pitch. Wired: init defaults block, end-of-init Display push block, `needsRecovering` entries, `chk3DSideWalls_CheckedChanged`, `combo3DColorMap_SelectedIndexChanged`, `btn3DResetDefaults_Click`. Persistence is free via Common.SaveForm/RestoreForm (control-name keyed).
+- Note: colormap combo restores by Text via RestoreForm — item strings must stay "Classic/Turbo/Viridis/Inferno".
+- **Fix (same day): mid-frame colormap race** — `SelectSurfaceColour` snapshotted `useColormap` at frame start but indexed `_colormapLUT` with the *live* `_pan3DColorMap`; switching to Classic mid-frame produced a negative LUT offset → `IndexOutOfRangeException` every frame (freeze + error spam). Now the map index is snapshotted once per frame (`colorMapIdx`) and used for both the branch and the offset.
+- **Fix (same day): live trace now follows colormaps** — the 2D live trace/fill drawn on top of the 3D stack only knew waterfall-sync/plain line colour, so Turbo/Viridis/Inferno never recoloured it. Added a `liveUseColormap` branch in the panadapter live-trace loop (display.cs ~5437): when 3D is enabled and a colormap is active it overrides waterfall-sync and colours line (alpha 1.0) + fill (alpha 0.55) from the same LUT with the same `(dBm - grid_min)/yRange` strength mapping as the surface, so the live trace blends into the front row. Shares the per-frame `liveWfBrushCache` (key includes alpha bits; no collisions).
+- **Fix (same day): hard crash (process exit) when Waterfall Sync unchecked** — WER/event log showed `c0000005` AV inside `Win32.memcpy` ← `DrawPanadapterDX2D`. Root cause: the DX2 device-setup path (display.cs ~3700, runs on rebuilds: resize/DPI/device-loss/skin) reallocated `_3dHistoryBuffer`/`_3dMedianPrev` in place with `float[1]` slots while the display thread pushed history; `fixed` re-reads the field after the length guard, so it could pin a fresh 4-byte slot and memcpy ~65KB into it. With Waterfall Sync ON pushes are waterfall-paced (race window tiny); unchecking sync switches pushes to `_3dPushIntervalTicks` (40ms ≈ every frame), multiplying exposure — hence "uncheck → crash". Fix: push block and draw method now snapshot the ring arrays + head/count into locals once (stale-ref use is harmless; guard and pin always see the same buffers), and the setup path builds new arrays locally and publishes with a single atomic reference assignment. Note: corrupted-state exceptions are uncatchable in .NET 10 (SYSLIB0032), so memory-safety was the only cure.
+- **UPDATE: crash persisted after the snapshot fix** (identical coreclr fault offset across 8+ crashes; user repro: always dies on unchecking Waterfall Sync, any path). Diagnostic build: ALL `Win32.memcpy` calls in the panadapter/waterfall render paths converted to bounds-checked managed `Array.Copy` (panadapter RX1 data copies ~5171-5181, 3D push block ~5185-5260, waterfall RX1/RX2 data copies ~7520-7560) and the push block is wrapped in try/catch that logs buffer lengths to ErrorLog.txt via `Common.LogString`/`LogException` and skips the push instead of dying. Interpretation guide for next test run: crash gone → one of those memcpys really was the culprit; crash gone + ErrorLog entries → logs name the bad lengths; crash persists with same signature → stack attribution is misleading, corruption originates elsewhere (suspect unmanaged DSP core or D2D interplay), next step is converting remaining memcpys (display.cs ~11125+, ~11797+) and/or capturing a real dump (`dotnet-dump collect -p <pid>` at the crash dialog / procdump -e).
+- **UPDATE 2 (end of day): memcpy theory ELIMINATED — dump captured, analysis pending.** User reproduced 3× on the Array.Copy build (process starts 23:02:38 / 23:03:32 / 23:05:04, exe written 23:02:07): identical signature (`c0000005`, coreclr.dll 10.0.1026.32716 offset `0x35967f`), and ErrorLog.txt stayed EMPTY → push-block try/catch never fired, none of the converted copies is the fault. Key deduction: a genuine msvcrt `memcpy` overrun would fault inside msvcrt.dll/ucrtbase.dll — but the faulting module is **coreclr.dll at a byte-identical offset every time**. Fixed-offset AV inside coreclr during managed execution = classic symptom of managed heap corruption discovered by GC/runtime helpers (or smashed thread frame chain), with the crash site unrelated to the corrupter. The "Win32.memcpy ← DrawPanadapterDX2D" frames in the .NET Runtime event log are an artifact of the CLR's post-mortem stack walk — do not chase them further.
+  - **Dump capture armed**: WER LocalDumps registered for Thetis.exe under `HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\Thetis.exe` (DumpFolder=`C:\Users\W4YNY\Documents\thetisvst\dumps`, DumpType=2 full, DumpCount=10; needed one UAC elevation). First catch: `dumps\Thetis.exe.21132.dmp` (2.1 GB, 23:10:11). REMOVE this registry key once debugging is done.
+  - **Tooling note**: `dotnet tool list` claimed dotnet-dump was installed but the shim exe was missing from `~\.dotnet\tools`; fixed by uninstall+reinstall (`dotnet-dump` 9.0.661903). Run as: `& "$env:USERPROFILE\.dotnet\tools\dotnet-dump.exe" analyze dumps\Thetis.exe.21132.dmp -c "<cmd>"`.
+  - **Analysis status**: only `pe` ran so far → "no current managed exception on this thread" (default thread isn't the faulting one). Next commands: `threads` to enumerate, find faulting thread (WER AV dumps: look for the thread whose native context matches exception record; try `clrstack` per candidate), then `verifyheap` (THE heap-corruption confirmation), `ip2md`/`u` near faulting IP if SOS can bind it, `dumpheap -stat` for anomalies.
+  - **Leads to check while analyzing** (gathered from code reading):
+    - Data pump console.cs ~24230-24340: `SpecHPSDRDLL.GetPixels(id, which, pinned ptr, ref flag)` — NATIVE code writes into managed pooled arrays (`Display.new_display_data`, `new_waterfall_data`, +bottom variants) through raw pointers. The pump thread does NOT hold `_objDX2Lock`.
+    - `initDisplayArrays` (display.cs ~3000-3050, UI thread, under `_objDX2Lock`) `Return`s those same arrays to `ArrayPool.Shared` and re-`Rent`s — race vs GetPixels can double-rent/live-resize arrays the native side still writes. Worse: **waterfall arrays are rented `Rent(W)` (current width), panadapter ones `Rent(BUFFER_SIZE)`** — if the native side's configured pixel count exceeds current W after a shrink, GetPixels overruns the array end → exactly the corruption pattern suspected.
+    - `GetPixels` DllImport declaration NOT yet located (grep missed it — maybe unusual formatting/generated); find it to see which native DLL and exact signature. Also `clsSpectrumProcessor.cs:878` calls GetPixels into `_workingPixels` sized `_pixels` — check that sizing path too.
+    - Repro detail: always dies on unchecking Waterfall Sync (any path); often on the SECOND reset-defaults→uncheck cycle. Uncheck ⇒ 3D history pushes go from waterfall-paced to every 40 ms ⇒ allocation/GC cadence spikes ⇒ corrupted heap gets touched sooner. Treat "uncheck" as an accelerant, not necessarily the cause.
+    - **STATUS 2026-08-21: the GetPixels/ArrayPool lead above is DEPRIORITIZED but not fully disproven** — `verifyheap` came back clean and the crash is a fail-fast on a native AV inside D2D calls (see 2026-08-21 session entry for the proven mechanism). The initDisplayArrays rent/return race is still real hygiene debt worth fixing separately, just unlikely to be THIS signature.
+
+### 2026-08-20 (3D panadapter UI decluttered — settings moved to popup window)
+User request: setup tab was too cluttered. The 3D group box is gone; the display tab now has only `chkDisplay3DPanadapter` ("Enabled", at 394,150) + `btn3DSettings` ("3D Settings...", at 394,172) directly on `tpDisplayGeneral`. Builds clean x64 Release (0 errors).
+- **New file `frm3DPanadapter.cs`** (single-file form, no .Designer.cs, added to Thetis.csproj as `<Compile><SubType>Form</SubType>`): owns ALL 3D settings controls — same control names as before (`chk3DWaterfallSync`, `chk3DSideWalls`, `ud3DXOffset`=Perspective, `ud3DYOffset`=Depth, `ud3DRidgeHeight`, `ud3DHaze`, `ud3DLineCount`, `ud3DSpeed`, `clrbtn3DLineColor`, `combo3DColorMap`, `btn3DResetDefaults`). FixedSingle non-resizable, ShowInTaskbar=false.
+- **Lifecycle pattern** copied from frmCFCConfig: ctor does `RestoreForm(this, "3DPanadapter", false)` + `ForceFormOnScreen` inside an `_initializing` guard, then one `PushAllSettings()` to Display.*; FormClosing always `SaveForm(this, "3DPanadapter")`, and on UserClosing hides+cancels for reuse. Setup keeps a lazy singleton (`_frm3DPanadapter`) shown modeless with `Show(this)` — owner-close passes through (only UserClosing is cancelled).
+- **setup.designer.cs**: grp3DPanadapter + all child instantiations/config blocks/SuspendLayout/EndInit/field declarations removed (~350 lines spliced); chkDisplay3DPanadapter repositioned onto the tab; btn3DSettings added (TabIndex 95/96).
+- **setup.cs**: init-defaults block, end-of-init push block and needsRecovering entries reduced to just chkDisplay3DPanadapter/Pan3DEnabled; all moved handlers deleted; `chkDisplay3DPanadapter_CheckedChanged` simplified (no longer forces waterfall-sync — that control lives in the popup now, default ON there). Stale-DB cleanup extended: all 10 moved control names are purged from the "Options" table via `_oldSettings` (foreach, NOT a lambda — `getDict` is a ref param and CS1628 forbids capturing it).
+- **Persistence note**: settings now save under DB table "3DPanadapter" instead of "Options"; first launch after this change falls back to designer defaults (identical values), then persists normally. Colormap combo still restores by Text — item strings must stay "Classic/Turbo/Viridis/Inferno".
+
+### 2026-08-21 (dump fully analyzed; mechanism proven; root-cause theory below was later RETRACTED — see 2026-08-22)
+**Bug**: unchecking Waterfall Sync (3D panadapter) kills the process deterministically. Signature byte-identical across 8+ crashes: `c0000005`, `coreclr.dll+0x35967F` (runtime 10.0.1026.32716). **NEW USER CLUE: only crashes with Classic colormap selected; Turbo/Viridis/Inferno never crash.**
+
+Theories ELIMINATED this session:
+- ~~memcpy overrun~~ (Array.Copy conversion changed nothing)
+- ~~managed heap corruption~~ (`verifyheap`: 776,232 objects, **0 errors**)
+- ~~stack overflow~~ (faulting-thread RSP had ~32 KB margin above TEB StackLimit)
+
+**PROVEN MECHANISM** (from dump `dumps\Thetis.exe.21132.dmp`):
+- Faulting thread = display thread (OS id 0x1950/6480): `RunDisplay` → `RenderDX2D` → `DrawPanadapterDX2D`, frozen at display.cs:**5610** (a `_d2dRenderTarget.DrawLine` P/Invoke in the live-trace block).
+- Capture RIP = `KERNELBASE!RaiseFailFastException+0x188`; `clrthreads` shows the thread carrying bare `System.ExecutionEngineException` (HRESULT 80131506, no message/stack = preallocated fail-fast sentinel).
+- ExceptionAddress `coreclr+0x35967F` resolves (with real PDB) to **`ProcessCLRException+0x13F` = exceptionhandling.cpp : line 621** = `EEPOLICY_HANDLE_FATAL_ERROR(pExceptionRecord->ExceptionCode)` inside the `IsProcessCorruptedStateException(...)` branch (first/searching pass).
+- ⇒ A **native access violation fired during D2D COM calls**; the CLR personality routine classifies c0000005 as corrupted-process-state and **fail-fasts without ever running managed catch blocks**. This is why ErrorLog.txt stayed empty — try/catch around the push block was never going to fire.
+- Old event-log "Win32.memcpy ← DrawPanadapterDX2D" frames were CLR post-mortem stack-walk artifacts. Dead end, confirmed.
+
+**~~ROOT CAUSE — render/lifecycle RACE on `_d2dRenderTarget`~~ — RETRACTED 2026-08-22:**
+- ~~The render loop never acquires `_objDX2Lock`...~~ **WRONG**: `RenderDX2D` takes `lock (_objDX2Lock)` at display.cs:**3998** and holds it around its ENTIRE frame body (3998–4406). The original grep looked for lock sites *inside* lines 4000–8700 and missed that the lock at 3998 encloses the region. All locked lifecycle paths are therefore mutually exclusive with the frame — no dispose-during-frame race through this lock exists.
+- The "why Classic-only" timing theory (slow frames widen race window) is also dead. The real explanation is branch selection — see 2026-08-22 entry.
+- Everything else in this entry (fail-fast mechanism, dump toolchain) remains valid.
+
+**Why Classic-colormap-only** *(superseded)*: Classic colours by *continuous* brightness × line colour × alpha → per-frame `brushCache` misses nearly every column → thousands of `CreateSolidColorBrush` COM calls/frame → very slow frames → **huge race window**. LUT colormaps quantize to ≤256×alpha keys → tiny brush set → fast frames → microscopic window. Colormap affects *timing*, not correctness.
+
+**Dump-analysis toolchain notes (reusable)**:
+- dbghelp-from-PowerShell works, BUT plain System32 dbghelp has NO working symsrv (SRV* paths silently resolve exports only). Workaround that WORKS: extract CV record (GUID+age) from dump module list (module stream entry +76/+80), download PDB via `https://msdl.microsoft.com/download/symbols/<pdb>/<GUID-N><ageHex>/<pdb>`, then co-locate **copy of matching DLL + PDB in one flat dir** (`%TEMP%\symtest\`) and `SymInitialize(hp, thatDir, false)` + `SymLoadModuleEx` pointing at the copied DLL.
+- **MUST match the exact runtime build**: machine has many runtimes; dump used **10.0.1026.32716 = installed folder `10.0.10`** (`C:\Program Files\dotnet\shared\Microsoft.NETCore.App\10.0.10\coreclr.dll`, GUID `{53bf947e-e5ca-4d92-bd36-51f1e7e1dda8}` age 1 — verified equal to local file). Wrong-version DLL gives err=487 or nonsense names.
+- Line numbers work: `SymGetLineFromAddrW64` with `IMAGEHLP_LINEW64.SizeOfStruct=40`; FileName is WIDE → `PtrToStringUni` (Ansi truncates to "D").
+- Scripts kept in `%TEMP%\opencode\`: `get_pdb.ps1` (CV extract+download), `resolve_v3.ps1` (co-location trick), `resolve_v5.ps1` (GUID verify + line info), `scan_threads.ps1` (per-thread graphics-module raw-stack tally), `find_av_record.ps1` (stack scan for EXCEPTION_RECORDs), `find_module.ps1`, `diag_syms.ps1`.
+- dotnet-dump quirks: pipe commands + `quit` via stdin; NO `u`/disassembly command; `setthread` wants decimal index or `-t <osid>`; `ip2md` maps JIT heap addresses (P/Invoke IL-stub return addrs like 0x7FF869F730EC report "not in JIT code range" — normal).
+- Raw-stack scan of other threads: UI thread idle in `WaitMessage`; five native-only threads show identical faint `d2d1:6 dxgi:2` residue (stale data, DSP/audio threads — not suspects).
+
+**NEXT STEPS** *(superseded — see 2026-08-22 entry)*: ~~identify racing op / pick fix architecture A-B-C~~. Still valid: after fix verified, REMOVE WER LocalDumps key `HKLM\...\LocalDumps\Thetis.exe` and optionally delete dumps\*.dmp (2 GB).
+
+### 2026-08-22 (RACE THEORY RETRACTED — real lead: `m_bDX2_3d_fill_brush` stale after RT recreation)
+Session goal was implementing "Option B" (RWLS gate). Pre-edit verification **destroyed the premise** and produced a better lead.
+
+**What was proven this session:**
+1. `RenderDX2D` holds `lock (_objDX2Lock)` around its entire frame body — display.cs:**3998** (lock opens) through 4406. The whole Draw* call tree therefore runs under that lock already.
+2. Complete lock-site map built (`%TEMP%\opencode\map_locks.ps1`, 53 sites): every lifecycle method IS gated — `initDisplayArrays`:3000, `ResetWaterfallBmp/2`:3203/3258, `ShutdownDX2D`:3352, `getGPUNameInUse`:3495, `initDX2D`:3517, `DXVersion`:3729, `ResetDX2DModeDescription`:3758, `resizeDX2D`:3784+3852, `setupAliasing`:3895+3922, `RenderDX2D`:3998, `SetDX2BackgoundImage`:8744, `buildDX2Resources`:9255, `buildFontsDX2D`:9389, `PurgeBuffers`:12610, `SetSantaGif`:12832, plus ~30 property setters (lines 2072–2765; script mislabels them "OnCentreFrequencyChanged" because property setters don't match its method regex).
+3. `releaseDX2Resources`/`releaseFonts` ELIMINATED as unlocked suspects: only called from display.cs 3364/3365 (inside locked ShutdownDX2D), 9259 (buildDX2Resources), 9393 (buildFontsDX2D).
+4. Shutdown flow confirmed serialized: console.cs:28234–28237 sets pause flag → `Join(500)` → locked `ShutdownDX2D()`.
+5. Lock-free methods touching D2D objects are all render-path helpers invoked under the frame lock (drawLine/drawString wrappers, grids, drawSpots, getSpotFlagBitmap@12978 via drawSpots@12213, etc.) — not cross-thread.
+
+**THE LEAD — repro path fully traced to a branch only Classic+Sync-Off can reach:**
+- Checkbox handler does NOTHING but set the bool: frm3DPanadapter.cs:370–373 → `Display.Pan3DWaterfallSync = value` (display.cs:586, plain setter, no side effects). So the crash happens **inside the next rendered frame**, in code that branches differently when sync is off.
+- Fill-brush selection in `DrawPanadapterDX2D` (display.cs:5558–5608):
+  - `liveUseColormap = _pan3DEnabled && _pan3DColorMap > 0 && rx==1 && !local_mox` (:5455) → Turbo/Viridis/Inferno take this regardless of sync ⇒ never crash ✓
+  - `liveUseWaterfallSync = !liveUseColormap && _pan3DEnabled && _pan3DWaterfallSync && rx==1 && !local_mox` (:5460) → Classic + sync-ON takes this ⇒ never crash ✓
+  - else `if (draw3DHistory && !local_mox) { if (!m_bUseLinearGradient) { if (m_bDX2_3d_fill_brush == null) { ...create... } activeFillBrush = m_bDX2_3d_fill_brush; } }` → **Classic + sync-OFF is the ONLY combination reaching `m_bDX2_3d_fill_brush`** ⇒ exactly the crashing config ✓✓
+- Prime suspect: `m_bDX2_3d_fill_brush` is a static `ID2D1LinearGradientBrush` added by OUR Tier-1 work ("vertical gradient: bright near trace ~55% alpha → ~16%", created lazily at :5590–5605 via `CreateGradientStopCollection` + `CreateLinearGradientBrush`). D2D device-dependent resources are **render-target-bound**: if `_d2dRenderTarget` gets recreated (`resizeDX2D` on window resize / `RecreateTarget` retry :4361–4369 / DeviceRemoved retry :4384–4390) while this brush isn't disposed+nulled alongside the other `m_bDX2_*` brushes in `releaseDX2Resources()`, the stale brush survives and the next sync-OFF classic frame calls `DrawLine(staleBrush)` (:5610) → native AV inside d2d1 → CLR fail-fast. Crash IP frozen at exactly that DrawLine fits.
+- Fits "often crashes on SECOND toggle cycle": brush must exist BEFORE an RT recreation to become stale (created during an earlier sync-off period; recreation meanwhile; uncheck again → draw with stale brush).
+- Secondary hygiene note: the `stopsColl` from `CreateGradientStopCollection` (:5598) is never released — leak, harmless to the crash but fix alongside.
+
+**NEXT STEPS (implement immediately):**
+1. Grep all references to `m_bDX2_3d_fill_brush`; read `releaseDX2Resources()` (9092–9252) to confirm it's missing from the dispose list.
+2. Fix: dispose + null `m_bDX2_3d_fill_brush` (and release `stopsColl`) everywhere the other `m_bDX2_*` brushes are released; if `resizeDX2D` recreates the RT without calling `releaseDX2Resources`, null the brush there too.
+3. Rebuild, user repros (classic colormap, uncheck Waterfall Sync, resize between toggles), confirm no crash.
+4. Then cleanup: REMOVE WER LocalDumps key `HKLM\...\LocalDumps\Thetis.exe`; optionally delete dumps\*.dmp (2 GB).
+
+### 2026-08-22 (BLOCKER FIXED — real root cause: dispose-without-null in `Pan3DLineColor` setter)
+Followed the NEXT STEPS above; findings overturned the RT-recreation theory and identified the true bug.
+
+**What was found:**
+1. `releaseDX2Resources()` was NEVER missing the brush — display.cs:9117 disposes it, :9183 nulls it. That theory is dead.
+2. **THE BUG — display.cs `Pan3DLineColor` setter (~line 600)**: `_pan3DLineColor = value; if (m_bDX2_3d_fill_brush != null) m_bDX2_3d_fill_brush?.Dispose();` — disposes WITHOUT nulling. The lazy-create guard at :5595 (`if (m_bDX2_3d_fill_brush == null)`) then skips recreation, and the next Classic+Sync-OFF frame assigns a DISPOSED COM brush as `activeFillBrush` → `DrawLine(...)` at :5610 → native AV inside d2d1 → CLR fail-fast (c0000005). Exactly the frozen-RIP signature from the dump.
+3. **Repro chain now fully explains every observed symptom**:
+   - Only Classic crashes: LUT colormaps take the `liveUseColormap` branch and never touch this brush; waterfall-sync takes its own branch. Classic + sync-OFF is the only path that uses it.
+   - Often the SECOND reset-defaults→uncheck cycle: `PushAllSettings()` (frm3DPanadapter.cs:355, called from ctor AND btn3DResetDefaults_Click) fires the setter every time. First cycle: brush still null → harmless no-op; uncheck creates fresh brush. Second cycle: setter disposes-but-leaves-non-null → uncheck → next frame draws through dead pointer.
+   - "Uncheck" itself is not causal — any setter call after the brush exists arms the bomb; unchecking sync just routes rendering into the poisoned branch.
+4. `stopsColl` leak confirmed (handoff hygiene note): `CreateGradientStopCollection` result never released after `CreateLinearGradientBrush`.
+5. Sweep for same bug class (`if (x != null) x?.Dispose();` without null) across display.cs + MeterManager.cs: all other sites live inside bulk-release methods that unconditionally null every field afterwards, or are locals. No other instances.
+6. resizeDX2D recreates `_d2dRenderTarget` without releasing static brushes — upstream-by-design (same D3D device domain; all other m_bDX2_* brushes survive resizes in practice), left untouched.
+
+**Fix applied (display.cs):**
+- Setter: dispose + set `m_bDX2_3d_fill_brush = null`
+- Creation site: `stopsColl.Dispose()` after brush creation
+
+**Brush-cache audit (user asked to confirm the anti-churn fixes survived the Vortice port — they did):**
+| Path | Mechanism | Status |
+|---|---|---|
+| 3D surface fills/outlines/walls/grid floor | per-frame `brushCache` Dictionary<int,ID2D1SolidColorBrush>, disposed in `finally` (~:6548) | ✓ intact |
+| Live trace colormap/waterfall-sync | `liveWfBrushCache`, cleared every frame (:6037–6041) | ✓ intact |
+| Classic fill gradient | lazy singleton `m_bDX2_3d_fill_brush` (now correctly invalidated) | ✓ fixed |
+| General colour brushes | `_DX2Brushes` / `_DXBrushes` keyed caches via getDXBrushForColour, cleared by clearAllDynamicBrushes() in both files' release paths | ✓ intact |
+| RX/TX data gradients | built-once with `_bRebuild*LinearGradBrush` flags | ✓ intact |
+
+No uncached per-column/per-row `CreateSolidColorBrush` remains in any hot loop. Note: Classic surface mode still generates many distinct colours per frame (continuous brightness × dim × haze quantised to int RGB keys) so its cache hit-rate is inherently lower than LUT colormaps — known/accepted since Tier 1; LUT colormaps (Turbo/Viridis/Inferno) remain the fast path.
+
+Build clean x64 Release (0 errors, pre-existing CA1416/MSB8012 warnings only).
+
+**NEXT:** user repro test (Classic colormap → open/close 3D settings popup + Reset Defaults between cycles → uncheck Waterfall Sync, plus window resizes between toggles). WER LocalDumps stays armed until verified, then remove `HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\Thetis.exe` + delete dumps\*.dmp (2 GB).
+
+### 2026-08-22 (fix VERIFIED by user; cleanup deferred)
+- User tested the fixed build: "seems its fixed so far" — no crash on uncheck-Waterfall-Sync. Blocker considered resolved (watch for regressions during normal use).
+- **Deferred cleanup (user choice — keep for now):** WER LocalDumps key `HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\Thetis.exe` remains armed; `dumps\Thetis.exe.21132.dmp` + `dumps\Thetis.exe.3532.dmp` (~4.3 GB) retained for future analysis if anything resurfaces. Remove both once confident.
+- Phase 2 runtime verification status: display modes working in daily use (2D pan, waterfall, meters, 3D pan with Tier-1 upgrades). Remaining Phase 2/3 checklist items are enhancements, not defects.
+- NOTE: large uncommitted working tree on `net10-migration` (Phase 2 Vortice port of display.cs/MeterManager.cs, DXVorticeCompat.cs + frm3DPanadapter.cs new files, settings/branding fixes, Tier-1 3D work, this fix) — commit when ready.
+- **2026-08-22 follow-up — "transparent panadapter + solid pink waterfall at exactly 28.000 MHz"**: NOT a code bug (user-confirmed). Per-band display scaling exists (spectrum grid min/max + waterfall hi/lo per band, applied on every band change via console.cs `UpdateWaterfallLevelValues` :8864+ and the grid-min/max switches :9247+/:9384+); 28.000 is the exact GEN(B11M)/B10M(HF) table boundary so the swap is instantaneous. User confirmed 10m Spectrum Grid Max moved to -135 in the .NET 10 upgrade and readjusted it back to normal range. Consistent with one-time blob-loss fallback for regular Option keys during DB upgrade; other bands' grid/waterfall values worth spot-checking once.
 
 ### 2026-08-19 (shutdown debugging session)
 - Root cause of shutdown hang identified: `BinaryFormatter` removed in .NET 10 caused `SaveOptions()` to throw exceptions showing MessageBox dialogs blocking the UI thread for 8-28 seconds per attempt
@@ -329,6 +552,52 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 | `_objDX2Lock` contention on shutdown | `display.cs:3329` → `console.cs:28241` | After Join(500) times out, ShutdownDX2D blocks on lock held by display thread in GPU Present |
 | PS thread cross-thread UI access | `PSForm.cs:562-587` | `CheckForIllegalCrossThreadCalls=false` suppresses but could crash during disposal |
 | TCIServer `InvokeOnConsole` potential deadlock | `TCIServer.cs:8342` | If using synchronous Invoke during shutdown |
+
+---
+
+## 3D Panadapter Modernization Plan (Phase 3)
+
+Documented 2026-08-20 after reviewing the current implementation.
+
+### Current Implementation
+
+`DrawPanadapter3DHistoryDX2D` (display.cs:6018–6286) — *simulated* 3D, no real geometry:
+
+- History of spectrum frames in `_3dHistoryBuffer` (ring buffer, pushed at `_3dPushIntervalTicks` ≈ 25 FPS, decimated to `nDecimatedWidth` columns)
+- Rows drawn back-to-front with perspective: narrower width toward back (`_pan3DPerspective`), rising baseline (`_pan3DDepth`), smoothstep depth curve, uniform ridge height (`_pan3DRidgeHeight`)
+- **PASS 1**: per-column vertical `DrawLine` fill (trace → absolute bottom, thickness = `local_Decimation`)
+- **PASS 2**: ridge outline hairline pass, brighter crest
+- Coloring: waterfall-sync palette / user gradient (pre-sampled 64-entry palette) / line color × brightness; depth dimming + linear haze blend toward background
+- Per-frame brush cache dictionary avoids COM brush churn
+- Existing user knobs: `_pan3DPerspective`, `_pan3DDepth`, `_pan3DRidgeHeight`, `_pan3DDepthFade`, `_pan3DLineCount`, `_pan3DLineColor`, `_pan3DWaterfallSync`
+- Cost: ~rows × columns × 2 DrawLine calls per frame (e.g. 100 × 800 × 2 ≈ 160K calls) — all CPU-side D2D command submission
+- Known artifact: "edge stepping" — jagged left/right silhouette because each row's inset differs (`inset = W*(1-rowWidthFrac)*0.5`) and outline runs under an `AntialiasMode.Aliased` clip
+
+### Tier 1 — Quick wins inside existing D2D renderer (days each)
+
+1. **Temporal interpolation between frames** — push rate is ~25 FPS, display is 60; interpolate 1–2 sub-rows between adjacent history frames so the surface morphs continuously. Biggest perceived-smoothness win per LOC.
+2. **Edge smoothing** — draw row outlines as filled path geometries and/or enable per-primitive anti-aliasing for the outline pass; turns the staircase silhouette into clean converging edges.
+3. **Side walls / end caps** — fill left/right edge quads (front trace → back trace → baseline) with darkened surface color; reads as a solid object (SDR Console / Aether style).
+4. **Perceptual colormaps** — add Turbo/Viridis/Inferno lookup tables alongside existing gradient/waterfall-sync plumbing; Turbo makes weak signals pop against noise floor.
+5. **Perspective grid floor** — faint receding gridlines under the surface matching row baselines; cheap depth cue.
+6. **Exponential fog** — replace linear haze (`haze = tSmooth * strength * 0.35`) with `1 - exp(-k*t)`; saturating fog looks more natural.
+
+### Tier 2 — Bloom/glow (medium)
+
+Upgrade render target to `ID2D1DeviceContext` (Vortice supports; D2D factory/device already exist). Effects graph: extract bright crests → Gaussian blur → additive composite = modern "neon ridge" look. Care needed with existing present path and render-target type used elsewhere.
+
+### Tier 3 — True GPU mesh renderer (flagship deliverable)
+
+Replace line emulation with a Direct3D11 triangle mesh; the port already owns an `ID3D11Device` + swap chain:
+
+- Vertex buffer: X=frequency, Y=amplitude, Z=depth; a few thousand vertices updated per frame — trivial GPU load
+- Pixel shader: palette lookup by height, exponential fog by depth, normal-based lighting (finite-difference normals; slopes facing virtual light brighten — what makes terrain renders look solid)
+- MSAA gives free anti-aliasing; edge stepping becomes geometrically impossible
+- 200+ rows at 60 FPS with near-zero CPU cost vs today's ~160K DrawLine calls/frame
+- Coexists with D2D on the shared swap chain: D3D draws surface, D2D overlays grid/text/controls
+- Foundation for compute-shader spectrum processing (final Phase 3 item)
+
+**Recommended order**: Tier 1 items compound and ship immediate visible results → then commit to Tier 3 as flagship; Tier 2 optional polish either side of it.
 
 ---
 

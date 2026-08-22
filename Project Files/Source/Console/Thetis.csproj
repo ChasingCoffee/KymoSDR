@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -61,12 +61,6 @@
     <PackageReference Include="NAudio.WinForms" Version="2.3.0" />
     <PackageReference Include="NAudio.WinMM" Version="2.3.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="SharpDX" Version="4.2.0" />
-    <PackageReference Include="SharpDX.Desktop" Version="4.2.0" />
-    <PackageReference Include="SharpDX.Direct2D1" Version="4.2.0" />
-    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
-    <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
-    <PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
     <PackageReference Include="SkiaSharp" Version="3.119.2" />
     <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
@@ -142,6 +136,9 @@
     <Compile Include="clsSingleInstance.cs" />
     <Compile Include="clsThetisSkinService.cs" />
     <Compile Include="clsTouchHandler.cs" />
+    <Compile Include="frm3DPanadapter.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="frmAbout.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -257,6 +254,7 @@
       <DependentUpon>frmSeqLog.cs</DependentUpon>
     </Compile>
     <Compile Include="MeterManager.cs" />
+    <Compile Include="DXVorticeCompat.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
@@ -997,17 +995,17 @@ echo } &gt;&gt; "$(ProjectDir)VersionInfo.cs"
   </PropertyGroup>
 
   <Target Name="PostBuild" AfterTargets="Build">
-    <Exec Command="copy /Y &quot;..\..\..\lib\fftw_$(PlatformName)\libfftw3-3.dll&quot; &quot;$(ProjectDir)$(OutDir)&quot;;" />
-    <Exec Command="copy /Y &quot;..\..\..\lib\fftw_$(PlatformName)\libfftw3f-3.dll&quot; &quot;$(ProjectDir)$(OutDir)&quot;;" />
-    <Exec Command="copy /Y &quot;..\..\..\lib\NR_Algorithms_$(PlatformName)\rnnoise.dll&quot; &quot;$(ProjectDir)$(OutDir)&quot;;" />
-    <Exec Command="copy /Y &quot;..\..\..\lib\NR_Algorithms_$(PlatformName)\rnnoise_avx2.dll&quot; &quot;$(ProjectDir)$(OutDir)&quot;;" />
-    <Exec Command="copy /Y &quot;..\..\..\lib\NR_Algorithms_$(PlatformName)\specbleach.dll&quot; &quot;$(ProjectDir)$(OutDir)&quot;;" />
-    <Exec Command="copy /Y &quot;$(ProjectDir)CAT\CATStructs.xml&quot; &quot;$(ProjectDir)$(OutDir)&quot;;" />
-    <Exec Command="copy /Y &quot;..\..\..\lib\Thetis-resources\calculus&quot; &quot;$(ProjectDir)$(OutDir)&quot;" />
-    <Exec Command=":: copy /Y &quot;..\..\..\lib\Thetis-resources\zetaHat.bin&quot; &quot;$(ProjectDir)$(OutDir)&quot;" />
-    <Exec Command="copy /Y &quot;..\..\..\lib\NR_Algorithms_x64\rnnoise_weights_small.bin&quot; &quot;$(ProjectDir)$(OutDir)&quot;" />
-    <Exec Command="copy /Y &quot;..\..\..\lib\NR_Algorithms_x64\rnnoise_weights_large.bin&quot; &quot;$(ProjectDir)$(OutDir)&quot;" />
-    <Exec Command="copy /Y &quot;$(NuGetPackageRoot)skiasharp.nativeassets.win32\3.119.2\runtimes\win-x64\native\libSkiaSharp.dll&quot; &quot;$(ProjectDir)$(OutDir)&quot;" />
+    <Copy SourceFiles="$(ProjectDir)..\..\lib\fftw_$(PlatformName)\libfftw3-3.dll" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <Copy SourceFiles="$(ProjectDir)..\..\lib\fftw_$(PlatformName)\libfftw3f-3.dll" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <Copy SourceFiles="$(ProjectDir)..\..\lib\NR_Algorithms_$(PlatformName)\rnnoise.dll" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <Copy SourceFiles="$(ProjectDir)..\..\lib\NR_Algorithms_$(PlatformName)\rnnoise_avx2.dll" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <Copy SourceFiles="$(ProjectDir)..\..\lib\NR_Algorithms_$(PlatformName)\specbleach.dll" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <Copy SourceFiles="$(ProjectDir)CAT\CATStructs.xml" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <Copy SourceFiles="$(ProjectDir)..\..\lib\Thetis-resources\calculus" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <!-- <Copy SourceFiles="$(ProjectDir)..\..\lib\Thetis-resources\zetaHat.bin" DestinationFolder="$(ProjectDir)$(OutDir)" /> -->
+    <Copy SourceFiles="$(ProjectDir)..\..\lib\NR_Algorithms_x64\rnnoise_weights_small.bin" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <Copy SourceFiles="$(ProjectDir)..\..\lib\NR_Algorithms_x64\rnnoise_weights_large.bin" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <Copy SourceFiles="$(NuGetPackageRoot)skiasharp.nativeassets.win32\3.119.2\runtimes\win-x64\native\libSkiaSharp.dll" DestinationFolder="$(ProjectDir)$(OutDir)" />
   </Target>
 
 </Project>
