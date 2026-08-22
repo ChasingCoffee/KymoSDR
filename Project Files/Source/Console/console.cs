@@ -51552,6 +51552,7 @@ namespace Thetis
                 case OtherButtonId.CURSOR_INFO: DoGeneralSettingAction(rx, OtherButtonId.CURSOR_INFO, !GetGeneralSetting(rx, OtherButtonId.CURSOR_INFO)); break;
                 case OtherButtonId.SPOTS: DoGeneralSettingAction(rx, OtherButtonId.SPOTS, !GetGeneralSetting(rx, OtherButtonId.SPOTS)); break;
                 case OtherButtonId.ACTITVE_PEAK: DoGeneralSettingAction(rx, OtherButtonId.ACTITVE_PEAK, !GetGeneralSetting(rx, OtherButtonId.ACTITVE_PEAK)); break;
+                case OtherButtonId.PAN3D: DoGeneralSettingAction(rx, OtherButtonId.PAN3D, !GetGeneralSetting(rx, OtherButtonId.PAN3D)); break;
                 case OtherButtonId.FILL_SPECTRUM: DoGeneralSettingAction(rx, OtherButtonId.FILL_SPECTRUM, !GetGeneralSetting(rx, OtherButtonId.FILL_SPECTRUM)); break;
                 case OtherButtonId.RIT: DoGeneralSettingAction(rx, OtherButtonId.RIT, !GetGeneralSetting(rx, OtherButtonId.RIT)); break;
                 case OtherButtonId.XIT: DoGeneralSettingAction(rx, OtherButtonId.XIT, !GetGeneralSetting(rx, OtherButtonId.XIT)); break;
@@ -52761,6 +52762,9 @@ namespace Thetis
                 case OtherButtonId.SPOTS:
                     if (!IsSetupFormNull) return SetupForm.ShowTCISpots;
                     break;
+                case OtherButtonId.PAN3D:
+                    if (!IsSetupFormNull) return SetupForm.Display3DPanadapter;
+                    break;
                 case OtherButtonId.ACTITVE_PEAK:
                     if (!IsSetupFormNull) return SetupForm.GetActivePeakHoldsEnabledRX(rx);
                     break;
@@ -52839,6 +52843,7 @@ namespace Thetis
             SetGeneralSetting(0, OtherButtonId.PEAK_BLOBS, GetGeneralSetting(tmp_rx, OtherButtonId.PEAK_BLOBS));
             SetGeneralSetting(0, OtherButtonId.CURSOR_INFO, GetGeneralSetting(tmp_rx, OtherButtonId.CURSOR_INFO));
             SetGeneralSetting(0, OtherButtonId.SPOTS, GetGeneralSetting(tmp_rx, OtherButtonId.SPOTS));
+            SetGeneralSetting(0, OtherButtonId.PAN3D, GetGeneralSetting(tmp_rx, OtherButtonId.PAN3D));
             SetGeneralSetting(0, OtherButtonId.DITHER, GetGeneralSetting(tmp_rx, OtherButtonId.DITHER));
             SetGeneralSetting(0, OtherButtonId.RANDOM, GetGeneralSetting(tmp_rx, OtherButtonId.RANDOM));
 
@@ -52939,6 +52944,9 @@ namespace Thetis
                     return true;
                 case OtherButtonId.SPOTS:
                     if (!IsSetupFormNull) SetupForm.ShowTCISpots = state;
+                    return true;
+                case OtherButtonId.PAN3D:
+                    if (!IsSetupFormNull) SetupForm.Display3DPanadapter = state;
                     return true;
                 case OtherButtonId.ACTITVE_PEAK:
                     if (!IsSetupFormNull) SetupForm.SetActivePeakHoldsEnabledRX(rx, state);
