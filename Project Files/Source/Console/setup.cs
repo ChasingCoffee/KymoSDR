@@ -658,6 +658,7 @@ namespace Thetis
             // push 3D panadapter enable state to Display (skipped during init due to 'initializing' guard)
             // remaining 3D settings are pushed by the 3D Panadapter Settings window
             Display.Pan3DEnabled = chkDisplay3DPanadapter.Checked;
+            console.SyncDisplay3DPanButton(chkDisplay3DPanadapter.Checked);
 
             udDisplayScopeTime_ValueChanged(this, EventArgs.Empty);
 
@@ -12915,6 +12916,7 @@ namespace Thetis
         {
             if (initializing) return;
             Display.Pan3DEnabled = chkDisplay3DPanadapter.Checked;
+            console.SyncDisplay3DPanButton(chkDisplay3DPanadapter.Checked);
         }
 
         private frm3DPanadapter _frm3DPanadapter = null;

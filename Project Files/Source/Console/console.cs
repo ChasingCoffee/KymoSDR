@@ -753,6 +753,20 @@ namespace Thetis
             InitializeComponent();								// Windows Forms Generated Code
             Common.DoubleBufferAll(this, true);
 
+            // '3D Pan' toggle button in the display toolbar — sits below Peak,
+            // to the right of CTUN (free slot at 52,51 in panelDisplay2)
+            btnDisplay3DPan = new CheckBoxTS();
+            btnDisplay3DPan.Name = "chkDisplay3DPan";
+            btnDisplay3DPan.Text = "3D Pan";
+            btnDisplay3DPan.Location = new System.Drawing.Point(52, 51);
+            btnDisplay3DPan.Size = new System.Drawing.Size(50, 23);
+            btnDisplay3DPan.FlatAppearance.BorderSize = 0;
+            btnDisplay3DPan.TextAlign = ContentAlignment.MiddleCenter;
+            btnDisplay3DPan.TabIndex = 10;
+            toolTip1.SetToolTip(btnDisplay3DPan, "3D Panadapter on/off");
+            btnDisplay3DPan.CheckedChanged += new EventHandler(chkDisplay3DPan_CheckedChanged);
+            panelDisplay2.Controls.Add(btnDisplay3DPan);
+
             InitialiseAndromedaMenus();
 
             //
@@ -29968,6 +29982,25 @@ namespace Thetis
             {
                 AVGChangedHandlers?.Invoke(1, old_on, specRX.GetSpecRX(0).AverageOn);
             }
+        }
+
+        private CheckBoxTS btnDisplay3DPan;
+
+        private void chkDisplay3DPan_CheckedChanged(object sender, EventArgs e)
+        {
+            Display.Pan3DEnabled = btnDisplay3DPan.Checked;
+            btnDisplay3DPan.BackColor = btnDisplay3DPan.Checked ? button_selected_color : SystemColors.Control;
+        }
+
+        /// <summary>
+        /// Keeps the display-toolbar '3D Pan' button in sync when the state is
+        /// changed elsewhere (setup checkbox at boot / by the user).
+        /// </summary>
+        public void SyncDisplay3DPanButton(bool state)
+        {
+            if (btnDisplay3DPan == null) return;
+            if (btnDisplay3DPan.Checked != state) btnDisplay3DPan.Checked = state; // fires CheckedChanged -> engine + colour
+            else btnDisplay3DPan.BackColor = state ? button_selected_color : SystemColors.Control;
         }
 
         private void chkDisplayPeak_CheckedChanged(object sender, System.EventArgs e)
