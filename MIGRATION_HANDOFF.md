@@ -684,6 +684,25 @@ Delivers the at-a-glance measurement tool for the last open Tier-3 item (mesh GP
 
 Build clean; user verified placement/readout ("perfect"). Actual mesh-vs-D2D GPU% reading session still pending.
 
+### 2026-08-23 (GPU mesh reworked to Aether-style curtain topology — spike "ribbon" bug fixed, RUNTIME VERIFIED)
+User tuned to an AM carrier: on the D2D 3D path the carrier renders as a thin red needle per history row (correct), but on the GPU mesh it showed a tall coloured **ribbon** hanging under the tip and running front-to-back.
+
+Root cause: our mesh was a continuous **heightfield sheet** — quads interpolate heights across neighbouring columns, so a single-column spike (carrier ≈ 1 FFT bin) creates near-vertical cliff faces sweeping floor→peak along full depth. The face pixels take low/mid palette colours (blue/green in Classic) and read as a ribbon. The D2D path has no such geometry: it paints each column independently, fill stroke from its own crest down, background visible either side of a needle.
+
+Two pixel-shader band-aids tried and rejected before the real fix: (1) colour faces with neighbourhood-max crest strength — ribbon became uniform pink but geometry remained; (2) bilinear-sample + `clip()` discard of below-crest face pixels — introduced GLOBAL choppiness (bilinear exposed a latent half-texel offset between grid UVs `c/(cols-1)` and texel centres `(c+0.5)/cols`) plus a residual upper-face band. LESSON: don't patch away geometry that shouldn't exist with per-pixel heuristics.
+
+Reference answer (`%TEMP%\opencode\aether\resources\shaders\dss_mesh.frag`): Aether's GPU mesh is NOT a heightfield either — *"Fill vertices (edge >= 0) draw the original full-height coloured curtains"* — per-column curtains from crest to floor, i.e. the GPU equivalent of exactly what our D2D path does.
+
+Rework (`Display.Pan3DMesh.cs`, user-approved "the aether way", verified "working perfect"):
+- **Vertex grid** → per (row,col) PAIR of vertices, float4(u, v, corner, 0), stride 16: corner 0 = crest above column, corner 1 = directly below at absolute `CB_BottomY`. `vs_main` branches on corner; everything else (perspective inset/rwf/baseline/zCurve lift) unchanged.
+- **Index buffers**: sheet IB now `rows*(cols-1)*6` per-row curtain quads (row-contiguous); line IB retargeted to crest vertices (`idx*2`, stride 2 between neighbours).
+- **Draw loop**: per row back-to-front, hairline(r) then curtain(r) — every row draws (old code skipped the r=0 sheet block as the live trace covers it; front curtain now included for full parity).
+- **ps_main** reverted to plain PointSamp taps + palette(s) (no smax/clip experiments); still opaque — curtains tile edge-to-edge below crests so coverage stays fully solid (explicit user concern beforehand: "it won't look solid like now?" — it does).
+- **Input layout** POSITION → R32G32B32A32_Float; **MeshConstants** gained `TexelY` (1/rows), buffer 48→64 bytes.
+- **Latent sampling fix**: new `TexelAt(u,v)` remaps grid uv → texel-centre uv for ALL height taps (VS/PS/line PS). The old code sampled raw grid uv, straddling texel boundaries by half a texel everywhere.
+
+Build clean; user verified needle rendering + overall look.
+
 ### 2026-08-19 (shutdown debugging session)
 - Root cause of shutdown hang identified: `BinaryFormatter` removed in .NET 10 caused `SaveOptions()` to throw exceptions showing MessageBox dialogs blocking the UI thread for 8-28 seconds per attempt
 - ErrorLog.txt showed identical stack trace repeated 10+ times: `BinaryFormatter.Serialize` → `SerializeToBase64` → `MultiMeterIO.GetSaveData` → `SaveOptions` → `Console_Closing`

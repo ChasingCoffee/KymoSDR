@@ -12,14 +12,17 @@
 // per depth row tS: width frac 1-tS*(1-backW), inset, baseline bottomY-tS*depthSpan,
 // foreshortened ridge frontRidge*rowWidthFrac, floor lift pow(s,zCurve).
 // Heights are streamed as an R32Float texture (one texel per column x depth row) and the
-// static vertex buffer is just a UV grid, so the per-frame CPU cost is one small texture
-// update. Colour = palette texture lookup by raw strength (built per frame from the same
-// SelectSurfaceColour sources as the D2D path), plus horizontal slope shading and linear
-// depth haze to match the established look.
+// static vertex buffer is just a curtain grid - per column per row a crest vertex and a
+// floor vertex (Aether's "full-height coloured curtains") - so the per-frame CPU cost is
+// one small texture update. Each cell quad hangs vertically from its crest edge to the
+// absolute bottom: narrow carriers render as thin vertical needles exactly like the CPU
+// path's per-column fills, with no interpolated cliff walls. Colour = palette texture
+// lookup by raw strength (built per frame from the same SelectSurfaceColour sources as
+// the D2D path), plus horizontal slope shading and linear depth haze to match the look.
 //
 // Tier-1 parity features rendered by this pass (D2D line renderer equivalents):
-//   - crest hairlines: LineList over the same UV grid, ps_line replicating the PASS 2
-//     outline formula; drawn back-to-front interleaved with sheet blocks so occlusion
+//   - crest hairlines: LineList over the crest vertices, ps_line replicating the PASS 2
+//     outline formula; drawn back-to-front interleaved with curtain rows so occlusion
 //     matches the D2D fill/outline interleave
 //   - perspective grid floor + side rails: flat vertex-colour lines, D2D alphas 0.10->0.03 / 0.12
 //   - side walls / end caps: edge-trace triangle strips down to absolute bottom,
@@ -127,6 +130,7 @@ namespace Thetis
                 float CB_Haze;      // haze strength
                 float3 CB_Background;
                 float CB_TexelX;    // 1/cols for neighbour taps
+                float CB_TexelY;    // 1/rows
             };
 
             Texture2D HeightTex : register(t0);
@@ -140,29 +144,49 @@ namespace Thetis
                 float2 uv : TEXCOORD0;
             };
 
-            PSIN vs_main(float2 uv : POSITION)
+            // grid uv -> texture uv. Grid coords are vertex indices normalised to
+            // [0,1] (u = c/(cols-1)) while texel centres live at (i+0.5)/size -
+            // remap so taps hit column centres exactly instead of straddling.
+            float2 TexelAt(float u, float v)
+            {
+                float cols = 1.0 / CB_TexelX;
+                float rows = 1.0 / CB_TexelY;
+                return float2((u * (cols - 1.0) + 0.5) / cols,
+                              (v * (rows - 1.0) + 0.5) / rows);
+            }
+
+            // Aether-style curtain vertex: (u, v, corner, 0). corner 0 hangs at the
+            // row's crest above column u; corner 1 drops straight down to the
+            // absolute plot bottom. One quad per cell per row means a narrow carrier
+            // renders as its own thin vertical stripe - exactly like the CPU path's
+            // per-column fills - instead of the diagonal cliff wall a continuous
+            // heightfield sheet would interpolate across the neighbouring cells.
+            PSIN vs_main(float4 vin : POSITION)
             {
                 PSIN o;
-                float v = uv.y;                                  // 0 = front row, 1 = back row
+                float u = vin.x;
+                float v = vin.y;                                 // 0 = front row, 1 = back row
                 float rwf = 1.0 - v * (1.0 - CB_BackW);          // row width fraction
                 float inset = CB_W * (1.0 - rwf) * 0.5;
-                float h = HeightTex.SampleLevel(PointSamp, float2(uv.x, v), 0).r;
+                float h = HeightTex.SampleLevel(PointSamp, TexelAt(u, v), 0).r;
                 float lift = pow(max(h, 0.0), CB_ZCurve);
-                float x = inset + uv.x * (CB_W - 2.0 * inset);
+                float x = inset + u * (CB_W - 2.0 * inset);
                 float baseline = CB_BottomY - v * CB_DepthSpan;
-                float y = baseline - lift * CB_FrontRidge * rwf; // uniform perspective scaling
+                float yTop = baseline - lift * CB_FrontRidge * rwf; // uniform perspective scaling
+                float y = (vin.z > 0.5) ? CB_BottomY : yTop;        // curtains reach the floor
                 o.pos = float4(x / CB_W * 2.0 - 1.0, 1.0 - y / CB_TargetH * 2.0, 0.0, 1.0);
-                o.uv = uv;
+                o.uv = float2(u, v);
                 return o;
             }
 
             float4 ps_main(PSIN i) : SV_Target
             {
-                float s = HeightTex.SampleLevel(PointSamp, i.uv, 0).r;
+                float2 t = TexelAt(i.uv.x, i.uv.y);
+                float s = HeightTex.SampleLevel(PointSamp, t, 0).r;
                 // horizontal slope shading (Aether kSlopeGain=0.55, shade 0.68-1.32),
                 // matching the D2D path's per-column shade so the look carries over
-                float hl = HeightTex.SampleLevel(PointSamp, i.uv - float2(CB_TexelX, 0.0), 0).r;
-                float hr = HeightTex.SampleLevel(PointSamp, i.uv + float2(CB_TexelX, 0.0), 0).r;
+                float hl = HeightTex.SampleLevel(PointSamp, t - float2(CB_TexelX, 0.0), 0).r;
+                float hr = HeightTex.SampleLevel(PointSamp, t + float2(CB_TexelX, 0.0), 0).r;
                 float slope = pow(max(hl, 0.0), CB_ZCurve) - pow(max(hr, 0.0), CB_ZCurve);
                 float shade = clamp(1.0 + 0.55 * slope, 0.68, 1.32);
 
@@ -173,9 +197,9 @@ namespace Thetis
                 float4 col = PaletteTex.SampleLevel(LinearSamp, float2(saturate(s), 0.5), 0);
                 col.rgb *= dim * shade;
                 col.rgb = lerp(col.rgb, CB_Background, saturate(haze));
-                // fully opaque: depth is already conveyed by dim + haze, and unlike the
-                // D2D path (many stacked translucent curtains converging to opaque) a
-                // single sheet would let the backdrop bleed through at any alpha < 1
+                // opaque curtains tile edge-to-edge below the crests so the surface
+                // stays fully solid and the backdrop never bleeds through; depth is
+                // already conveyed by dim + haze exactly as on the D2D path
                 return float4(col.rgb, 1.0);
             }
 
@@ -186,7 +210,7 @@ namespace Thetis
             // DestBlend InvSrcAlpha) composites as true SourceOver, matching D2D.
             float4 ps_line(PSIN i) : SV_Target
             {
-                float s = HeightTex.SampleLevel(PointSamp, i.uv, 0).r;
+                float s = HeightTex.SampleLevel(PointSamp, TexelAt(i.uv.x, i.uv.y), 0).r;
                 float v = i.uv.y;
 
                 float4 col = PaletteTex.SampleLevel(LinearSamp, float2(saturate(s), 0.5), 0);
@@ -319,13 +343,13 @@ namespace Thetis
                     new Vortice.Direct3D11.InputElementDescription("COLOR", 0, Format.R32G32B32A32_Float, 8, 0),
                 }, vsFlatBytes);
 
-                Vortice.Direct3D11.InputElementDescription[] layout = new Vortice.Direct3D11.InputElementDescription[]
-                {
-                    new Vortice.Direct3D11.InputElementDescription("POSITION", 0, Format.R32G32_Float, 0),
-                };
+                        Vortice.Direct3D11.InputElementDescription[] layout = new Vortice.Direct3D11.InputElementDescription[]
+                        {
+                            new Vortice.Direct3D11.InputElementDescription("POSITION", 0, Format.R32G32B32A32_Float, 0),
+                        };
                 _meshIL = device.CreateInputLayout(layout, vsBytes);
 
-                _meshCB = device.CreateBuffer(new BufferDescription(48, BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
+                _meshCB = device.CreateBuffer(new BufferDescription(64, BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
                 _meshBlend = device.CreateBlendState(Vortice.Direct3D11.BlendDescription.AlphaBlend);
                 // winding ends up CCW in NDC (y-flip in the VS) - disable culling entirely
                 _meshRS = device.CreateRasterizerState(new Vortice.Direct3D11.RasterizerDescription(CullMode.None, Vortice.Direct3D11.FillMode.Solid));
@@ -372,47 +396,52 @@ namespace Thetis
                 _meshHeightSRV?.Dispose(); _meshHeightSRV = null;
                 _meshHeightTex?.Dispose(); _meshHeightTex = null;
 
-                // UV grid: rows*cols vertices
-                var verts = new float[rows * cols * 2];
+                // Curtain grid (Aether-style): per (row,col) a PAIR of vertices -
+                // corner 0 = crest above the column, corner 1 = directly below at
+                // the absolute plot bottom. float4(u, v, corner, 0), stride 16.
+                var verts = new float[rows * cols * 2 * 4];
                 for (int r = 0; r < rows; r++)
                 {
                     float v = r / (float)(rows - 1);
                     for (int c = 0; c < cols; c++)
                     {
-                        int o = (r * cols + c) * 2;
-                        verts[o] = c / (float)(cols - 1);
-                        verts[o + 1] = v;
+                        float u = c / (float)(cols - 1);
+                        int o = (r * cols + c) * 8;
+                        verts[o] = u; verts[o + 1] = v; verts[o + 2] = 0f; verts[o + 3] = 0f;
+                        verts[o + 4] = u; verts[o + 5] = v; verts[o + 6] = 1f; verts[o + 7] = 0f;
                     }
                 }
                 _meshVB = device.CreateBuffer(verts, new BufferDescription((uint)(verts.Length * sizeof(float)), BindFlags.VertexBuffer, ResourceUsage.Immutable));
 
-                uint[] idx = new uint[(rows - 1) * (cols - 1) * 6];
+                // curtain quads: one cell [c,c+1] per row, top edge joins the two
+                // crests, bottom edge lies on the absolute floor line
+                uint[] idx = new uint[rows * (cols - 1) * 6];
                 int ii = 0;
-                for (int r = 0; r < rows - 1; r++)
+                for (int r = 0; r < rows; r++)
                 {
                     for (int c = 0; c < cols - 1; c++)
                     {
-                        uint a = (uint)(r * cols + c);
-                        uint b = a + 1;
-                        uint d = a + (uint)cols;
-                        uint e = d + 1;
-                        idx[ii++] = a; idx[ii++] = d; idx[ii++] = b;
-                        idx[ii++] = b; idx[ii++] = d; idx[ii++] = e;
+                        uint tl = (uint)((r * cols + c) * 2);   // crest left
+                        uint bl = tl + 1;                        // floor left
+                        uint tr = tl + 2;                        // crest right
+                        uint br = tr + 1;                        // floor right
+                        idx[ii++] = tl; idx[ii++] = bl; idx[ii++] = tr;
+                        idx[ii++] = tr; idx[ii++] = bl; idx[ii++] = br;
                     }
                 }
                 _meshIB = device.CreateBuffer(idx, new BufferDescription((uint)(idx.Length * sizeof(uint)), BindFlags.IndexBuffer, ResourceUsage.Immutable));
 
-                // crest hairline line-list: per row, connect adjacent columns.
-                // Row-contiguous so each row draws with a single indexed call.
+                // crest hairline line-list: per row, connect adjacent CREST vertices
+                // (even indices). Row-contiguous so each row draws with a single call.
                 uint[] lidx = new uint[rows * (cols - 1) * 2];
                 int li = 0;
                 for (int r = 0; r < rows; r++)
                 {
                     for (int c = 0; c < cols - 1; c++)
                     {
-                        uint a = (uint)(r * cols + c);
+                        uint a = (uint)((r * cols + c) * 2);
                         lidx[li++] = a;
-                        lidx[li++] = a + 1;
+                        lidx[li++] = a + 2;
                     }
                 }
                 _meshLineIB = device.CreateBuffer(lidx, new BufferDescription((uint)(lidx.Length * sizeof(uint)), BindFlags.IndexBuffer, ResourceUsage.Immutable));
@@ -488,6 +517,8 @@ namespace Thetis
             public float W, TargetH, BottomY, DepthSpan;   // 0-15
             public float FrontRidge, BackW, ZCurve, Haze;  // 16-31
             public float BgR, BgG, BgB, TexelX;            // 32-47 (float3 aligned to 16)
+            public float TexelY;                           // 48-51
+            public float _pad0, _pad1, _pad2;              // 52-63
         }
 
         /// <summary>
@@ -614,6 +645,7 @@ namespace Thetis
                     BgG = m_cDX2_display_background_clear_colour.G,
                     BgB = m_cDX2_display_background_clear_colour.B,
                     TexelX = 1f / cols,
+                    TexelY = 1f / rowCount,
                 };
                 MappedSubresource cbMap = dc.Map((ID3D11Resource)_meshCB, 0, MapMode.WriteDiscard, Vortice.Direct3D11.MapFlags.None);
                 unsafe { System.Runtime.CompilerServices.Unsafe.Write((void*)cbMap.DataPointer, cb); }
@@ -693,11 +725,11 @@ namespace Thetis
                     }
                 }
 
-                // ---- surface sheet + crest hairlines, painter back-to-front so a
-                // nearer row's sheet occludes farther outlines exactly like the D2D
+                // ---- crest hairlines + curtains, painter back-to-front so a nearer
+                // row's curtain occludes farther outlines exactly like the D2D
                 // fill/outline passes interleaved per row ----
                 dc.IASetInputLayout(_meshIL);
-                dc.IASetVertexBuffer(0, _meshVB, 8, 0);
+                dc.IASetVertexBuffer(0, _meshVB, 16, 0);
                 dc.VSSetShader(_meshVS);
                 dc.VSSetConstantBuffer(0, _meshCB);
                 dc.PSSetConstantBuffer(0, _meshCB);
@@ -722,14 +754,11 @@ namespace Thetis
                     dc.IASetPrimitiveTopology(Vortice.Direct3D.PrimitiveTopology.LineList);
                     dc.DrawIndexed(linesPerRow, (uint)(r * linesPerRow), 0);
 
-                    // sheet block spanning rows (r-1 .. r), in front of the hairline
-                    if (r > 0)
-                    {
-                        dc.PSSetShader(_meshPS);
-                        dc.IASetIndexBuffer(_meshIB, Format.R32_UInt, 0);
-                        dc.IASetPrimitiveTopology(Vortice.Direct3D.PrimitiveTopology.TriangleList);
-                        dc.DrawIndexed(quadsPerRow, (uint)((r - 1) * quadsPerRow), 0);
-                    }
+                    // curtain of row r (crest edge -> floor), in front of the hairline
+                    dc.PSSetShader(_meshPS);
+                    dc.IASetIndexBuffer(_meshIB, Format.R32_UInt, 0);
+                    dc.IASetPrimitiveTopology(Vortice.Direct3D.PrimitiveTopology.TriangleList);
+                    dc.DrawIndexed(quadsPerRow, (uint)(r * quadsPerRow), 0);
                 }
                 dc.Flush();
 
