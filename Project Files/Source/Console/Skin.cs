@@ -784,14 +784,52 @@ namespace Thetis
             ctrl.BackgroundImage = null;
         }
         private static Dictionary<string, ImageList> _shared_image_lists = new Dictionary<string, ImageList>();
+        private static bool ButtonImageSetExists(Button ctrl, string name)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                if (File.Exists(path + "\\" + ctrl.TopLevelControl.Name + "\\" + name + "-" + i.ToString() + pic_file_ext))
+                    return true;
+                if (File.Exists(path + "\\" + "Console" + "\\" + name + "-" + i.ToString() + pic_file_ext))
+                    return true;
+            }
+            return false;
+        }
+
         private static void SetupButtonImages(Button ctrl)
         {
+            // resolve which console image set to use - prefer the control's own
+            // art; some later-era console buttons ship no set in most skins, so
+            // fall back through visually matching neighbours from the same area
+            string imgName = ctrl.Name;
+            if (!ButtonImageSetExists(ctrl, imgName))
+            {
+                string[] donors;
+                switch (ctrl.Name)
+                {
+                    case "btnDisplayZTB":
+                        donors = new string[] { "btnDisplayZoom05", "btnDisplayPanCenter", "btnDisplayZoom1x", "btnDisplayZoom2x", "btnDisplayZoom4x" };
+                        break;
+                    default:
+                        donors = new string[0];
+                        break;
+                }
+                foreach (string donor in donors)
+                {
+                    if (ButtonImageSetExists(ctrl, donor))
+                    {
+                        imgName = donor;
+                        break;
+                    }
+                }
+            }
+
             string skey = "";
             for (int i = 0; i < 8; i++)
             {
-                string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + imgName + "-" + i.ToString() + pic_file_ext;
                 if(!File.Exists(spath))
-                    spath = path + "\\" + "Console" + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                    spath = path + "\\" + "Console" + "\\" + imgName + "-" + i.ToString() + pic_file_ext;
                 if (File.Exists(spath))
                 {
                     Image img = loadImage(spath); // load to cache it                
@@ -815,11 +853,11 @@ namespace Thetis
                 for (int i = 0; i < 8; i++)
                 {
                     string sstate = ((ImageState)i).ToString();
-                    string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                    string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + imgName + "-" + i.ToString() + pic_file_ext;
                     Image img = getImageFromFilePath(spath);
                     if (img == null)
                     {
-                        spath = path + "\\" + "Console" + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                        spath = path + "\\" + "Console" + "\\" + imgName + "-" + i.ToString() + pic_file_ext;
                         img = getImageFromFilePath(spath);
                     }
 

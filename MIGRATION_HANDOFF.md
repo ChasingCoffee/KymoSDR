@@ -68,10 +68,9 @@ Migrate the entire solution from .NET Framework 4.8 to .NET 10, replacing SharpD
 
 **Goal**: Modern GPU-accelerated rendering leveraging Vortice. Tiered roadmap — see "3D Panadapter Modernization Plan" section below for full detail.
 
-- [ ] Tier 1: Quick visual wins inside existing D2D renderer (temporal interpolation, edge smoothing, side walls, perceptual colormaps, grid floor, exponential fog)
+- [x] Tier 1: Quick visual wins inside existing D2D renderer (temporal interpolation, edge smoothing, side walls, perceptual colormaps, grid floor, exponential fog) — **CODE COMPLETE 2026-08-20, RUNTIME VERIFIED 2026-08-22** (see session history)
 - [ ] **MANDATORY: GPU→CPU fallback architecture (applies to ALL GPU features below)** — see "GPU Fallback Architecture Requirement" section
-- [x] Tier 2: Bloom/glow via ID2D1DeviceContext effects graph — **DONE + RUNTIME VERIFIED 2026-08-22 (panadapter trace glow "Line Glow", HW-only)**
-- [ ] Tier 3: GPU mesh-based 3D panadapter (replacing per-column DrawLine; fixes edge stepping geometrically) — **FIRST SLICE DONE + RUNTIME VERIFIED 2026-08-22** (surface renders on HW, fluid/solid, colormaps match non-mesh displays after BGRA fix; skin background preserved via prepass sandwich). Remaining: side walls/grid floor/crest hairline/depth-slope-shading parity + GPU% check. See session history.
+- [x] Tier 3: GPU mesh-based 3D panadapter (replacing per-column DrawLine; fixes edge stepping geometrically) — **FIRST SLICE + TIER-1 PARITY DONE, RUNTIME VERIFIED, COMMITTED `89f05af` + follow-up 2026-08-23** (crest hairlines/side walls/grid floor ported; slope shading was already at parity). Remaining: GPU% measurement, RDP/WARP fallback sanity test. See session history.
 - [ ] GPU compute shaders for spectrum/waterfall
 
 ### GPU Fallback Architecture Requirement (added 2026-08-22)
@@ -662,6 +661,17 @@ Three items landed and user-verified ("no crash now", parity look "does look rig
 ErrorLog forensics note: after the SEH, tryWarpDowngrade logged "switching to WARP" yet the next init log showed Hardware/RX580 — post-AV recovery chain is murky (device was poisoned; app needed restart). Not chased further: preventing the AV is the cure.
 
 Remaining Tier 3: GPU% measurement post-debug-removal; RDP/device-removal auto-downgrade test (deferred until second PC/RDP available).
+
+### 2026-08-23 (ZTB toolbar button white-block fix via skin-image fallback chain, RUNTIME VERIFIED)
+User reported the console "ZTB" button (below waterfall, right of zoom slider) rendering as a plain white block. Root cause: `btnDisplayZTB` has NO image set in most skins (incl. SDRVST3/W1AEX sets), and an unskinned flat ButtonTS = light-grey rectangle with near-white text on dark chrome. A naive name→name alias was rejected because (a) it would override genuine per-skin ZTB art that many third-party skins ship, and (b) a hard dependency on one donor could still miss on minimal skins.
+
+Fix (`Skin.cs`) — buttons resolve art through a fallback chain instead of exact-name-only:
+- New `ButtonImageSetExists(ctrl, name)` probes `<skin>\<form>\<name>-<0..7>.png` (+ shared `Console\` dir).
+- `SetupButtonImages`: prefer the control's OWN set first (N2MDX/XMAS/AI/VA2CST/K1GMM… skins ship real `btnDisplayZTB` art — must not be overridden); if absent, fall back through per-control donor lists. For `btnDisplayZTB`: `btnDisplayZoom05` (same row, same 40×24 size, user-chosen) → PanCenter → Zoom1x → Zoom2x → Zoom4x. Every installed skin ships PanCenter + zoom sets, so no skin can regress to the white block.
+- BOTH lookup passes (cache-key scan + ImageList fill loop) now use the RESOLVED name — previously the fill loop used raw `ctrl.Name`, which silently starved any aliased control.
+- Incidental: same latent fill-loop bug fixed in `SetupCheckBoxImages` (its ImageList fill now honours the chkTXVST/chkRXVST/chkDisplay3DPan → chkNoiseGate alias).
+
+Build clean; user verified the button shows skinned Zoom05 art.
 
 ### 2026-08-19 (shutdown debugging session)
 - Root cause of shutdown hang identified: `BinaryFormatter` removed in .NET 10 caused `SaveOptions()` to throw exceptions showing MessageBox dialogs blocking the UI thread for 8-28 seconds per attempt
