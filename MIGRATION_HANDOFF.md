@@ -703,6 +703,19 @@ Rework (`Display.Pan3DMesh.cs`, user-approved "the aether way", verified "workin
 
 Build clean; user verified needle rendering + overall look.
 
+### 2026-08-23 (waterfall colour quantization fixed: gradient LUT 101 -> 1024 steps, RUNTIME VERIFIED)
+Investigation prompted by user question "is the waterfall 8-bit / limited to 256 colours?". Findings: pixel storage was ALREADY 32-bit BGRA (`pixel_size=4` rows into a D2D Bgra32 bitmap) — not an indexed surface. The real limit was the **Custom-scheme colour LUT**: `perc = (int)(overall_percent * 100f)` indexed `_rx1/_rx2/_tx_waterfall_grad`, each only **101 entries** (producers `WaterfallRXGradient()/WaterfallTXGradient()` in setup.cs sampled the gradient picker at whole-percent steps). Result: at most 101 discrete colours on the RX1/RX2/TX waterfalls regardless of gradient smoothness — visible posterized bands following signal contours (contour-map effect), worst on slow fades and smooth dark gradients. Enhanced scheme already computed colours continuously; the GPU mesh palette was already 256 entries — which is why 3D looked smoother than 2D.
+
+Fix (display.cs + setup.cs):
+- New `public const int WaterfallGradSteps = 1024;` on Display (single source of truth both files use).
+- Producers build 1024-entry arrays, sampling `GetColourAtPercent(i/(N-1))` continuously; rebuild still event-driven on gradient change, zero added per-pixel cost (~0.05 dB/step at a typical 50 dB span).
+- `OnWaterfallRX/TXGradientChanged` guards compare against `WaterfallGradSteps`; copy loops bound by array length.
+- All consumers index **dynamically** by `array.Length - 1` with explicit clamps instead of hard-coded 100: `GetWaterfallColor(...)` (also feeds spectrum fills and the D2D 3D-history SelectSurfaceColour path) and the inline waterfall Custom block (`cols[100]` top-colour reference replaced by `cols[^1]` equivalent).
+
+Verification tip that came up: distinguish artifact from real RF — quantization banding follows equal-strength contours of signals/noise floor; genuine static crashes are full-width bright streaks at one instant (always keep those).
+
+Build clean; user verified "seems to look smoother".
+
 ### 2026-08-19 (shutdown debugging session)
 - Root cause of shutdown hang identified: `BinaryFormatter` removed in .NET 10 caused `SaveOptions()` to throw exceptions showing MessageBox dialogs blocking the UI thread for 8-28 seconds per attempt
 - ErrorLog.txt showed identical stack trace repeated 10+ times: `BinaryFormatter.Serialize` → `SerializeToBase64` → `MultiMeterIO.GetSaveData` → `SaveOptions` → `Console_Closing`

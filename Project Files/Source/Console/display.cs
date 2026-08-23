@@ -7829,16 +7829,20 @@ namespace Thetis
         private static int m_nRX1WaterFallFrameCount = 0; // 1=every frame, 2= every other, etc
         private static int m_nRX2WaterFallFrameCount = 0;
 
-        private static Color[] _rx1_waterfall_grad = new Color[101];
-        private static Color[] _rx2_waterfall_grad = new Color[101];
+        // waterfall gradient LUT resolution: sampled continuously from the setup
+        // gradient control, so colour banding on the waterfall is not visible
+        public const int WaterfallGradSteps = 1024;
+
+        private static Color[] _rx1_waterfall_grad = new Color[WaterfallGradSteps];
+        private static Color[] _rx2_waterfall_grad = new Color[WaterfallGradSteps];
         private static bool _rx1_waterfall_grad_ok = false;
         private static bool _rx2_waterfall_grad_ok = false;
-        private static Color[] _tx_waterfall_grad = new Color[101];
+        private static Color[] _tx_waterfall_grad = new Color[WaterfallGradSteps];
         private static bool _tx_waterfall_grad_ok = false;
 
         private static void OnWaterfallRXGradientChanged(int rx, Color[] colours)
         {
-            if (colours.Length != 101) return;
+            if (colours == null || colours.Length != WaterfallGradSteps) return;
 
             Color[] cols;
             if (rx == 1)
@@ -7854,7 +7858,7 @@ namespace Thetis
             else
                 return;
 
-            for (int perc = 0; perc <= 100; perc++)
+            for (int perc = 0; perc < cols.Length; perc++)
             {
                 cols[perc] = Color.FromArgb(255, colours[perc]);
             }
@@ -7870,11 +7874,11 @@ namespace Thetis
         }
         private static void OnWaterfallTXGradientChanged(Color[] colours)
         {
-            if (colours.Length != 101) return;
+            if (colours == null || colours.Length != WaterfallGradSteps) return;
 
             _tx_waterfall_grad_ok = false;
             Color[] cols = _tx_waterfall_grad;
-            for (int perc = 0; perc <= 100; perc++)
+            for (int perc = 0; perc < cols.Length; perc++)
             {
                 cols[perc] = Color.FromArgb(255, colours[perc]);
             }
@@ -7891,8 +7895,9 @@ namespace Thetis
                 if (dBm <= lowThreshold) pct = 0f;
                 else if (dBm >= highThreshold) pct = 1f;
                 else pct = (dBm - lowThreshold) / (highThreshold - lowThreshold);
-                int idx = (int)(pct * 100f);
-                if (idx < 0) idx = 0; if (idx > 100) idx = 100;
+                int last = gradArray.Length - 1;
+                int idx = (int)(pct * last);
+                if (idx < 0) idx = 0; if (idx > last) idx = last;
                 R = gradArray[idx].R; G = gradArray[idx].G; B = gradArray[idx].B;
             }
             else if (scheme == ColorScheme.enhanced)
@@ -8334,6 +8339,7 @@ namespace Thetis
 
                                 for (int i = 0; i < nDecimatedWidth; i++)   // for each pixel in the new line
                                 {
+                                    int gradLast = cols.Length - 1;
                                     if (waterfall_data[i] <= low_threshold)
                                     {
                                         R = cols[0].R;
@@ -8342,16 +8348,17 @@ namespace Thetis
                                     }
                                     else if (waterfall_data[i] >= high_threshold)
                                     {
-                                        R = cols[100].R;
-                                        G = cols[100].G;
-                                        B = cols[100].B;
+                                        R = cols[gradLast].R;
+                                        G = cols[gradLast].G;
+                                        B = cols[gradLast].B;
                                     }
                                     else // value is between low and high
                                     {
                                         float range = high_threshold - low_threshold;
                                         float offset = waterfall_data[i] - low_threshold;
                                         float overall_percent = offset / range; // value from 0.0 to 1.0 where 1.0 is high and 0.0 is low.
-                                        int perc = (int)(overall_percent * 100f);
+                                        int perc = (int)(overall_percent * gradLast);
+                                        if (perc < 0) perc = 0; else if (perc > gradLast) perc = gradLast;
 
                                         R = cols[perc].R;
                                         G = cols[perc].G;

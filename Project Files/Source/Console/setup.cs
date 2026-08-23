@@ -34027,20 +34027,20 @@ namespace Thetis
 
         public Color[] WaterfallRXGradient()
         {
-            Color[] waterfall_grad = new Color[101];
-            for (int perc = 0; perc <= 100; perc++)
+            Color[] waterfall_grad = new Color[Display.WaterfallGradSteps];
+            for (int perc = 0; perc < waterfall_grad.Length; perc++)
             {
-                Color c = lgLinearGradient_waterfall.GetColourAtPercent(perc / 100f);
+                Color c = lgLinearGradient_waterfall.GetColourAtPercent(perc / (float)(waterfall_grad.Length - 1));
                 waterfall_grad[perc] = c;
             }
             return waterfall_grad;
         }
         public Color[] WaterfallTXGradient()
         {
-            Color[] waterfall_grad = new Color[101];
-            for (int perc = 0; perc <= 100; perc++)
+            Color[] waterfall_grad = new Color[Display.WaterfallGradSteps];
+            for (int perc = 0; perc < waterfall_grad.Length; perc++)
             {
-                Color c = lgLinearGradientTX_waterfall.GetColourAtPercent(perc / 100f);
+                Color c = lgLinearGradientTX_waterfall.GetColourAtPercent(perc / (float)(waterfall_grad.Length - 1));
                 waterfall_grad[perc] = c;
             }
             return waterfall_grad;
