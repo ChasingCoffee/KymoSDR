@@ -101,7 +101,7 @@ namespace Thetis
         LAST,
     }
 
-    class Display
+    partial class Display
     {
         #region Variable Declaration
 
@@ -3410,6 +3410,7 @@ namespace Thetis
         private static ID2D1Image _glowBlurImage;
         private static bool m_bGlowLayerActive;
         private static bool m_bGlowCompositeLogged;
+        private static bool _b3DMeshDrewFrame;          // Tier 3: mesh drew the surface this frame (before D2D BeginDraw)
         private static ID3D11Device _device;
         private static IDXGIFactory1 _factory1;
         private static readonly Object _objDX2Lock = new Object();
@@ -3510,6 +3511,7 @@ namespace Thetis
                     if (_d2dDeviceContext != null) _d2dDeviceContext.Target = null;
 
                     releaseGlowLayer();
+                    ReleaseGpuMeshDeviceObjects();
                     _backBufferBitmap?.Dispose();
                     _d2dRenderTarget = null;
                     _d2dDeviceContext?.Dispose();
@@ -3901,6 +3903,7 @@ namespace Thetis
             if (_d2dDeviceContext != null) _d2dDeviceContext.Target = null;
 
             releaseGlowLayer();
+            ReleaseGpuMeshDeviceObjects();
             _backBufferBitmap?.Dispose();
             _d2dRenderTarget = null;
             _d2dDeviceContext?.Dispose();
@@ -4070,6 +4073,7 @@ namespace Thetis
 
                     if (_d2dDeviceContext != null) _d2dDeviceContext.Target = null;
                     releaseGlowLayer();
+                    ReleaseGpuMeshFrameState();
                     _backBufferBitmap?.Dispose();
                     _surface?.Dispose();
 
@@ -4289,6 +4293,12 @@ namespace Thetis
                     _bNoiseFloorAlreadyCalculatedRX1 = false; // keeps track of noise floor processing, only want to do it once, even if pana + water shown
                     _bNoiseFloorAlreadyCalculatedRX2 = false;
 
+                    // Tier 3 GPU mesh: draw the 3D surface straight into the backbuffer
+                    // BEFORE the D2D frame begins. When it succeeds, the D2D clear +
+                    // background fill below are skipped so the surface survives; grid,
+                    // text, live trace and all overlays still come from D2D on top.
+                    _b3DMeshDrewFrame = RenderGpuMesh3D();
+
                     _d2dRenderTarget.BeginDraw();
 
                     if (_paused_display && _pause_bitmap != null)
@@ -4303,46 +4313,44 @@ namespace Thetis
                     t.Translation = m_pixelShift;
                     _d2dRenderTarget.Transform = t;
 
-                    //always clear without using alpha
-                    _d2dRenderTarget.Clear(m_cDX2_display_background_clear_colour);
+                    RectangleF rectDest = new RectangleF(0, 0, displayTargetWidth, displayTargetHeight);
+                    if (!_b3DMeshDrewFrame)
+                    {
+                        //always clear without using alpha
+                        _d2dRenderTarget.Clear(m_cDX2_display_background_clear_colour);
 
-                    RectangleF rectDest;
-
-                    if (_bitmapBackground != null) 
-                    { 
-                        // draw background image                        
-                        if (_maintain_background_aspectratio && _bitmapBackground != null)
+                        if (_bitmapBackground != null)
                         {
-                            float imageWidth = _bitmapBackground.PixelSize.Width;
-                            float imageHeight = _bitmapBackground.PixelSize.Height;
-                            float aspectRatio = imageWidth / imageHeight;
-
-                            float targetAspectRatio = displayTargetWidth / displayTargetHeight;
-
-                            if (aspectRatio > targetAspectRatio)
+                            // draw background image
+                            if (_maintain_background_aspectratio && _bitmapBackground != null)
                             {
-                                float scaledHeight = displayTargetWidth / aspectRatio;
-                                rectDest = new RectangleF(0, (displayTargetHeight - scaledHeight) / 2, displayTargetWidth, scaledHeight);
+                                float imageWidth = _bitmapBackground.PixelSize.Width;
+                                float imageHeight = _bitmapBackground.PixelSize.Height;
+                                float aspectRatio = imageWidth / imageHeight;
+
+                                float targetAspectRatio = displayTargetWidth / displayTargetHeight;
+
+                                if (aspectRatio > targetAspectRatio)
+                                {
+                                    float scaledHeight = displayTargetWidth / aspectRatio;
+                                    rectDest = new RectangleF(0, (displayTargetHeight - scaledHeight) / 2, displayTargetWidth, scaledHeight);
+                                }
+                                else
+                                {
+                                    float scaledWidth = displayTargetHeight * aspectRatio;
+                                    rectDest = new RectangleF((displayTargetWidth - scaledWidth) / 2, 0, scaledWidth, displayTargetHeight);
+                                }
                             }
                             else
                             {
-                                float scaledWidth = displayTargetHeight * aspectRatio;
-                                rectDest = new RectangleF((displayTargetWidth - scaledWidth) / 2, 0, scaledWidth, displayTargetHeight);
+                                rectDest = new RectangleF(0, 0, displayTargetWidth, displayTargetHeight);
                             }
-                        }
-                        else
-                        {
-                            rectDest = new RectangleF(0, 0, displayTargetWidth, displayTargetHeight);
+
+                            _d2dRenderTarget.DrawBitmap(_bitmapBackground, rectDest, 1f, BitmapInterpolationMode.Linear);
                         }
 
-                        _d2dRenderTarget.DrawBitmap(_bitmapBackground, rectDest, 1f, BitmapInterpolationMode.Linear);                        
+                        _d2dRenderTarget.FillRectangle(rectDest, m_bDX2_display_background_brush);
                     }
-                    else
-                    {
-                        rectDest = new RectangleF(0, 0, displayTargetWidth, displayTargetHeight);
-                    }
-
-                    _d2dRenderTarget.FillRectangle(rectDest, m_bDX2_display_background_brush);
 
                     // LINEAR BRUSH BUILDING
                     if (_bRebuildRXLinearGradBrush || _bRebuildTXLinearGradBrush)
@@ -5421,8 +5429,11 @@ namespace Thetis
             // draw 3D history BEFORE the grid, so filters/cursor render on top
             if (draw3DHistory && !local_mox)
             {
-                DrawPanadapter3DHistoryDX2D(nVerticalShift, W, H, rx, bottom,
-                    null, 0, grid_max, nDecimatedWidth, m_nDecimation);
+                // snapshot params for the GPU mesh path (consumed pre-BeginDraw next frame)
+                CaptureMeshFrameParams(nVerticalShift, W, H, rx, nDecimatedWidth, m_nDecimation, grid_min, grid_max);
+                if (!_b3DMeshDrewFrame)
+                    DrawPanadapter3DHistoryDX2D(nVerticalShift, W, H, rx, bottom,
+                        null, 0, grid_max, nDecimatedWidth, m_nDecimation);
             }
 
             //if (grid_control) //[2.10.3.9]MW0LGE raw grid control option now just turns off the grid, all other elements are shown

@@ -71,7 +71,7 @@ Migrate the entire solution from .NET Framework 4.8 to .NET 10, replacing SharpD
 - [ ] Tier 1: Quick visual wins inside existing D2D renderer (temporal interpolation, edge smoothing, side walls, perceptual colormaps, grid floor, exponential fog)
 - [ ] **MANDATORY: GPU→CPU fallback architecture (applies to ALL GPU features below)** — see "GPU Fallback Architecture Requirement" section
 - [x] Tier 2: Bloom/glow via ID2D1DeviceContext effects graph — **DONE + RUNTIME VERIFIED 2026-08-22 (panadapter trace glow "Line Glow", HW-only)**
-- [ ] Tier 3: GPU mesh-based 3D panadapter (replacing per-column DrawLine; fixes edge stepping geometrically)
+- [ ] Tier 3: GPU mesh-based 3D panadapter (replacing per-column DrawLine; fixes edge stepping geometrically) — **FIRST SLICE DONE + RUNTIME VERIFIED 2026-08-22** (surface renders on HW, fluid/solid, colormaps match non-mesh displays after BGRA fix; skin background preserved via prepass sandwich). Remaining: side walls/grid floor/crest hairline/depth-slope-shading parity + GPU% check. See session history.
 - [ ] GPU compute shaders for spectrum/waterfall
 
 ### GPU Fallback Architecture Requirement (added 2026-08-22)
@@ -91,7 +91,7 @@ End users may have no discrete/integrated GPU, an underpowered GPU, a remote-des
 - `DX2Adaptors()` at display.cs ~3450 enumerates adapters (used for adaptor preference); device/swapchain teardown block ~3390–3415.
 - The legacy non-DX2 GDI draw path is GONE — D2D/Vortice is the only renderer, so "D2DCpu" tier = current line-based renderer (keep it maintained per rule 1), "WarpSoftware" tier = WARP-backed device (`DriverType.Warp`), live since first slice.
 - Remaining from this slice's scope: runtime verification only (HW machine normal boot, checkbox toggle re-init, RDP/WARP behaviour). MeterManager dxInit fallback NOW ALSO IMPLEMENTED (same day follow-up, see session history).
-- Still future: Tier 3 GPU mesh dispatch behind one entry point (rule 3) + compute shaders (rule 5).
+- Still future: ~~Tier 3 GPU mesh dispatch behind one entry point (rule 3)~~ → **DONE 2026-08-22**: `Display.Pan3DMesh.cs` `RenderGpuMesh3D()` is the single dispatch (called pre-BeginDraw in RenderDX2D; returns false → D2D line path draws, incl. try/catch auto-fallback per rules) + compute shaders (rule 5).
 
 ---
 
@@ -317,7 +317,7 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 - [x] Tier 1: temporal interpolation, edge smoothing, side walls, Turbo/Viridis colormaps, grid floor, exponential fog — **CODE COMPLETE 2026-08-20 (below), RUNTIME VERIFIED 2026-08-22 (user sign-off)**
 - [x] **BLOCKER RESOLVED 2026-08-22: uncheck-Waterfall-Sync crash — root cause was `Pan3DLineColor` setter disposing `m_bDX2_3d_fill_brush` WITHOUT nulling it → Classic+Sync-OFF frame drew through a disposed COM brush. Fixed (dispose+null + stopsColl leak); user verified "seems fixed so far". Dumps/WER key intentionally left in place for now. See 2026-08-22 session entries**
 - [x] Tier 2: bloom/glow (ID2D1DeviceContext effects graph) — **DONE + RUNTIME VERIFIED 2026-08-22 (panadapter trace glow "Line Glow", HW-only)**
-- [ ] Tier 3: GPU mesh 3D panadapter (replaces per-column DrawLine; fixes edge stepping)
+- [ ] Tier 3: GPU mesh 3D panadapter (replaces per-column DrawLine; fixes edge stepping) — **FIRST SLICE RUNTIME VERIFIED 2026-08-22** (see Phase-3 roadmap line + session history; polish items remain, NOT yet committed)
 - [ ] GPU compute shaders for spectrum
 
 ---
@@ -574,6 +574,25 @@ RUNTIME VERIFIED 2026-08-22 (user: "it is glowing now", colour follows the data-
 
 **MIGRATION FIX (unrelated but blocking)**: Thetis.Tests referenced `..\..\bin\x64\Debug\Thetis.exe`. Post-migration that exe is a native apphost stub (managed assembly is Thetis.dll) — tests silently compiled against a PRE-migration managed exe until today's rebuild replaced it, then failed CS0103/CS0246 ('VstHost', 'VstPluginCatalogFile', 'VstChainState'). HintPath switched to Thetis.dll; full solution incl. tests builds clean again.
 
+### 2026-08-22 (Tier 3 first slice — GPU mesh 3D panadapter, RUNTIME VERIFIED)
+Build clean x64 Release (EXIT=0). **User verified: "yes its working looks very fluid and solid", then after the BGRA palette fix "palletes are correct color now".** New file `Console/Display.Pan3DMesh.cs` (~730 lines, partial class Display) + `display.cs` made `partial`; Vortice.D3DCompiler 3.8.3 package added to Thetis.csproj (+ explicit `<Compile Include>` — csproj uses explicit Compile items despite SDK-style). Session-only toggle `chkGpuMesh3D` ("GPU 3D mesh (exp.)") in grpDisplayDriverEngine slot (8,47) TabIndex 52; handler pushes `Display.GpuMeshEnabled` live; registered in ForceAllEvents. **NOT YET COMMITTED** (all Tier 3 work; commit next session on user go-ahead).
+
+Architecture:
+- Heightmap R32Float dynamic texture (strengths [0..1], pow zCurve applied in shaders) + static UV-grid VB + index buffer rebuilt when (rows,cols) change; per-frame palette 256×1 BGRA8 replicating SelectSurfaceColour priority (waterfall sync > colormap > gradient > line colour); params snapshot captured each frame by DrawPanadapterDX2D into `_meshParams`, consumed NEXT frame pre-BeginDraw (one-frame latency invisible).
+- Dispatch: RenderDX2D calls `_b3DMeshDrewFrame = RenderGpuMesh3D()` BEFORE `_d2dRenderTarget.BeginDraw()`; when true, the frame skips the D2D global Clear+background-image+FillRectangle block (mesh pass owns the backdrop), D2D still draws grid/live-trace/labels/waterfall on top. `if (!_b3DMeshDrewFrame) DrawPanadapter3DHistoryDX2D(...)` keeps the line renderer intact (rule 1). try/catch inside RenderGpuMesh3D releases objects + returns false → automatic D2D fallback. Teardown hooks: `ReleaseGpuMeshDeviceObjects` (shutdown/releasePartial), `ReleaseGpuMeshFrameState` (resize; RTV only).
+- HLSL VS mirrors Aether math exactly (uv→pos incl. pow zCurve lift, foreshortened ridge ×row-width-fraction, y-flip to NDC); PS = palette lookup + horizontal slope shade 0.68–1.32 (kSlopeGain 0.55) + depth dim + linear haze toward bg + alpha fade 1.0→0.85. MeshCB is 48 bytes (float3 Background @16-byte offset 32).
+- Skin background preservation: when `_bitmapBackground != null`, a D2D **prepass** draws the skin image first (`DrawSkinBackgroundPrepass`, same aspect-ratio logic as the normal frame), then instead of ClearRenderTargetView the mesh pass repaints ONLY the plot strip with a scissored opaque quad (`vs_clear`/`ps_clear` returning CB_Background, `_meshBlendOpaque` = default no-blend, `_meshRSScissor` ScissorEnable=true, rect [0, Shift, W, Shift+PlotH]); without a skin image it full-clears to bg colour as before. User confirmed image visibility preserved.
+
+Debugging saga — lessons that cost hours (record for ALL future D3D11 work):
+1. **Missing `OMSetRenderTargets` = draws invisible, clears fine**: `ClearRenderTargetView` writes through the view directly, but draw fragments rasterize into whatever is bound at the OUTPUT MERGER — never bound here → every fragment discarded while magenta debug clears showed perfectly. Fixed with `dc.OMSetRenderTargets(new[]{_meshRTV}, null)`. THE root cause of "no mesh, just black".
+2. Isolation technique that found it: magenta clear + solid-green PS (proves target reachability vs geometry), then SV_VertexID fullscreen triangle `dc.Draw(3,0)` with NO buffers (splits IA-buffer issues from everything else), then reflection-dumping Vortice overloads via the %TEMP%\opencode\d2dprobe project.
+3. **Palette BGRA packing**: B8G8R8A8_UNorm memory order is [B,G,R,A]; little-endian uint = `A<<24 | R<<16 | G<<8 | B`. Originally packed R/B swapped → colormaps rendered with red/blue exchanged ("palettes don't match non-mesh versions"). 
+4. Samplers must be created AND bound per stage (`VSSetSamplers`/`PSSetSamplers`) or every SampleLevel returns 0; height SRV needed on BOTH VS and PS stages. Cull mode off (`RasterizerDescription(CullMode.None, ...)`) because the VS y-flip makes winding CCW.
+5. Vortice API traps hit this session: `Filter.MinMagMipPoint` needs full qualification (`Vortice.Direct3D11.Filter` — ambiguous); `BufferDescription` ctor is (uint byteWidth, BindFlags, ResourceUsage, CpuAccessFlags=..., ResourceOptionFlags=..., uint stride=...) with optional tail; generic `CreateBuffer(float[], BufferDescription)` (Span overload) works for VB/IB init; `BlendDescription.AlphaBlend` preset = SrcBlend One / DestBlend InvSrcAlpha (premultiplied convention — fine for straight-alpha out with a=1); `RasterizerDescription(CullMode,FillMode)` partial ctor leaves DepthClipEnable=true, MultisampleEnable=true (both harmless here); `RSSetScissorRects(RawRect[])` wants an ARRAY of `Vortice.RawRect` (Left/Top/Right/Bottom, lives in Vortice.DirectX assembly — fully qualify); D2D types: `Matrix3x2` = System.Numerics, `RectangleF` = System.Drawing, `RawRectF` = Vortice.DirectX; background DrawBitmap overload used: `(ID2D1Bitmap, RawRectF?, float opacity, BitmapInterpolationMode, RawRectF? sourceRect=null)` (5-arg — the 4-arg float-second-arg forms are different signatures entirely).
+6. 3D history ring resets each app restart — right after launch the grid is a thin strip (rows = histCount-based); wait ~10 s before judging visuals.
+
+Known gaps (intentional first-slice scope, queued next): side walls/end caps, grid floor/rails, crest hairline, depth-direction slope shading (D2D path has these via Tier 1); GPU% not yet measured post-debug-removal (was pegged 99% during fullscreen-triangle debug builds only); RDP/WARP behaviour of mesh path untested (mesh auto-falls back to D2D lines on WARP by design — GpuMeshEnabled requires Hardware path).
+
 ### 2026-08-22 (GPU fallback first slice — render-path enum + HW→WARP init chain + Force CPU setting)
 Implements the "NEXT SESSION START HERE" scope. Build clean x64 Release (EXIT=0, pre-existing warnings only). Runtime verification pending.
 
@@ -669,6 +688,10 @@ Replace line emulation with a Direct3D11 triangle mesh; the port already owns an
 - Coexists with D2D on the shared swap chain: D3D draws surface, D2D overlays grid/text/controls
 - Foundation for compute-shader spectrum processing (final Phase 3 item)
 
+**STATUS 2026-08-22 — FIRST SLICE IMPLEMENTED + RUNTIME VERIFIED** (implementation notes + D3D11 lessons in session history; NOT yet committed):
+- Done: heightmap texture + UV-grid mesh pipeline (Display.Pan3DMesh.cs), Aether-math VS (zCurve/ridge/perspective), palette PS (slope shade + depth dim + haze), per-frame palette upload mirroring SelectSurfaceColour, pre-BeginDraw dispatch with D2D-line fallback (rules 1–3 honoured), skin-background prepass + scissored plot-strip clear, session-only chkGpuMesh3D toggle.
+- Remaining for full parity/polish: side walls/end caps, grid floor/rails, crest hairline, depth-direction slope shading (Tier 1 has these on the D2D path); measure GPU% post-debug; RDP/WARP fallback sanity test; commit.
+
 **Recommended order**: Tier 1 items compound and ship immediate visible results → then commit to Tier 3 as flagship; Tier 2 optional polish either side of it.
 
 ---
@@ -715,7 +738,7 @@ Replace line emulation with a Direct3D11 triangle mesh; the port already owns an
 | `Color4` | `Vortice.Mathematics.Color4` | |
 | `RawVector2` | `Vortice.Mathematics.RawVector2` | |
 | `RawColor4` | `Vortice.Mathematics.RawColor4` | |
-| `RectangleF` | `Vortice.RawRectF` | |
+| `RectangleF` | `System.Drawing.RectangleF` (display.cs usage) / `Vortice.RawRectF` for raw D2D calls | `Matrix3x2` = `System.Numerics.Matrix3x2`; `RawRect`/`RawRectF` live in the Vortice.DirectX assembly | |
 | `Size2` | `Vortice.Mathematics.SizeI` | |
 | `Utilities.Dispose(ref x)` | `x?.Dispose(); x = null;` | |
 | `SharpDXException` | `SharpGenException` | |

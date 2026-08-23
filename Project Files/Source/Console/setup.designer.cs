@@ -2008,6 +2008,7 @@
             this.grpDisplayDriverEngine = new System.Windows.Forms.GroupBoxTS();
             this.chkVSyncDX = new System.Windows.Forms.CheckBoxTS();
             this.chkForceCPURendering = new System.Windows.Forms.CheckBoxTS();
+            this.chkGpuMesh3D = new System.Windows.Forms.CheckBoxTS();
             this.chkSpectrumGlow = new System.Windows.Forms.CheckBoxTS();
             this.chkAccurateFrameTiming = new System.Windows.Forms.CheckBoxTS();
             this.chkAntiAlias = new System.Windows.Forms.CheckBoxTS();
@@ -33220,6 +33221,7 @@
             // 
             this.grpDisplayDriverEngine.Controls.Add(this.chkVSyncDX);
             this.grpDisplayDriverEngine.Controls.Add(this.chkForceCPURendering);
+            this.grpDisplayDriverEngine.Controls.Add(this.chkGpuMesh3D);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAccurateFrameTiming);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAntiAlias);
             this.grpDisplayDriverEngine.Controls.Add(this.comboDisplayThreadPriority);
@@ -33258,6 +33260,19 @@
             this.toolTip1.SetToolTip(this.chkForceCPURendering, "Render via the WARP software rasteriser instead of the GPU.\n\nUse if the graphics driver causes problems, e.g. over remote desktop.\nIf automatic mode fails on startup it also falls back to this automatically.");
             this.chkForceCPURendering.UseVisualStyleBackColor = true;
             this.chkForceCPURendering.CheckedChanged += new System.EventHandler(this.chkForceCPURendering_CheckedChanged);
+            //
+            // chkGpuMesh3D
+            //
+            this.chkGpuMesh3D.AutoSize = true;
+            this.chkGpuMesh3D.Image = null;
+            this.chkGpuMesh3D.Location = new System.Drawing.Point(8, 47);
+            this.chkGpuMesh3D.Name = "chkGpuMesh3D";
+            this.chkGpuMesh3D.Size = new System.Drawing.Size(130, 17);
+            this.chkGpuMesh3D.TabIndex = 52;
+            this.chkGpuMesh3D.Text = "GPU 3D mesh (exp.)";
+            this.toolTip1.SetToolTip(this.chkGpuMesh3D, "Experimental: renders the 3D panadapter surface as a real GPU triangle mesh (Tier 3).\n\nHardware rendering only - automatically falls back to the line renderer on WARP or if the mesh pipeline fails.");
+            this.chkGpuMesh3D.UseVisualStyleBackColor = true;
+            this.chkGpuMesh3D.CheckedChanged += new System.EventHandler(this.chkGpuMesh3D_CheckedChanged);
             // 
             // chkSpectrumGlow
             // 
@@ -75314,6 +75329,7 @@
         private LabelTS labelTS518;
         private CheckBoxTS chkVSyncDX;
         private CheckBoxTS chkForceCPURendering;
+        private CheckBoxTS chkGpuMesh3D;
         private CheckBoxTS chkSpectrumGlow;
         private LabelTS lblBlobMS;
         private NumericUpDownTS udBlobPeakHoldMS;
