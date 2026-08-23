@@ -2512,6 +2512,7 @@ namespace Thetis
 
             // Display Tab
             chkForceCPURendering_CheckedChanged(this, e);
+            chkSpectrumGlow_CheckedChanged(this, e);
             udDisplayDecimation_ValueChanged(this, e);
             udDisplayGridMax_ValueChanged(this, e);
             udDisplayGridMin_ValueChanged(this, e);
@@ -19889,6 +19890,12 @@ namespace Thetis
             console.RestartDisplayDX();
             if (_frm3DPanadapter != null && !_frm3DPanadapter.IsDisposed)
                 _frm3DPanadapter.ApplyRenderPathLimits();
+        }
+
+        private void chkSpectrumGlow_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.SpectrumGlow = chkSpectrumGlow.Checked;
         }
 
         private void chkBlobPeakHold_CheckedChanged(object sender, EventArgs e)

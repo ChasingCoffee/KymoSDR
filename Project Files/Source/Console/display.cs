@@ -3401,6 +3401,15 @@ namespace Thetis
         private static IDXGISwapChain1 _swapChain1;
         private static ID2D1RenderTarget _d2dRenderTarget;
         private static ID2D1Factory _d2dFactory;
+        private static ID2D1DeviceContext _d2dDeviceContext;
+        private static ID2D1Device _d2dDevice;
+        private static ID2D1Bitmap _backBufferBitmap;
+        private static ID2D1BitmapRenderTarget _glowRT;
+        private static ID2D1Bitmap _glowTraceBitmap;
+        private static ID2D1Effect _glowBlurEffect;
+        private static ID2D1Image _glowBlurImage;
+        private static bool m_bGlowLayerActive;
+        private static bool m_bGlowCompositeLogged;
         private static ID3D11Device _device;
         private static IDXGIFactory1 _factory1;
         private static readonly Object _objDX2Lock = new Object();
@@ -3429,6 +3438,12 @@ namespace Thetis
         {
             get { return m_bForceCPURendering; }
             set { m_bForceCPURendering = value; }
+        }
+        private static bool m_bSpectrumGlow = true;
+        public static bool SpectrumGlow
+        {
+            get { return m_bSpectrumGlow; }
+            set { m_bSpectrumGlow = value; }
         }
         public static string RenderPathString()
         {
@@ -3492,7 +3507,18 @@ namespace Thetis
                         _pause_bitmap = null;
                     }
 
-                    _d2dRenderTarget?.Dispose();
+                    if (_d2dDeviceContext != null) _d2dDeviceContext.Target = null;
+
+                    releaseGlowLayer();
+                    _backBufferBitmap?.Dispose();
+                    _d2dRenderTarget = null;
+                    _d2dDeviceContext?.Dispose();
+                    _d2dDevice?.Dispose();
+
+                    _backBufferBitmap = null;
+                    _d2dDeviceContext = null;
+                    _d2dDevice = null;
+
                     _swapChain1?.Dispose();
                     _swapChain?.Dispose();
                     _surface?.Dispose();
@@ -3848,8 +3874,21 @@ namespace Thetis
 
             _surface = _swapChain1.GetBuffer<IDXGISurface>(0);
 
-            RenderTargetProperties rtp = new RenderTargetProperties(new SDXPixelFormat(_swapChain.Description.BufferDescription.Format, ALPHA_MODE));
-            _d2dRenderTarget = _d2dFactory.CreateDxgiSurfaceRenderTarget(_surface, rtp);
+            ID2D1Factory1 factory1 = _d2dFactory.QueryInterface<ID2D1Factory1>();
+            using (IDXGIDevice dxgiDevice = _device.QueryInterface<IDXGIDevice>())
+            {
+                _d2dDevice = factory1.CreateDevice(dxgiDevice);
+            }
+            factory1.Dispose();
+
+            _d2dDeviceContext = _d2dDevice.CreateDeviceContext();
+            // flip-model backbuffers MUST be created with CannotDraw (they are owned by the
+            // presentation path); without it CreateBitmapFromDxgiSurface returns E_INVALIDARG.
+            // Target|CannotDraw is the documented interop combination for swapchain targets.
+            _backBufferBitmap = _d2dDeviceContext.CreateBitmapFromDxgiSurface(_surface,
+                new BitmapProperties1(new SDXPixelFormat(_swapChain.Description.BufferDescription.Format, ALPHA_MODE), 96f, 96f, BitmapOptions.Target | BitmapOptions.CannotDraw));
+            _d2dDeviceContext.Target = _backBufferBitmap;
+            _d2dRenderTarget = _d2dDeviceContext;
 
             _bDX2Setup = true;
 
@@ -3859,7 +3898,18 @@ namespace Thetis
         }
         private static void releasePartialDX2DDevice()
         {
-            _d2dRenderTarget?.Dispose();
+            if (_d2dDeviceContext != null) _d2dDeviceContext.Target = null;
+
+            releaseGlowLayer();
+            _backBufferBitmap?.Dispose();
+            _d2dRenderTarget = null;
+            _d2dDeviceContext?.Dispose();
+            _d2dDevice?.Dispose();
+
+            _backBufferBitmap = null;
+            _d2dDeviceContext = null;
+            _d2dDevice = null;
+
             _surface?.Dispose();
             _swapChain1?.Dispose();
             _swapChain?.Dispose();
@@ -3876,6 +3926,56 @@ namespace Thetis
             _factory1 = null;
 
             _bDX2Setup = false;
+        }
+        private static void releaseGlowLayer()
+        {
+            _glowBlurImage?.Dispose();
+            _glowBlurEffect?.Dispose();
+            _glowTraceBitmap?.Dispose();
+            _glowRT?.Dispose();
+            _glowRT = null;
+            _glowBlurImage = null;
+            _glowTraceBitmap = null;
+            _glowBlurEffect = null;
+            m_bGlowLayerActive = false;
+        }
+        private static bool ensureGlowLayer(int width, int height)
+        {
+            if (!_bDX2Setup || _d2dDeviceContext == null) return false;
+
+            try
+            {
+                Vortice.Mathematics.SizeI wanted = new Vortice.Mathematics.SizeI(width, height);
+                if (_glowRT == null || _glowTraceBitmap == null || _glowTraceBitmap.Size.Width != width || _glowTraceBitmap.Size.Height != height)
+                {
+                    releaseGlowLayer();
+
+                    _glowRT = _d2dRenderTarget.CreateCompatibleRenderTarget(
+                        new Vortice.Mathematics.Size(width, height),
+                        wanted,
+                        new SDXPixelFormat(_swapChain.Description.BufferDescription.Format, ALPHA_MODE),
+                        CompatibleRenderTargetOptions.None);
+                    _glowRT.AntialiasMode = AntialiasMode.PerPrimitive;
+
+                    _glowTraceBitmap = _glowRT.Bitmap;
+
+                    _glowBlurEffect = (ID2D1Effect)_d2dDeviceContext.CreateEffect(EffectGuids.GaussianBlur);
+                    _glowBlurEffect.SetInput(0, _glowTraceBitmap, true);
+                    _glowBlurEffect.SetValueByName("StandardDeviation", PropertyType.Float, BitConverter.GetBytes(6.0f), 4);
+                    _glowBlurImage = _glowBlurEffect.QueryInterface<ID2D1Image>();
+
+                    m_bGlowLayerActive = true;
+                    Common.LogString("Spectrum glow layer active (" + width + "x" + height + ")");
+                }
+
+                return m_bGlowLayerActive;
+            }
+            catch (Exception ex)
+            {
+                Common.LogString("Spectrum glow layer init failed : " + ex.Message);
+                releaseGlowLayer();
+                return false;
+            }
         }
         public static string describeDXAttempt(DriverType driverType, AdaptorInfo adaptorInfo)
         {
@@ -3968,10 +4068,13 @@ namespace Thetis
                         return false;
                     }
 
-                    _d2dRenderTarget?.Dispose();
+                    if (_d2dDeviceContext != null) _d2dDeviceContext.Target = null;
+                    releaseGlowLayer();
+                    _backBufferBitmap?.Dispose();
                     _surface?.Dispose();
 
                     _d2dRenderTarget = null;
+                    _backBufferBitmap = null;
                     _surface = null;
 
                     _device.ImmediateContext.ClearState();
@@ -3981,8 +4084,10 @@ namespace Thetis
 
                     _surface = _swapChain1.GetBuffer<IDXGISurface>(0);
 
-                    RenderTargetProperties rtp = new RenderTargetProperties(new SDXPixelFormat(_swapChain.Description.BufferDescription.Format, ALPHA_MODE));
-                    _d2dRenderTarget = _d2dFactory.CreateDxgiSurfaceRenderTarget(_surface, rtp);
+                    _backBufferBitmap = _d2dDeviceContext.CreateBitmapFromDxgiSurface(_surface,
+                        new BitmapProperties1(new SDXPixelFormat(_swapChain.Description.BufferDescription.Format, ALPHA_MODE), 96f, 96f, BitmapOptions.Target | BitmapOptions.CannotDraw));
+                    _d2dDeviceContext.Target = _backBufferBitmap;
+                    _d2dRenderTarget = _d2dDeviceContext;
 
                     setupAliasing();
 
@@ -5671,6 +5776,21 @@ namespace Thetis
                 float live3DRidge = H * _pan3DRidgeHeight;
                 float live3DZCurve = Math.Max(0.05f, _pan3DZCurve);
 
+                // bloom/glow (Tier 2): live trace segments are recorded during the column
+                // loop, replayed into an offscreen layer (inside its own Begin/EndDraw -
+                // draws outside that pair are silently dropped!), blurred via the D2D
+                // effects graph and composited under the overlays.
+                // Skipped automatically on the WARP software path - a gaussian pass over
+                // a full-size layer per frame would eat the frame budget (see GPU fallback rule 2)
+                bool bGlowTrace = m_bSpectrumGlow && m_eRenderPath == DXRenderPath.Hardware;
+                List<(Vector2 a, Vector2 b, ID2D1Brush brush, float width)> glowSegs = null;
+                if (bGlowTrace)
+                {
+                    bGlowTrace = ensureGlowLayer((int)_d2dRenderTarget.Size.Width + 1, (int)_d2dRenderTarget.Size.Height + 1);
+                    if (bGlowTrace)
+                        glowSegs = new List<(Vector2, Vector2, ID2D1Brush, float)>(nDecimatedWidth);
+                }
+
                 for (int i = 0; i < nDecimatedWidth; i++)
                 {
                     point.X = i * local_Decimation;
@@ -5900,12 +6020,38 @@ namespace Thetis
 
                     if (bIgnoringPoints)
                     {
-                        _d2dRenderTarget.DrawLine(previousPoint, lastIgnoredPoint, activeLineBrush, line_width);
+                        if (glowSegs != null) glowSegs.Add((previousPoint, lastIgnoredPoint, activeLineBrush, line_width));
+                        else _d2dRenderTarget.DrawLine(previousPoint, lastIgnoredPoint, activeLineBrush, line_width);
                         previousPoint = lastIgnoredPoint;
                         bIgnoringPoints = false;
                     }
-                    _d2dRenderTarget.DrawLine(previousPoint, point, activeLineBrush, line_width);
+                    if (glowSegs != null) glowSegs.Add((previousPoint, point, activeLineBrush, line_width));
+                    else _d2dRenderTarget.DrawLine(previousPoint, point, activeLineBrush, line_width);
                     previousPoint = point;
+                }
+
+                //bloom/glow composite: replay recorded strokes into the offscreen layer
+                //(Begin/EndDraw mandatory), then blurred halo + sharp trace under the overlays,
+                //clipped by the already-pushed spectrum clip so spill never reaches waterfall/grid
+                if (glowSegs != null)
+                {
+                    _glowRT.BeginDraw();
+                    _glowRT.Clear(default);
+                    for (int s = 0; s < glowSegs.Count; s++)
+                    {
+                        var seg = glowSegs[s];
+                        _glowRT.DrawLine(seg.a, seg.b, seg.brush, seg.width);
+                    }
+                    _glowRT.EndDraw();
+
+                    if (!m_bGlowCompositeLogged)
+                    {
+                        m_bGlowCompositeLogged = true;
+                        Common.LogString("Spectrum glow composite running (sigma=6, 2 passes, " + glowSegs.Count + " segments)");
+                    }
+                    _d2dDeviceContext.DrawImage(_glowBlurImage, null, null, Vortice.Direct2D1.InterpolationMode.Linear, CompositeMode.SourceOver);
+                    _d2dDeviceContext.DrawImage(_glowBlurImage, null, null, Vortice.Direct2D1.InterpolationMode.Linear, CompositeMode.SourceOver);
+                    _d2dDeviceContext.DrawImage(_glowTraceBitmap, null, null, Vortice.Direct2D1.InterpolationMode.Linear, CompositeMode.SourceOver);
                 }
 
                 //noise floor

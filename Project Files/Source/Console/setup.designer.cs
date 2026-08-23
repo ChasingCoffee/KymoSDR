@@ -2008,6 +2008,7 @@
             this.grpDisplayDriverEngine = new System.Windows.Forms.GroupBoxTS();
             this.chkVSyncDX = new System.Windows.Forms.CheckBoxTS();
             this.chkForceCPURendering = new System.Windows.Forms.CheckBoxTS();
+            this.chkSpectrumGlow = new System.Windows.Forms.CheckBoxTS();
             this.chkAccurateFrameTiming = new System.Windows.Forms.CheckBoxTS();
             this.chkAntiAlias = new System.Windows.Forms.CheckBoxTS();
             this.comboDisplayThreadPriority = new System.Windows.Forms.ComboBoxTS();
@@ -33258,6 +33259,21 @@
             this.chkForceCPURendering.UseVisualStyleBackColor = true;
             this.chkForceCPURendering.CheckedChanged += new System.EventHandler(this.chkForceCPURendering_CheckedChanged);
             // 
+            // chkSpectrumGlow
+            // 
+            this.chkSpectrumGlow.AutoSize = true;
+            this.chkSpectrumGlow.Checked = true;
+            this.chkSpectrumGlow.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkSpectrumGlow.Image = null;
+            this.chkSpectrumGlow.Location = new System.Drawing.Point(9, 240);
+            this.chkSpectrumGlow.Name = "chkSpectrumGlow";
+            this.chkSpectrumGlow.Size = new System.Drawing.Size(110, 17);
+            this.chkSpectrumGlow.TabIndex = 97;
+            this.chkSpectrumGlow.Text = "Line Glow";
+            this.toolTip1.SetToolTip(this.chkSpectrumGlow, "Bloom/glow on the live spectrum trace - follows the data line colour and width above.\r\n\r\nHardware rendering only - automatically ignored when running on the WARP software path (Force CPU rendering).");
+            this.chkSpectrumGlow.UseVisualStyleBackColor = true;
+            this.chkSpectrumGlow.CheckedChanged += new System.EventHandler(this.chkSpectrumGlow_CheckedChanged);
+            // 
             // chkAccurateFrameTiming
             // 
             this.chkAccurateFrameTiming.AutoSize = true;
@@ -52811,6 +52827,7 @@
             // 
             this.grpAppPanadapter.Controls.Add(this.chkGridControl_minor);
             this.grpAppPanadapter.Controls.Add(this.chkJoinBandEdges);
+            this.grpAppPanadapter.Controls.Add(this.chkSpectrumGlow);
             this.grpAppPanadapter.Controls.Add(this.tbBandstackOverlayAlpha);
             this.grpAppPanadapter.Controls.Add(this.clrbtnBandstackOverlay);
             this.grpAppPanadapter.Controls.Add(this.labelTS532);
@@ -52909,7 +52926,7 @@
             // tbDataLineAlpha
             // 
             this.tbDataLineAlpha.AutoSize = false;
-            this.tbDataLineAlpha.Location = new System.Drawing.Point(180, 214);
+            this.tbDataLineAlpha.Location = new System.Drawing.Point(180, 186);
             this.tbDataLineAlpha.Maximum = 255;
             this.tbDataLineAlpha.Name = "tbDataLineAlpha";
             this.tbDataLineAlpha.Size = new System.Drawing.Size(66, 18);
@@ -52933,7 +52950,7 @@
             // tbActiveSpectralPeakAlpha
             // 
             this.tbActiveSpectralPeakAlpha.AutoSize = false;
-            this.tbActiveSpectralPeakAlpha.Location = new System.Drawing.Point(180, 186);
+            this.tbActiveSpectralPeakAlpha.Location = new System.Drawing.Point(180, 158);
             this.tbActiveSpectralPeakAlpha.Maximum = 255;
             this.tbActiveSpectralPeakAlpha.Name = "tbActiveSpectralPeakAlpha";
             this.tbActiveSpectralPeakAlpha.Size = new System.Drawing.Size(66, 18);
@@ -52961,7 +52978,7 @@
             this.clrbtnActiveSpectralPeak.Automatic = "Automatic";
             this.clrbtnActiveSpectralPeak.Color = System.Drawing.Color.Gray;
             this.clrbtnActiveSpectralPeak.Image = null;
-            this.clrbtnActiveSpectralPeak.Location = new System.Drawing.Point(130, 186);
+            this.clrbtnActiveSpectralPeak.Location = new System.Drawing.Point(130, 158);
             this.clrbtnActiveSpectralPeak.MoreColors = "More Colors...";
             this.clrbtnActiveSpectralPeak.Name = "clrbtnActiveSpectralPeak";
             this.clrbtnActiveSpectralPeak.Selectable = true;
@@ -52983,7 +53000,7 @@
             // 
             this.lblActiveSpectralPeakColour.AutoSize = true;
             this.lblActiveSpectralPeakColour.Image = null;
-            this.lblActiveSpectralPeakColour.Location = new System.Drawing.Point(6, 191);
+            this.lblActiveSpectralPeakColour.Location = new System.Drawing.Point(6, 163);
             this.lblActiveSpectralPeakColour.Name = "lblActiveSpectralPeakColour";
             this.lblActiveSpectralPeakColour.Size = new System.Drawing.Size(68, 13);
             this.lblActiveSpectralPeakColour.TabIndex = 93;
@@ -53079,7 +53096,7 @@
             0,
             0,
             65536});
-            this.udDisplayLineWidth.Location = new System.Drawing.Point(130, 243);
+            this.udDisplayLineWidth.Location = new System.Drawing.Point(130, 214);
             this.udDisplayLineWidth.Maximum = new decimal(new int[] {
             50,
             0,
@@ -53129,7 +53146,7 @@
             // 
             this.lblDisplayLineWidth.AutoSize = true;
             this.lblDisplayLineWidth.Image = null;
-            this.lblDisplayLineWidth.Location = new System.Drawing.Point(6, 244);
+            this.lblDisplayLineWidth.Location = new System.Drawing.Point(6, 215);
             this.lblDisplayLineWidth.Name = "lblDisplayLineWidth";
             this.lblDisplayLineWidth.Size = new System.Drawing.Size(61, 13);
             this.lblDisplayLineWidth.TabIndex = 43;
@@ -53163,7 +53180,7 @@
             this.clrbtnDataLine.Automatic = "Automatic";
             this.clrbtnDataLine.Color = System.Drawing.Color.White;
             this.clrbtnDataLine.Image = null;
-            this.clrbtnDataLine.Location = new System.Drawing.Point(130, 214);
+            this.clrbtnDataLine.Location = new System.Drawing.Point(130, 186);
             this.clrbtnDataLine.MoreColors = "More Colors...";
             this.clrbtnDataLine.Name = "clrbtnDataLine";
             this.clrbtnDataLine.Selectable = true;
@@ -53188,7 +53205,7 @@
             // 
             this.lblDisplayDataLineColor.AutoSize = true;
             this.lblDisplayDataLineColor.Image = null;
-            this.lblDisplayDataLineColor.Location = new System.Drawing.Point(6, 219);
+            this.lblDisplayDataLineColor.Location = new System.Drawing.Point(6, 191);
             this.lblDisplayDataLineColor.Name = "lblDisplayDataLineColor";
             this.lblDisplayDataLineColor.Size = new System.Drawing.Size(56, 13);
             this.lblDisplayDataLineColor.TabIndex = 41;
@@ -75297,6 +75314,7 @@
         private LabelTS labelTS518;
         private CheckBoxTS chkVSyncDX;
         private CheckBoxTS chkForceCPURendering;
+        private CheckBoxTS chkSpectrumGlow;
         private LabelTS lblBlobMS;
         private NumericUpDownTS udBlobPeakHoldMS;
         private CheckBoxTS chkBlobPeakHold;
@@ -77224,3 +77242,5 @@
         private CheckBoxTS chkPSOutlierEnable;
     }
 }
+
+
