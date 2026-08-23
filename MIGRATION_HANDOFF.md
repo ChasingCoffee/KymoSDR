@@ -637,6 +637,16 @@ Follow-up to the Fill Color feature (`b84a70e`); user-verified ("perfect they bo
 
 Build clean x64 Release (0 errors).
 
+### 2026-08-23 (Filter/zero-line markers stay visible over the solid front wall, RUNTIME VERIFIED)
+Follow-up to the solid-wall mode (`b661f77`); user-verified ("perfect we made alot of progress"). Problem: the TX/RX filter lines and locked 0Hz line were drawn during the GRID pass (before the live trace), so once the 3D front wall/fill painted over them they vanished — visible over the rear rows only (history draws before the grid).
+
+1. **Fix**: extracted the whole marker set — sub-RX filter + its 0Hz line, RX filter + highlighted edge, TX filter/edges, band-stack overlays, CW zero-beat + TX CW lines, locked 0Hz line (all incl. their waterfall variants) — into self-contained `drawFilterZeroOverlaysDX2D(nVerticalShift, W, H, rx, bottom, bIsWaterfall)` (display.cs ~:10109). The helper re-derives Low/High/f_diff, filter_low/high (+DRM override), top, localSubDiff and cwSideToneShift from globals exactly as the grid method does, and runs inside the CALLER's clip (no own push/pop).
+2. **Call sites**: (a) grid method calls it once at the original position — non-3D/waterfall rendering unchanged; (b) `DrawPanadapterDX2D` calls it a SECOND time after the per-column live trace loop (just before the WF-sync brush cleanup, still inside the spectrum clip), gated `draw3DHistory && !local_mox` — mirroring the 3D-history gate — so markers render on top of the front wall across the whole depth.
+3. **Deliberately left in the grid method**: notches and 60m-channel bars (not part of the request). Side effect: band-stack/CW-zero now draw slightly earlier relative to those in the under-pass; no conflict observed.
+4. **Bookkeeping note**: the toolbar-button UX fixes shipped as `5364b44` never got an entry — recorded here for completeness: two-way sync `btnDisplay3DPan` ↔ setup `chkDisplay3DPanadapter` (via `SetupForm.Display3DPanadapter` setter guarded by `IsSetupFormNull`; SetupForm always exists at boot) and right-click on the toolbar 3D button opens the settings popup through public `setup.Show3DPanadapterSettings()`. WinForms gotcha: MouseClick/Click NEVER fire for the right button — wire MouseUp.
+
+Build clean x64 Release (0 errors).
+
 ### 2026-08-23 (Tier 3 parity + mesh opacity + brush-race crash fix, RUNTIME VERIFIED)
 Three items landed and user-verified ("no crash now", parity look "does look right", opaque fix "perfect"):
 

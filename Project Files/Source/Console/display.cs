@@ -6578,6 +6578,13 @@ namespace Thetis
                     else if (_ema_dbc != -999) _ema_dbc = -999;
                 }
 
+            // redraw filter/zero markers on top of the live front area when the
+            // 3D surface is active - the live fill/wall paints over them during
+            // the trace pass, and they must stay visible across the whole depth
+            // just like they do over the rear rows (which drew before the grid)
+            if (draw3DHistory && !local_mox)
+                drawFilterZeroOverlaysDX2D(nVerticalShift, W, H, rx, bottom, false);
+
             // clean up waterfall sync brushes
             if (liveWfBrushCache != null)
             {
@@ -10097,6 +10104,334 @@ namespace Thetis
             RectangleF rect = new RectangleF(filter_left_x, nVerticalShfit + top, nWidth, H - top);
             _d2dRenderTarget.FillRectangle(rect, brush);
         }
+        /// <summary>
+        /// Draws the filter / zero-line marker set: sub-rx filter + its 0Hz line,
+        /// RX filter (+highlighted edge), TX filter/edges, band stack overlays,
+        /// CW zero-beat + TX CW lines, and the locked 0Hz line.
+        /// Called by drawPanadapterAndWaterfallGridDX2D in its normal (under-trace)
+        /// position, and AGAIN by DrawPanadapterDX2D after the live trace when the
+        /// 3D surface is active so the markers stay visible over the front wall.
+        /// Must run inside the caller's pane clip.
+        /// </summary>
+        private static void drawFilterZeroOverlaysDX2D(int nVerticalShift, int W, int H, int rx, bool bottom, bool bIsWaterfall)
+        {
+            bool displayduplex = isRxDuplex(rx);
+            bool local_mox = localMox(rx);
+
+            // derive the same geometry inputs drawPanadapterAndWaterfallGridDX2D uses
+            int Low = 0, High = 0, f_diff = 0;
+            int grid_max = 0, grid_min = 0, grid_step = 0;
+
+            if (rx == 1)
+            {
+                if (local_mox)
+                {
+                    Low = displayduplex ? rx_display_low : tx_display_low;
+                    High = displayduplex ? rx_display_high : tx_display_high;
+                    grid_max = tx_spectrum_grid_max;
+                    grid_min = tx_spectrum_grid_min;
+                    grid_step = tx_spectrum_grid_step;
+                }
+                else
+                {
+                    Low = rx_display_low;
+                    High = rx_display_high;
+                    grid_max = spectrum_grid_max;
+                    grid_min = spectrum_grid_min;
+                    grid_step = spectrum_grid_step;
+                }
+                f_diff = freq_diff;
+            }
+            else
+            {
+                Low = local_mox ? tx_display_low : rx2_display_low;
+                High = local_mox ? tx_display_high : rx2_display_high;
+                grid_max = local_mox ? tx_spectrum_grid_max : rx2_spectrum_grid_max;
+                grid_min = local_mox ? tx_spectrum_grid_min : rx2_spectrum_grid_min;
+                grid_step = local_mox ? tx_spectrum_grid_step : rx2_spectrum_grid_step;
+                f_diff = rx2_freq_diff;
+            }
+
+            if (split_display) grid_step *= 2;
+
+            int filter_low, filter_high;
+            if (rx == 1)
+            {
+                if (local_mox) { filter_low = tx_filter_low; filter_high = tx_filter_high; }
+                else { filter_low = rx1_filter_low; filter_high = rx1_filter_high; }
+            }
+            else
+            {
+                if (local_mox) { filter_low = tx_filter_low; filter_high = tx_filter_high; }
+                else { filter_low = rx2_filter_low; filter_high = rx2_filter_high; }
+            }
+
+            if ((rx1_dsp_mode == DSPMode.DRM && rx == 1) ||
+                (rx2_dsp_mode == DSPMode.DRM && rx == 2))
+            {
+                filter_low = -6000;
+                filter_high = 6000;
+            }
+
+            int width = High - Low;
+            int y_range = grid_max - grid_min;
+            int top;
+            if (bIsWaterfall) top = 20; //change top so that the filter gap doesnt change, inore grid spacing
+            else top = (int)((double)grid_step * H / y_range); // top is based on grid spacing
+
+            long localSubDiff;
+            if (local_mox)
+            {
+                if (displayduplex) localSubDiff = vfoa_sub_hz - vfoa_hz;
+                else localSubDiff = 0;
+            }
+            else
+            {
+                localSubDiff = vfoa_sub_hz - vfoa_hz;
+            }
+
+            int cwSideToneShift = getCWSideToneShift(rx);
+            int cwSideToneShiftInverted = -cwSideToneShift;
+
+            #region RX filter, filter lines and sub rx overlay
+            if (!local_mox && sub_rx1_enabled && rx == 1) //multi-rx
+            {
+                int localRit = _rx1ClickDisplayCTUN ? rit_hz : 0;
+                if ((bIsWaterfall && m_bShowRXFilterOnWaterfall) || !bIsWaterfall)
+                {
+                    // draw Sub RX filter
+                    // get filter screen coordinates
+                    int filter_left_x = (int)((float)(filter_low - Low + localSubDiff + localRit) / width * W);
+                    int filter_right_x = (int)((float)(filter_high - Low + localSubDiff + localRit) / width * W);
+
+                    drawFilterOverlayDX2D(m_bDX2_sub_rx_filter_brush, filter_left_x, filter_right_x, W, H, rx, top, bottom, nVerticalShift);
+                }
+
+                if ((bIsWaterfall && m_bShowRXZeroLineOnWaterfall) || !bIsWaterfall)
+                {
+                    // draw Sub RX 0Hz line
+                    int x = (int)((float)(localSubDiff - Low + localRit) / width * W);
+                    drawLineDX2D(m_bDX2_sub_rx_zero_line_pen, x, nVerticalShift + top, x, nVerticalShift + H, 2);
+                }
+            }
+
+            // RX FILTER overlay + highlight edges
+            if ((bIsWaterfall && m_bShowRXFilterOnWaterfall) || !bIsWaterfall)
+            {
+                if (!local_mox)
+                {
+                    // draw RX filter
+                    int filter_left_x = (int)((float)(filter_low - Low - f_diff) / width * W);
+                    int filter_right_x = (int)((float)(filter_high - Low - f_diff) / width * W);
+
+                    drawFilterOverlayDX2D(m_bDX2_display_filter_brush, filter_left_x, filter_right_x, W, H, rx, top, bottom, nVerticalShift);
+
+                    if (!bIsWaterfall)
+                    {
+                        int nFilterEdge = 0;
+
+                        if (rx == 1)
+                            nFilterEdge = m_nHightlightFilterEdgeRX1;
+                        else if (rx == 2)
+                            nFilterEdge = m_nHightlightFilterEdgeRX2;
+
+                        switch (nFilterEdge)
+                        {
+                            case -1:
+                                drawLineDX2D(m_bDX2_cw_zero_pen, filter_left_x, nVerticalShift + top, filter_left_x, nVerticalShift + H, 2);
+                                break;
+                            case 1:
+                                drawLineDX2D(m_bDX2_cw_zero_pen, filter_right_x, nVerticalShift + top, filter_right_x, nVerticalShift + H, 2);
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                }
+            }
+            //
+            #endregion
+
+            #region Tx filter and tx lines
+            if ((rx == 1 && rx1_dsp_mode != DSPMode.CWL && rx1_dsp_mode != DSPMode.CWU) || (rx == 2 && rx2_dsp_mode != DSPMode.CWL && rx2_dsp_mode != DSPMode.CWU)) //MW0LGE [2.9.0.7] +rx2
+            {
+                if ((bIsWaterfall && m_bShowTXFilterOnRXWaterfall) || !bIsWaterfall)
+                {
+                    int filter_left_x;
+                    int filter_right_x;
+                    int filter_low_tmp;
+                    int filter_high_tmp;
+
+                    if (local_mox)
+                    {
+                        filter_low_tmp = filter_low;
+                        filter_high_tmp = filter_high;
+                    }
+                    else
+                    {
+                        filter_low_tmp = tx_filter_low;
+                        filter_high_tmp = tx_filter_high;
+                    }
+
+                    int localRit = 0;
+                    int localXit;
+                    if (local_mox)
+                        localXit = displayduplex ? xit_hz : 0;
+                    else
+                        localXit = xit_hz;
+                    if (!split_enabled)
+                    {
+                        if (!local_mox)
+                            localRit = rx == 1 ? rit_hz : 0;
+                        filter_left_x = (int)((float)(filter_low_tmp - Low - f_diff + localXit - localRit) / width * W);
+                        filter_right_x = (int)((float)(filter_high_tmp - Low - f_diff + localXit - localRit) / width * W);
+                    }
+                    else // MW0LGE_21k8
+                    {
+                        if (!local_mox)
+                            localRit = rx == 1 && _rx1ClickDisplayCTUN ? 0 : rx == 2 ? 0 : rit_hz;
+                        filter_left_x = (int)((float)(filter_low_tmp - Low + localXit + (localSubDiff) - localRit) / width * W);
+                        filter_right_x = (int)((float)(filter_high_tmp - Low + localXit + (localSubDiff) - localRit) / width * W);
+                    }
+
+                    if (local_mox)
+                    {
+                        drawFilterOverlayDX2D(m_bDX2_tx_filter_brush, filter_left_x, filter_right_x, W, H, rx, top, bottom, nVerticalShift);
+                    }
+                    else if (draw_tx_filter)
+                    {
+                        if ((rx == 2 && _tx_on_vfob) || (rx == 1 && !(_tx_on_vfob && _rx2_enabled)))
+                        {
+                            drawLineDX2D(m_bDX2_tx_filter_pen, filter_left_x, nVerticalShift + top, filter_left_x, nVerticalShift + H, tx_filter_pen.Width);
+                            drawLineDX2D(m_bDX2_tx_filter_pen, filter_right_x, nVerticalShift + top, filter_right_x, nVerticalShift + H, tx_filter_pen.Width);
+                        }
+                    }
+                }
+            }
+            #endregion
+
+            #region BandStackOverlay
+            //MW0LGE_21h
+            if (m_bShowBandStackOverlays && m_bandStackOverlays != null && rx == 1 && !local_mox && !bIsWaterfall)
+            {
+                long rf_freq = vfoa_hz;
+                int local_rit = _rx1ClickDisplayCTUN ? 0 : rit_hz;
+
+                ID2D1Brush brush;
+                for (int n = 0; n < m_bandStackOverlays.Length; n++)
+                {
+                    int filter_left_x = (int)((float)((((m_bandStackOverlays[n].Frequency * 1e6) - rf_freq) + m_bandStackOverlays[n].LowFilter) - Low - local_rit) / width * W);
+                    int filter_right_x = (int)((float)((((m_bandStackOverlays[n].Frequency * 1e6) - rf_freq) + m_bandStackOverlays[n].HighFilter) - Low - local_rit) / width * W);
+
+                    brush = (n == m_nHighlightedBandStackEntryIndex) ? m_bDX2_bandstack_overlay_brush_highlight : m_bDX2_bandstack_overlay_brush;
+
+                    // filled rect
+                    drawFilterOverlayDX2D(brush, filter_left_x, filter_right_x, W, H, rx, top, bottom, nVerticalShift);
+
+                    // line either side
+                    drawLineDX2D(m_bDX2_bandstack_overlay_brush_lines, filter_left_x, nVerticalShift + top, filter_left_x, nVerticalShift + H, 2);
+                    drawLineDX2D(m_bDX2_bandstack_overlay_brush_lines, filter_right_x, nVerticalShift + top, filter_right_x, nVerticalShift + H, 2);
+                }
+            }
+            #endregion
+
+            #region CW zero and tx lines
+            // Draw a CW Zero Beat + TX line on CW filter
+            if (!bIsWaterfall)
+            {
+                if (show_cwzero_line)
+                {
+                    if (rx == 1 && !local_mox &&
+                        (rx1_dsp_mode == DSPMode.CWL || rx1_dsp_mode == DSPMode.CWU))
+                    {
+                        int cw_line_x1;
+                        cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low - f_diff) / width * W);
+
+                        drawLineDX2D(m_bDX2_cw_zero_pen, cw_line_x1, nVerticalShift + top, cw_line_x1, nVerticalShift + H, cw_zero_pen.Width);
+                    }
+
+                    if (rx == 2 && !local_mox &&
+                        (rx2_dsp_mode == DSPMode.CWL || rx2_dsp_mode == DSPMode.CWU))
+                    {
+                        int cw_line_x1;
+                        cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low - f_diff) / width * W);
+
+                        drawLineDX2D(m_bDX2_cw_zero_pen, cw_line_x1, nVerticalShift + top, cw_line_x1, nVerticalShift + H, cw_zero_pen.Width);
+                    }
+                }
+                if (draw_tx_cw_freq)
+                {
+                    if (rx == 1 && !local_mox && !(_rx2_enabled && _tx_on_vfob) &&
+                        (rx1_dsp_mode == DSPMode.CWL || rx1_dsp_mode == DSPMode.CWU))
+                    {
+                        int cw_line_x1;
+                        int localRit;
+                        if (!split_enabled)
+                        {
+                            localRit = rit_hz;
+                            cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low - f_diff + xit_hz - localRit) / width * W);
+                        }
+                        else
+                        {
+                            localRit = _rx1ClickDisplayCTUN ? 0 : rit_hz;
+                            cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low + xit_hz - localRit + (localSubDiff)) / width * W);
+                        }
+
+                        drawLineDX2D(m_bDX2_tx_filter_pen, cw_line_x1, nVerticalShift + top, cw_line_x1, nVerticalShift + H, tx_filter_pen.Width);
+                    }
+
+                    if (rx == 2 && !local_mox && (_rx2_enabled && _tx_on_vfob) &&  //MW0LGE [2.9.0.7] txonb
+                        (rx2_dsp_mode == DSPMode.CWL || rx2_dsp_mode == DSPMode.CWU))
+                    {
+                        int cw_line_x1;
+                        if (!split_enabled)
+                            cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low - f_diff + xit_hz) / width * W);
+                        else
+                            cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low + xit_hz + (localSubDiff)) / width * W);
+
+                        drawLineDX2D(m_bDX2_tx_filter_pen, cw_line_x1, nVerticalShift + top, cw_line_x1, nVerticalShift + H, tx_filter_pen.Width);
+                    }
+                }
+            }
+            #endregion
+
+            #region locked 0Hz line
+            {
+                int center_line_x;
+                if (local_mox)
+                {
+                    int localXit = displayduplex ? xit_hz : 0;
+
+                    if (!split_enabled) //MW0LGE_21k8
+                    {
+                        center_line_x = (int)((float)(-f_diff - Low + localXit) / width * W); // locked 0 line
+                    }
+                    else
+                    {
+                        center_line_x = (int)((float)(-Low + localXit + (localSubDiff)) / width * W); // locked 0 line
+                    }
+                }
+                else
+                {
+                    center_line_x = (int)((float)(-f_diff - Low) / width * W); // locked 0 line
+                }
+
+                // Draw 0Hz vertical line if visible
+                if ((!bIsWaterfall && show_zero_line) |
+                    (bIsWaterfall && ((m_bShowRXZeroLineOnWaterfall & !local_mox) || (m_bShowTXZeroLineOnWaterfall & local_mox)))) // MW0LGE
+                {
+                    if (center_line_x >= 0 && center_line_x <= W)
+                    {
+                        float pw = local_mox ? tx_grid_zero_pen.Width : grid_zero_pen.Width;
+                        ID2D1Brush pnPen = local_mox ? m_bDX2_tx_grid_zero_pen : m_bDX2_grid_zero_pen;
+
+                        drawLineDX2D(pnPen, center_line_x, nVerticalShift + top, center_line_x, nVerticalShift + H, pw);
+                    }
+                }
+            }
+            #endregion
+        }
+
         private static void drawChannelBarDX2D(Channel chan, int left, int right, int top, int height, Color c, Color h)
         {
             int width = right - left;
@@ -10590,123 +10925,8 @@ namespace Thetis
             RectangleF clipRect = new RectangleF(0, nVerticalShift, W, H);
             _d2dRenderTarget.PushAxisAlignedClip(clipRect, AntialiasMode.Aliased);
 
-            #region RX filter, filter lines and sub rx overlay
-            if (!local_mox && sub_rx1_enabled && rx == 1) //multi-rx
-            {
-                int localRit = _rx1ClickDisplayCTUN ? rit_hz : 0;
-                if ((bIsWaterfall && m_bShowRXFilterOnWaterfall) || !bIsWaterfall)
-                {
-                    // draw Sub RX filter
-                    // get filter screen coordinates
-                    int filter_left_x = (int)((float)(filter_low - Low + localSubDiff + localRit) / width * W);
-                    int filter_right_x = (int)((float)(filter_high - Low + localSubDiff + localRit) / width * W);
-
-                    drawFilterOverlayDX2D(m_bDX2_sub_rx_filter_brush, filter_left_x, filter_right_x, W, H, rx, top, bottom, nVerticalShift);
-                }
-
-                if ((bIsWaterfall && m_bShowRXZeroLineOnWaterfall) || !bIsWaterfall)
-                {
-                    // draw Sub RX 0Hz line
-                    int x = (int)((float)(localSubDiff - Low + localRit) / width * W);
-                    drawLineDX2D(m_bDX2_sub_rx_zero_line_pen, x, nVerticalShift + top, x, nVerticalShift + H, 2);
-                }
-            }
-
-            // RX FILTER overlay + highlight edges
-            if ((bIsWaterfall && m_bShowRXFilterOnWaterfall) || !bIsWaterfall)
-            {
-                if (!local_mox)
-                {
-                    // draw RX filter
-                    int filter_left_x = (int)((float)(filter_low - Low - f_diff) / width * W);
-                    int filter_right_x = (int)((float)(filter_high - Low - f_diff) / width * W);
-
-                    drawFilterOverlayDX2D(m_bDX2_display_filter_brush, filter_left_x, filter_right_x, W, H, rx, top, bottom, nVerticalShift);
-
-                    if (!bIsWaterfall)
-                    {
-                        int nFilterEdge = 0;
-
-                        if (rx == 1)
-                            nFilterEdge = m_nHightlightFilterEdgeRX1;
-                        else if (rx == 2)
-                            nFilterEdge = m_nHightlightFilterEdgeRX2;
-
-                        switch (nFilterEdge)
-                        {
-                            case -1:
-                                drawLineDX2D(m_bDX2_cw_zero_pen, filter_left_x, nVerticalShift + top, filter_left_x, nVerticalShift + H, 2);
-                                break;
-                            case 1:
-                                drawLineDX2D(m_bDX2_cw_zero_pen, filter_right_x, nVerticalShift + top, filter_right_x, nVerticalShift + H, 2);
-                                break;
-                            default:
-                                break;
-                        }
-                    }
-                }
-            }
-            //
-            #endregion
-
-            #region Tx filter and tx lines
-
-            //MW0LGE_21k8 reworked
-            if ((rx == 1 && rx1_dsp_mode != DSPMode.CWL && rx1_dsp_mode != DSPMode.CWU) || (rx == 2 && rx2_dsp_mode != DSPMode.CWL && rx2_dsp_mode != DSPMode.CWU)) //MW0LGE [2.9.0.7] +rx2
-            {
-                if ((bIsWaterfall && m_bShowTXFilterOnRXWaterfall) || !bIsWaterfall)
-                {
-                    int filter_left_x;
-                    int filter_right_x;
-                    int filter_low_tmp;
-                    int filter_high_tmp;
-
-                    if (local_mox)
-                    {
-                        filter_low_tmp = filter_low;
-                        filter_high_tmp = filter_high;
-                    }
-                    else
-                    {
-                        filter_low_tmp = tx_filter_low;
-                        filter_high_tmp = tx_filter_high;
-                    }
-
-                    int localRit = 0;
-                    int localXit;
-                    if (local_mox)
-                        localXit = displayduplex ? xit_hz : 0;
-                    else
-                        localXit = xit_hz;
-                    if (!split_enabled)
-                    {
-                        if (!local_mox)
-                            localRit = rx == 1 ? rit_hz : 0;
-                        filter_left_x = (int)((float)(filter_low_tmp - Low - f_diff + localXit - localRit) / width * W);
-                        filter_right_x = (int)((float)(filter_high_tmp - Low - f_diff + localXit - localRit) / width * W);
-                    }
-                    else // MW0LGE_21k8
-                    {
-                        if (!local_mox)
-                            localRit = rx == 1 && _rx1ClickDisplayCTUN ? 0 : rx == 2 ? 0 : rit_hz;
-                        filter_left_x = (int)((float)(filter_low_tmp - Low + localXit + (localSubDiff) - localRit) / width * W);
-                        filter_right_x = (int)((float)(filter_high_tmp - Low + localXit + (localSubDiff) - localRit) / width * W);
-                    }
-
-                    if (local_mox)
-                    {
-                        drawFilterOverlayDX2D(m_bDX2_tx_filter_brush, filter_left_x, filter_right_x, W, H, rx, top, bottom, nVerticalShift);
-                    }
-                    else if (draw_tx_filter)
-                    {
-                        if ((rx == 2 && _tx_on_vfob) || (rx == 1 && !(_tx_on_vfob && _rx2_enabled)))
-                        {
-                            drawLineDX2D(m_bDX2_tx_filter_pen, filter_left_x, nVerticalShift + top, filter_left_x, nVerticalShift + H, tx_filter_pen.Width);
-                            drawLineDX2D(m_bDX2_tx_filter_pen, filter_right_x, nVerticalShift + top, filter_right_x, nVerticalShift + H, tx_filter_pen.Width);
-                        }
-                    }
-                }
-            }
+            #region RX/TX filters, sub-rx, band stack, CW zero and locked 0Hz line
+            drawFilterZeroOverlaysDX2D(nVerticalShift, W, H, rx, bottom, bIsWaterfall);
             #endregion
 
             #region 60m channels
@@ -10769,97 +10989,12 @@ namespace Thetis
             }
             #endregion
 
-            #region BandStackOverlay
-            //MW0LGE_21h
-            if (m_bShowBandStackOverlays && m_bandStackOverlays != null && rx == 1 && !local_mox && !bIsWaterfall)
-            {
-                long rf_freq = vfoa_hz;
-                int local_rit = _rx1ClickDisplayCTUN ? 0 : rit_hz;
-
-                ID2D1Brush brush;
-                for (int n = 0; n < m_bandStackOverlays.Length; n++)
-                {
-                    int filter_left_x = (int)((float)((((m_bandStackOverlays[n].Frequency * 1e6) - rf_freq) + m_bandStackOverlays[n].LowFilter) - Low - local_rit) / width * W);
-                    int filter_right_x = (int)((float)((((m_bandStackOverlays[n].Frequency * 1e6) - rf_freq) + m_bandStackOverlays[n].HighFilter) - Low - local_rit) / width * W);
-
-                    brush = (n == m_nHighlightedBandStackEntryIndex) ? m_bDX2_bandstack_overlay_brush_highlight : m_bDX2_bandstack_overlay_brush;
-
-                    // filled rect
-                    drawFilterOverlayDX2D(brush, filter_left_x, filter_right_x, W, H, rx, top, bottom, nVerticalShift);
-
-                    // line either side
-                    drawLineDX2D(m_bDX2_bandstack_overlay_brush_lines, filter_left_x, nVerticalShift + top, filter_left_x, nVerticalShift + H, 2);
-                    drawLineDX2D(m_bDX2_bandstack_overlay_brush_lines, filter_right_x, nVerticalShift + top, filter_right_x, nVerticalShift + H, 2);
-                }
-            }
-            #endregion
-
             #region notches
             // draw notches if in RX
             if (!local_mox && !bIsWaterfall)
             {
                 handleNotches(rx, bottom, cwSideToneShift, Low, High, nVerticalShift, top, width, W, H, true);//, 50); //MW0LGE [2.9.0.7] moved to function so can be used by drawmpana/drawwater                
             }// END NOTCH
-            #endregion
-
-            #region CW zero and tx lines
-            // Draw a CW Zero Beat + TX line on CW filter
-            if (!bIsWaterfall)
-            {
-                if (show_cwzero_line)
-                {
-                    if (rx == 1 && !local_mox &&
-                        (rx1_dsp_mode == DSPMode.CWL || rx1_dsp_mode == DSPMode.CWU))
-                    {
-                        int cw_line_x1;
-                        cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low - f_diff) / width * W);
-
-                        drawLineDX2D(m_bDX2_cw_zero_pen, cw_line_x1, nVerticalShift + top, cw_line_x1, nVerticalShift + H, cw_zero_pen.Width);
-                    }
-
-                    if (rx == 2 && !local_mox &&
-                        (rx2_dsp_mode == DSPMode.CWL || rx2_dsp_mode == DSPMode.CWU))
-                    {
-                        int cw_line_x1;
-                        cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low - f_diff) / width * W);
-
-                        drawLineDX2D(m_bDX2_cw_zero_pen, cw_line_x1, nVerticalShift + top, cw_line_x1, nVerticalShift + H, cw_zero_pen.Width);
-                    }
-                }
-                if (draw_tx_cw_freq)
-                {
-                    if (rx == 1 && !local_mox && !(_rx2_enabled && _tx_on_vfob) &&
-                        (rx1_dsp_mode == DSPMode.CWL || rx1_dsp_mode == DSPMode.CWU))
-                    {
-                        int cw_line_x1;
-                        int localRit;
-                        if (!split_enabled)
-                        {
-                            localRit = rit_hz;
-                            cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low - f_diff + xit_hz - localRit) / width * W);
-                        }
-                        else
-                        {
-                            localRit = _rx1ClickDisplayCTUN ? 0 : rit_hz;
-                            cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low + xit_hz - localRit + (localSubDiff)) / width * W);
-                        }
-
-                        drawLineDX2D(m_bDX2_tx_filter_pen, cw_line_x1, nVerticalShift + top, cw_line_x1, nVerticalShift + H, tx_filter_pen.Width);
-                    }
-
-                    if (rx == 2 && !local_mox && (_rx2_enabled && _tx_on_vfob) &&  //MW0LGE [2.9.0.7] txonb
-                        (rx2_dsp_mode == DSPMode.CWL || rx2_dsp_mode == DSPMode.CWU))
-                    {
-                        int cw_line_x1;
-                        if (!split_enabled)
-                            cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low - f_diff + xit_hz) / width * W);
-                        else
-                            cw_line_x1 = (int)((float)(cwSideToneShiftInverted - Low + xit_hz + (localSubDiff)) / width * W);
-
-                        drawLineDX2D(m_bDX2_tx_filter_pen, cw_line_x1, nVerticalShift + top, cw_line_x1, nVerticalShift + H, tx_filter_pen.Width);
-                    }
-                }
-            }
             #endregion
 
             #region Centre Lines, 0hz line, and Freq offset text
@@ -10880,19 +11015,6 @@ namespace Thetis
             else
             {
                 center_line_x = (int)((float)(-f_diff - Low) / width * W); // locked 0 line
-            }
-
-            // Draw 0Hz vertical line if visible
-            if ((!bIsWaterfall && show_zero_line) |
-                (bIsWaterfall && ((m_bShowRXZeroLineOnWaterfall & !local_mox) || (m_bShowTXZeroLineOnWaterfall & local_mox)))) // MW0LGE
-            {
-                if (center_line_x >= 0 && center_line_x <= W)
-                {
-                    float pw = local_mox ? tx_grid_zero_pen.Width : grid_zero_pen.Width;
-                    ID2D1Brush pnPen = local_mox ? m_bDX2_tx_grid_zero_pen : m_bDX2_grid_zero_pen;
-
-                    drawLineDX2D(pnPen, center_line_x, nVerticalShift + top, center_line_x, nVerticalShift + H, pw);
-                }
             }
 
             if (show_freq_offset)
