@@ -12923,7 +12923,11 @@ namespace Thetis
         }
 
         private frm3DPanadapter _frm3DPanadapter = null;
-        private void btn3DSettings_Click(object sender, EventArgs e)
+        /// <summary>
+        /// Lazily creates / raises the 3D panadapter settings popup (shared by the
+        /// setup button and the console display-toolbar button's right-click).
+        /// </summary>
+        public void Show3DPanadapterSettings()
         {
             if (_frm3DPanadapter == null || _frm3DPanadapter.IsDisposed)
             {
@@ -12939,6 +12943,10 @@ namespace Thetis
             {
                 _frm3DPanadapter.BringToFront();
             }
+        }
+        private void btn3DSettings_Click(object sender, EventArgs e)
+        {
+            Show3DPanadapterSettings();
         }
 
         private bool _skinChanging = false;

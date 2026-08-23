@@ -768,6 +768,7 @@ namespace Thetis
             btnDisplay3DPan.TabIndex = 10;
             toolTip1.SetToolTip(btnDisplay3DPan, "3D Panadapter on/off");
             btnDisplay3DPan.CheckedChanged += new EventHandler(chkDisplay3DPan_CheckedChanged);
+            btnDisplay3DPan.MouseUp += new MouseEventHandler(btnDisplay3DPan_MouseUp);
             panelDisplay2.Controls.Add(btnDisplay3DPan);
 
             InitialiseAndromedaMenus();
@@ -30005,6 +30006,11 @@ namespace Thetis
         {
             Display.Pan3DEnabled = btnDisplay3DPan.Checked;
             btnDisplay3DPan.BackColor = btnDisplay3DPan.Checked ? button_selected_color : SystemColors.Control;
+
+            // keep the setup checkbox in sync with the toolbar button (guarded so we
+            // never lazily create the Setup form just for this; its CheckedChanged
+            // re-pushes the same engine value and re-syncs this button - idempotent)
+            if (!IsSetupFormNull) SetupForm.Display3DPanadapter = btnDisplay3DPan.Checked;
         }
 
         /// <summary>
@@ -30016,6 +30022,15 @@ namespace Thetis
             if (btnDisplay3DPan == null) return;
             if (btnDisplay3DPan.Checked != state) btnDisplay3DPan.Checked = state; // fires CheckedChanged -> engine + colour
             else btnDisplay3DPan.BackColor = state ? button_selected_color : SystemColors.Control;
+        }
+
+        private void btnDisplay3DPan_MouseUp(object sender, MouseEventArgs e)
+        {
+            // Thetis convention: right-click a button to jump to its settings popup.
+            // NOTE: WinForms never raises MouseClick/Click for the right button,
+            // so this must hang off MouseUp.
+            if (IsSetupFormNull || e.Button != MouseButtons.Right) return;
+            SetupForm.Show3DPanadapterSettings();
         }
 
         private void chkDisplayPeak_CheckedChanged(object sender, System.EventArgs e)
