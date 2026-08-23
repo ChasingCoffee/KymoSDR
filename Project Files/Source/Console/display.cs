@@ -643,6 +643,16 @@ namespace Thetis
                                             int.Parse(c[3]), int.Parse(c[0]), int.Parse(c[1]), int.Parse(c[2]));
                                     break;
                                 }
+                            case "chk3DFillColorEnable": Pan3DFillColorEnabled = bool.Parse(val); break;
+                            case "tb3DFillOpacity": Pan3DFillAlpha = int.Parse(val) / 100f; break;
+                            case "clrbtn3DFillColor":
+                                {
+                                    string[] f = val.Split('.');
+                                    if (f.Length == 4)
+                                        Pan3DFillColor = Color.FromArgb(
+                                            int.Parse(f[3]), int.Parse(f[0]), int.Parse(f[1]), int.Parse(f[2]));
+                                    break;
+                                }
                             case "combo3DColorMap":
                                 {
                                     // stored as combo text; map back to index (Classic/Turbo/Viridis/Inferno)
@@ -700,6 +710,33 @@ namespace Thetis
         {
             get { return _pan3DColorMap; }
             set { _pan3DColorMap = Math.Max(0, Math.Min(3, value)); }
+        }
+
+        // 3D front data fill override (frm3DPanadapter "Fill Color"). When disabled the
+        // fill keeps its per-colormap behaviour untouched; when enabled every colormap's
+        // live fill is strength-shaded from Pan3DFillColor instead. Never affects the
+        // data line stroke or the 3D surface palette.
+        private static bool _pan3DFillColorEnabled = false;
+        public static bool Pan3DFillColorEnabled
+        {
+            get { return _pan3DFillColorEnabled; }
+            set { _pan3DFillColorEnabled = value; }
+        }
+
+        private static Color _pan3DFillColor = Color.Aquamarine;
+        public static Color Pan3DFillColor
+        {
+            get { return _pan3DFillColor; }
+            set { _pan3DFillColor = value; }
+        }
+
+        // opacity of the custom fill colour (0-1). Default matches the 0.55 the
+        // colormap fills have always used so enabling starts from the familiar look.
+        private static float _pan3DFillAlpha = 0.55f;
+        public static float Pan3DFillAlpha
+        {
+            get { return _pan3DFillAlpha; }
+            set { _pan3DFillAlpha = Math.Max(0f, Math.Min(1f, value)); }
         }
 
         public static bool Pan3DSideWalls
@@ -5777,7 +5814,13 @@ namespace Thetis
                 bool liveUseColormap = _pan3DEnabled && _pan3DColorMap > 0 && rx == 1 && !local_mox && !liveUseWaterfallSync;
                 if (liveUseColormap && _colormapLUT == null) BuildColormapLUT();
                 int liveColorMapIdx = _pan3DColorMap;
-                var liveWfBrushCache = liveUseWaterfallSync || liveUseColormap
+
+                // user fill-colour override: explicit opt-in, so it outranks waterfall
+                // sync / colormap / classic fills. 3D history frames only (2D keeps its
+                // own Data Fill from the main display setup) - never touches the line.
+                bool liveCustomFill = draw3DHistory && _pan3DFillColorEnabled && rx == 1 && !local_mox;
+
+                var liveWfBrushCache = liveUseWaterfallSync || liveUseColormap || liveCustomFill || _b3DMeshDrewFrame
                     ? new System.Collections.Generic.Dictionary<int, ID2D1SolidColorBrush>()
                     : null;
 
@@ -5899,7 +5942,27 @@ namespace Thetis
                         bottomPoint.X = point.X;
 
                         ID2D1Brush activeFillBrush = fillBrush;
-                        if (liveUseColormap)
+                        if (liveCustomFill)
+                        {
+                            // same strength-keyed solid brush mechanism as the colormaps,
+                            // but shaded from the user's fill colour
+                            float sF = (max - grid_min) / (float)yRange;
+                            if (sF < 0) sF = 0; else if (sF > 1) sF = 1;
+                            float brF = 0.25f + 0.75f * sF;
+                            int rF = (int)(_pan3DFillColor.R * brF);
+                            int gF = (int)(_pan3DFillColor.G * brF);
+                            int bF = (int)(_pan3DFillColor.B * brF);
+                            int aF = (int)(_pan3DFillAlpha * 255f);
+                            int fKey = (aF << 24) | (rF << 16) | (gF << 8) | bF;
+                            if (!liveWfBrushCache.TryGetValue(fKey, out var customFillBrush))
+                            {
+                                customFillBrush = _d2dRenderTarget.CreateSolidColorBrush(
+                                    new Vortice.Mathematics.Color4(rF / 255f, gF / 255f, bF / 255f, _pan3DFillAlpha));
+                                liveWfBrushCache[fKey] = customFillBrush;
+                            }
+                            activeFillBrush = customFillBrush;
+                        }
+                        else if (liveUseColormap)
                         {
                             float sC = (max - grid_min) / (float)yRange;
                             if (sC < 0) sC = 0; else if (sC > 1) sC = 1;
@@ -5930,24 +5993,49 @@ namespace Thetis
                         {
                             if (!m_bUseLinearGradient)
                             {
-                                if (m_bDX2_3d_fill_brush == null)
+                                if (_b3DMeshDrewFrame && rx == 1)
                                 {
-                                    // vertical gradient: bright near trace (~55% alpha) fading to bottom (~16% alpha)
-                                    GradientStop[] stops = new GradientStop[]
+                                    // GPU mesh owns the backdrop: there is no curtain stack
+                                    // behind this fill, so the vertical gradient reads as
+                                    // transparent. Colour it exactly like the LUT colormaps
+                                    // do - per-column strength-keyed solid brush at 0.55 alpha
+                                    // using the surface's Classic brightness formula.
+                                    float sCls = (max - grid_min) / (float)yRange;
+                                    if (sCls < 0) sCls = 0; else if (sCls > 1) sCls = 1;
+                                    float brCls = 0.25f + 0.75f * sCls;
+                                    int rCls = (int)(_pan3DLineColor.R * brCls);
+                                    int gCls = (int)(_pan3DLineColor.G * brCls);
+                                    int blCls = (int)(_pan3DLineColor.B * brCls);
+                                    int clsKey = (140 << 24) | (rCls << 16) | (gCls << 8) | blCls;
+                                    if (!liveWfBrushCache.TryGetValue(clsKey, out var clsFillBrush))
                                     {
-                                        new GradientStop() { Color = new Vortice.Mathematics.Color4(_pan3DLineColor.R / 255f, _pan3DLineColor.G / 255f, _pan3DLineColor.B / 255f, 0.55f), Position = 0.0f },
-                                        new GradientStop() { Color = new Vortice.Mathematics.Color4(_pan3DLineColor.R / 255f, _pan3DLineColor.G / 255f, _pan3DLineColor.B / 255f, 0.16f), Position = 1.0f },
-                                    };
-                                    var stopsColl = _d2dRenderTarget.CreateGradientStopCollection( stops);
-                                    m_bDX2_3d_fill_brush = _d2dRenderTarget.CreateLinearGradientBrush(new LinearGradientBrushProperties()
-                                    {
-                                        StartPoint = new Vector2(0, nVerticalShift),
-                                        EndPoint = new Vector2(0, nVerticalShift + H)
-                                    },
-                                    stopsColl);
-                                    stopsColl.Dispose();
+                                        clsFillBrush = _d2dRenderTarget.CreateSolidColorBrush(
+                                            new Vortice.Mathematics.Color4(rCls / 255f, gCls / 255f, blCls / 255f, 0.55f));
+                                        liveWfBrushCache[clsKey] = clsFillBrush;
+                                    }
+                                    activeFillBrush = clsFillBrush;
                                 }
-                                activeFillBrush = m_bDX2_3d_fill_brush;
+                                else
+                                {
+                                    if (m_bDX2_3d_fill_brush == null)
+                                    {
+                                        // vertical gradient: bright near trace (~55% alpha) fading to bottom (~16% alpha)
+                                        GradientStop[] stops = new GradientStop[]
+                                        {
+                                            new GradientStop() { Color = new Vortice.Mathematics.Color4(_pan3DLineColor.R / 255f, _pan3DLineColor.G / 255f, _pan3DLineColor.B / 255f, 0.55f), Position = 0.0f },
+                                            new GradientStop() { Color = new Vortice.Mathematics.Color4(_pan3DLineColor.R / 255f, _pan3DLineColor.G / 255f, _pan3DLineColor.B / 255f, 0.16f), Position = 1.0f },
+                                        };
+                                        var stopsColl = _d2dRenderTarget.CreateGradientStopCollection( stops);
+                                        m_bDX2_3d_fill_brush = _d2dRenderTarget.CreateLinearGradientBrush(new LinearGradientBrushProperties()
+                                        {
+                                            StartPoint = new Vector2(0, nVerticalShift),
+                                            EndPoint = new Vector2(0, nVerticalShift + H)
+                                        },
+                                        stopsColl);
+                                        stopsColl.Dispose();
+                                    }
+                                    activeFillBrush = m_bDX2_3d_fill_brush;
+                                }
                             }
                         }
 
@@ -6008,50 +6096,30 @@ namespace Thetis
                         continue;
                     }
 
+                    // The data line keeps the user's configured color on EVERY path -
+                    // colormap / waterfall-sync palettes color the 3D surface and the
+                    // fills, never the top-curve stroke (matches the 2D panadapter).
                     ID2D1Brush activeLineBrush = lineBrush;
-                    if (liveUseColormap)
-                    {
-                        float sL = (max - grid_min) / (float)yRange;
-                        if (sL < 0) sL = 0; else if (sL > 1) sL = 1;
-                        int oL = ((liveColorMapIdx - 1) * 256 + (int)(sL * 255f)) * 3;
-                        int cmKey = (0xFF << 24) | (_colormapLUT[oL] << 16) | (_colormapLUT[oL + 1] << 8) | _colormapLUT[oL + 2];
-                        if (!liveWfBrushCache.TryGetValue(cmKey, out var cmLineBrush))
-                        {
-                            cmLineBrush = _d2dRenderTarget.CreateSolidColorBrush(
-                                new Vortice.Mathematics.Color4(_colormapLUT[oL] / 255f, _colormapLUT[oL + 1] / 255f, _colormapLUT[oL + 2] / 255f, 1.0f));
-                            liveWfBrushCache[cmKey] = cmLineBrush;
-                        }
-                        activeLineBrush = cmLineBrush;
-                    }
-                    else if (liveUseWaterfallSync)
-                    {
-                        GetWaterfallColor(max, liveWfLow, liveWfHigh, _rx1_color_scheme,
-                            waterfall_low_color, _rx1_waterfall_grad, _rx1_waterfall_grad_ok, out int wfLR, out int wfLG, out int wfLB);
-                        int wfCacheKey = (0xFF << 24) | (wfLR << 16) | (wfLG << 8) | wfLB;
-                        if (!liveWfBrushCache.TryGetValue(wfCacheKey, out var wfLineBrush))
-                        {
-                            wfLineBrush = _d2dRenderTarget.CreateSolidColorBrush(
-                                new Vortice.Mathematics.Color4(wfLR / 255f, wfLG / 255f, wfLB / 255f, 1.0f));
-                            liveWfBrushCache[wfCacheKey] = wfLineBrush;
-                        }
-                        activeLineBrush = wfLineBrush;
-                    }
 
                     if (bIgnoringPoints)
                     {
+                        _d2dRenderTarget.DrawLine(previousPoint, lastIgnoredPoint, activeLineBrush, line_width);
                         if (glowSegs != null) glowSegs.Add((previousPoint, lastIgnoredPoint, activeLineBrush, line_width));
-                        else _d2dRenderTarget.DrawLine(previousPoint, lastIgnoredPoint, activeLineBrush, line_width);
                         previousPoint = lastIgnoredPoint;
                         bIgnoringPoints = false;
                     }
+                    _d2dRenderTarget.DrawLine(previousPoint, point, activeLineBrush, line_width);
                     if (glowSegs != null) glowSegs.Add((previousPoint, point, activeLineBrush, line_width));
-                    else _d2dRenderTarget.DrawLine(previousPoint, point, activeLineBrush, line_width);
                     previousPoint = point;
                 }
 
-                //bloom/glow composite: replay recorded strokes into the offscreen layer
-                //(Begin/EndDraw mandatory), then blurred halo + sharp trace under the overlays,
-                //clipped by the already-pushed spectrum clip so spill never reaches waterfall/grid
+                //bloom/glow composite: replay the recorded strokes into the offscreen
+                //layer using the BASE line colour so the halo stays the user's set
+                //color on every colormap / waterfall-sync path (per-column palette
+                //colors blur into colourless mush). The sharp trace itself was already
+                //drawn directly above with its per-column colors; only the blurred
+                //halo is composited here, under the overlays, clipped by the
+                //already-pushed spectrum clip so spill never reaches waterfall/grid.
                 if (glowSegs != null)
                 {
                     _glowRT.BeginDraw();
@@ -6059,7 +6127,7 @@ namespace Thetis
                     for (int s = 0; s < glowSegs.Count; s++)
                     {
                         var seg = glowSegs[s];
-                        _glowRT.DrawLine(seg.a, seg.b, seg.brush, seg.width);
+                        _glowRT.DrawLine(seg.a, seg.b, lineBrush, seg.width);
                     }
                     _glowRT.EndDraw();
 
@@ -6070,7 +6138,6 @@ namespace Thetis
                     }
                     _d2dDeviceContext.DrawImage(_glowBlurImage, null, null, Vortice.Direct2D1.InterpolationMode.Linear, CompositeMode.SourceOver);
                     _d2dDeviceContext.DrawImage(_glowBlurImage, null, null, Vortice.Direct2D1.InterpolationMode.Linear, CompositeMode.SourceOver);
-                    _d2dDeviceContext.DrawImage(_glowTraceBitmap, null, null, Vortice.Direct2D1.InterpolationMode.Linear, CompositeMode.SourceOver);
                 }
 
                 //noise floor

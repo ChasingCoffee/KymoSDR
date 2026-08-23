@@ -45,6 +45,9 @@ namespace Thetis
         private NumericUpDownTS ud3DSpeed;
         private LabelTS lbl3DLineColor;
         private ColorButton clrbtn3DLineColor;
+        private CheckBoxTS chk3DFillColorEnable;
+        private ColorButton clrbtn3DFillColor;
+        private TrackBarTS tb3DFillOpacity;
         private LabelTS lbl3DColorMap;
         private ComboBoxTS combo3DColorMap;
         private LabelTS lbl3DZCurve;
@@ -119,6 +122,9 @@ namespace Thetis
             this.ud3DSpeed = new System.Windows.Forms.NumericUpDownTS();
             this.lbl3DLineColor = new System.Windows.Forms.LabelTS();
             this.clrbtn3DLineColor = new Thetis.ColorButton();
+            this.chk3DFillColorEnable = new System.Windows.Forms.CheckBoxTS();
+            this.clrbtn3DFillColor = new Thetis.ColorButton();
+            this.tb3DFillOpacity = new System.Windows.Forms.TrackBarTS();
             this.lbl3DColorMap = new System.Windows.Forms.LabelTS();
             this.combo3DColorMap = new System.Windows.Forms.ComboBoxTS();
             this.lbl3DZCurve = new System.Windows.Forms.LabelTS();
@@ -137,7 +143,7 @@ namespace Thetis
             this.chk3DWaterfallSync.Size = new System.Drawing.Size(105, 17);
             this.chk3DWaterfallSync.TabIndex = 0;
             this.chk3DWaterfallSync.Text = "Waterfall Sync";
-            this.toolTip1.SetToolTip(this.chk3DWaterfallSync, "Use waterfall palette and levels for 3D colors (overrides Color and Colormap).");
+            this.toolTip1.SetToolTip(this.chk3DWaterfallSync, "Use waterfall palette and levels for 3D colors (overrides Color and Colormap). A enabled Fill Color overrides this for the front fill.");
             this.chk3DWaterfallSync.CheckedChanged += new System.EventHandler(this.chk3DWaterfallSync_CheckedChanged);
             //
             // chk3DSideWalls
@@ -311,13 +317,55 @@ namespace Thetis
             this.toolTip1.SetToolTip(this.clrbtn3DLineColor, "Ridge outline color (used when waterfall palette is off).");
             this.clrbtn3DLineColor.Changed += new System.EventHandler(this.clrbtn3DLineColor_Changed);
             //
+            // chk3DFillColorEnable
+            //
+            this.chk3DFillColorEnable.AutoSize = true;
+            this.chk3DFillColorEnable.Image = null;
+            this.chk3DFillColorEnable.Location = new System.Drawing.Point(12, 226);
+            this.chk3DFillColorEnable.Name = "chk3DFillColorEnable";
+            this.chk3DFillColorEnable.Size = new System.Drawing.Size(100, 17);
+            this.chk3DFillColorEnable.TabIndex = 16;
+            this.chk3DFillColorEnable.Text = "Fill Color";
+            this.toolTip1.SetToolTip(this.chk3DFillColorEnable, "Use a custom color for the front data fill in 3D mode (overrides Colormap and Waterfall Sync fill colors). Off = default per-colormap fill.");
+            this.chk3DFillColorEnable.CheckedChanged += new System.EventHandler(this.chk3DFillColorEnable_CheckedChanged);
+            //
+            // clrbtn3DFillColor
+            //
+            this.clrbtn3DFillColor.Automatic = "Automatic";
+            this.clrbtn3DFillColor.Color = System.Drawing.Color.Aquamarine;
+            this.clrbtn3DFillColor.Image = null;
+            this.clrbtn3DFillColor.Location = new System.Drawing.Point(120, 225);
+            this.clrbtn3DFillColor.MoreColors = "More Colors...";
+            this.clrbtn3DFillColor.Name = "clrbtn3DFillColor";
+            this.clrbtn3DFillColor.Selectable = true;
+            this.clrbtn3DFillColor.Size = new System.Drawing.Size(40, 23);
+            this.clrbtn3DFillColor.TabIndex = 17;
+            this.toolTip1.SetToolTip(this.clrbtn3DFillColor, "Front data fill color (3D only). Does not affect the data line.");
+            this.clrbtn3DFillColor.Changed += new System.EventHandler(this.clrbtn3DFillColor_Changed);
+            //
+            // tb3DFillOpacity
+            //
+            this.tb3DFillOpacity.AutoSize = false;
+            this.tb3DFillOpacity.Location = new System.Drawing.Point(165, 225);
+            this.tb3DFillOpacity.Maximum = 100;
+            this.tb3DFillOpacity.Minimum = 0;
+            this.tb3DFillOpacity.Name = "tb3DFillOpacity";
+            this.tb3DFillOpacity.Size = new System.Drawing.Size(60, 23);
+            this.tb3DFillOpacity.SmallChange = 5;
+            this.tb3DFillOpacity.LargeChange = 10;
+            this.tb3DFillOpacity.TabIndex = 18;
+            this.tb3DFillOpacity.TickStyle = System.Windows.Forms.TickStyle.None;
+            this.tb3DFillOpacity.Value = 55;
+            this.toolTip1.SetToolTip(this.tb3DFillOpacity, "Fill Color opacity (0-100%). Default 55.");
+            this.tb3DFillOpacity.Scroll += new System.EventHandler(this.tb3DFillOpacity_Scroll);
+            //
             // lbl3DColorMap
             //
             this.lbl3DColorMap.Image = null;
-            this.lbl3DColorMap.Location = new System.Drawing.Point(12, 228);
+            this.lbl3DColorMap.Location = new System.Drawing.Point(12, 258);
             this.lbl3DColorMap.Name = "lbl3DColorMap";
             this.lbl3DColorMap.Size = new System.Drawing.Size(90, 16);
-            this.lbl3DColorMap.TabIndex = 16;
+            this.lbl3DColorMap.TabIndex = 18;
             this.lbl3DColorMap.Text = "Colormap:";
             //
             // combo3DColorMap
@@ -328,32 +376,32 @@ namespace Thetis
                 "Turbo",
                 "Viridis",
                 "Inferno"});
-            this.combo3DColorMap.Location = new System.Drawing.Point(120, 225);
+            this.combo3DColorMap.Location = new System.Drawing.Point(120, 255);
             this.combo3DColorMap.Name = "combo3DColorMap";
             this.combo3DColorMap.Size = new System.Drawing.Size(100, 21);
-            this.combo3DColorMap.TabIndex = 17;
+            this.combo3DColorMap.TabIndex = 19;
             this.toolTip1.SetToolTip(this.combo3DColorMap, "Perceptual surface colormap (ignored while Waterfall Sync is checked).");
             this.combo3DColorMap.SelectedIndexChanged += new System.EventHandler(this.combo3DColorMap_SelectedIndexChanged);
             //
             // lbl3DZCurve (Floor Lift)
             //
             this.lbl3DZCurve.Image = null;
-            this.lbl3DZCurve.Location = new System.Drawing.Point(12, 250);
+            this.lbl3DZCurve.Location = new System.Drawing.Point(12, 280);
             this.lbl3DZCurve.Name = "lbl3DZCurve";
             this.lbl3DZCurve.Size = new System.Drawing.Size(90, 16);
-            this.lbl3DZCurve.TabIndex = 18;
+            this.lbl3DZCurve.TabIndex = 20;
             this.lbl3DZCurve.Text = "Floor Lift:";
             //
             // ud3DZCurve (Floor Lift: 0.05-1.0, default 0.90)
             //
             this.ud3DZCurve.DecimalPlaces = 2;
             this.ud3DZCurve.Increment = 0.05m;
-            this.ud3DZCurve.Location = new System.Drawing.Point(120, 247);
+            this.ud3DZCurve.Location = new System.Drawing.Point(120, 277);
             this.ud3DZCurve.Maximum = 1.00m;
             this.ud3DZCurve.Minimum = 0.05m;
             this.ud3DZCurve.Name = "ud3DZCurve";
             this.ud3DZCurve.Size = new System.Drawing.Size(56, 20);
-            this.ud3DZCurve.TabIndex = 19;
+            this.ud3DZCurve.TabIndex = 21;
             this.toolTip1.SetToolTip(this.ud3DZCurve, "Lifts the noise floor up into the surface (lower = more floor).");
             this.ud3DZCurve.Value = 0.90m;
             this.ud3DZCurve.ValueChanged += new System.EventHandler(this.ud3DZCurve_ValueChanged);
@@ -361,10 +409,10 @@ namespace Thetis
             // btn3DResetDefaults
             //
             this.btn3DResetDefaults.Image = null;
-            this.btn3DResetDefaults.Location = new System.Drawing.Point(12, 285);
+            this.btn3DResetDefaults.Location = new System.Drawing.Point(12, 315);
             this.btn3DResetDefaults.Name = "btn3DResetDefaults";
             this.btn3DResetDefaults.Size = new System.Drawing.Size(208, 26);
-            this.btn3DResetDefaults.TabIndex = 18;
+            this.btn3DResetDefaults.TabIndex = 22;
             this.btn3DResetDefaults.Text = "Reset Defaults";
             this.toolTip1.SetToolTip(this.btn3DResetDefaults, "Reset all 3D panadapter settings to defaults.");
             this.btn3DResetDefaults.Click += new System.EventHandler(this.btn3DResetDefaults_Click);
@@ -373,7 +421,7 @@ namespace Thetis
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(232, 323);
+            this.ClientSize = new System.Drawing.Size(232, 353);
             this.Controls.Add(this.chk3DWaterfallSync);
             this.Controls.Add(this.chk3DSideWalls);
             this.Controls.Add(this.lbl3DXOffset);
@@ -390,6 +438,9 @@ namespace Thetis
             this.Controls.Add(this.ud3DSpeed);
             this.Controls.Add(this.lbl3DLineColor);
             this.Controls.Add(this.clrbtn3DLineColor);
+            this.Controls.Add(this.chk3DFillColorEnable);
+            this.Controls.Add(this.clrbtn3DFillColor);
+            this.Controls.Add(this.tb3DFillOpacity);
             this.Controls.Add(this.lbl3DColorMap);
             this.Controls.Add(this.combo3DColorMap);
             this.Controls.Add(this.lbl3DZCurve);
@@ -419,6 +470,9 @@ namespace Thetis
             Display.Pan3DZCurve = (float)ud3DZCurve.Value;
             Display.Pan3DSpeed = (int)ud3DSpeed.Value;
             Display.Pan3DLineColor = clrbtn3DLineColor.Color;
+            Display.Pan3DFillColorEnabled = chk3DFillColorEnable.Checked;
+            Display.Pan3DFillColor = clrbtn3DFillColor.Color;
+            Display.Pan3DFillAlpha = tb3DFillOpacity.Value / 100f;
             Display.Pan3DColorMap = Math.Max(0, combo3DColorMap.SelectedIndex);
         }
 
@@ -494,6 +548,24 @@ namespace Thetis
             Display.Pan3DLineColor = clrbtn3DLineColor.Color;
         }
 
+        private void chk3DFillColorEnable_CheckedChanged(object sender, EventArgs e)
+        {
+            if (_initializing) return;
+            Display.Pan3DFillColorEnabled = chk3DFillColorEnable.Checked;
+        }
+
+        private void clrbtn3DFillColor_Changed(object sender, EventArgs e)
+        {
+            if (_initializing) return;
+            Display.Pan3DFillColor = clrbtn3DFillColor.Color;
+        }
+
+        private void tb3DFillOpacity_Scroll(object sender, EventArgs e)
+        {
+            if (_initializing) return;
+            Display.Pan3DFillAlpha = tb3DFillOpacity.Value / 100f;
+        }
+
         private void combo3DColorMap_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_initializing) return;
@@ -514,6 +586,9 @@ namespace Thetis
             ud3DSpeed.Value = 25;
             ud3DZCurve.Value = 0.90m;
             clrbtn3DLineColor.Color = Color.Aquamarine;
+            chk3DFillColorEnable.Checked = false;
+            clrbtn3DFillColor.Color = Color.Aquamarine;
+            tb3DFillOpacity.Value = 55;
             combo3DColorMap.SelectedIndex = 0;
 
             _initializing = false;
