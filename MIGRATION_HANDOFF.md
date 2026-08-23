@@ -673,6 +673,17 @@ Fix (`Skin.cs`) — buttons resolve art through a fallback chain instead of exac
 
 Build clean; user verified the button shows skinned Zoom05 art.
 
+### 2026-08-23 (GPU% indicator on the console status bar)
+Delivers the at-a-glance measurement tool for the last open Tier-3 item (mesh GPU% cost). New `Invoke`-style helper `GpuUsageMonitor.cs` (explicitly added to Thetis.csproj):
+- Samples the Windows **"GPU Engine" / Utilization Percentage** performance counter category — the same source Task Manager's per-process GPU column uses. Instances are filtered by `pid_<ourpid>_` prefix so ALL engines (3D/Copy/VideoDecode/…) of THIS process are summed across all adapters.
+- Engine instances appear/disappear dynamically → full instance re-enumeration every 5 s and value sampling every 1 s, all on the threadpool (`PerformanceCounterCategory.Exists` is slow, so even the availability probe runs off-thread).
+- Values posted to the UI thread via the captured `SynchronizationContext`; clamped 0–100 (multi-GPU theoretical overflow noted in comments); if the category is missing (pre-WDDM2.0 driver etc.) it reports unavailable exactly once and goes dormant.
+- UI: `toolStripStatusLabel_GPU` inserted programmatically into `statusStripMain` immediately AFTER `toolStripStatusLabelTXAnt` ("last in line" per user), 68 px, ControlLightLight text, shows `GPU nn%`, stays hidden when counters are unavailable. Started from `Console_Shown` → `initGpuUsageMeter()` (region `GPU usage indicator`); disposed first thing in `Console_Closing`.
+- Placement history: v1 was a form-level label under panelPower using designer coords (landed overtop the buttons because saved layouts move the strip); v2 anchored live to `panelPower.Bottom` (right spot, user liked size/bold) then user relocated it into the status bar instead — floating label code removed.
+- LESSON: never hard-code console control coordinates from resx — saved layouts/skins reposition controls at runtime; anchor relative to live bounds or parent containers.
+
+Build clean; user verified placement/readout ("perfect"). Actual mesh-vs-D2D GPU% reading session still pending.
+
 ### 2026-08-19 (shutdown debugging session)
 - Root cause of shutdown hang identified: `BinaryFormatter` removed in .NET 10 caused `SaveOptions()` to throw exceptions showing MessageBox dialogs blocking the UI thread for 8-28 seconds per attempt
 - ErrorLog.txt showed identical stack trace repeated 10+ times: `BinaryFormatter.Serialize` → `SerializeToBase64` → `MultiMeterIO.GetSaveData` → `SaveOptions` → `Console_Closing`

@@ -28114,6 +28114,38 @@ namespace Thetis
         private ShutdownForm _frmShutDownForm = null;
         private bool _is_shutting_down = false;
         private bool _is_closing_now = false;
+        #region GPU usage indicator
+
+        private GpuUsageMonitor _gpuUsageMonitor;
+        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel_GPU;
+
+        private void initGpuUsageMeter()
+        {
+            // lives on the bottom status bar, right after the RX/TX antenna selectors
+            toolStripStatusLabel_GPU = new System.Windows.Forms.ToolStripStatusLabel();
+            toolStripStatusLabel_GPU.Name = "toolStripStatusLabel_GPU";
+            toolStripStatusLabel_GPU.AutoSize = false;
+            toolStripStatusLabel_GPU.Size = new System.Drawing.Size(68, 20);
+            toolStripStatusLabel_GPU.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            toolStripStatusLabel_GPU.ForeColor = SystemColors.ControlLightLight;
+            toolStripStatusLabel_GPU.Text = "";
+            toolStripStatusLabel_GPU.Visible = false; // shown once the monitor reports a value
+            int insertAt = statusStripMain.Items.IndexOf(toolStripStatusLabelTXAnt);
+            statusStripMain.Items.Insert(insertAt < 0 ? statusStripMain.Items.Count : insertAt + 1, toolStripStatusLabel_GPU);
+
+            _gpuUsageMonitor = new GpuUsageMonitor(gpuPercent =>
+            {
+                if (IsDisposed || toolStripStatusLabel_GPU == null || toolStripStatusLabel_GPU.IsDisposed)
+                    return;
+                toolStripStatusLabel_GPU.Visible = gpuPercent >= 0f; // -1 => counters unavailable
+                if (gpuPercent >= 0f)
+                    toolStripStatusLabel_GPU.Text = "GPU " + Math.Round(gpuPercent) + "%";
+            });
+            _gpuUsageMonitor.Start();
+        }
+
+        #endregion
+
         private void Console_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             if (_is_closing_now)
@@ -28136,6 +28168,13 @@ namespace Thetis
             if (!_is_shutting_down)
             {
             shutdownLogStringToPath("Inside Console_Closing()");
+
+            // stop GPU% sampling before anything else tears down the UI
+            if (_gpuUsageMonitor != null)
+            {
+                _gpuUsageMonitor.Dispose();
+                _gpuUsageMonitor = null;
+            }
 
             //show the shutdown form and then restart the close process via BeginInvoke
             //removes the doevents issue and allows the shutdown form to show properly
@@ -44857,6 +44896,9 @@ namespace Thetis
             }
 
             updateResolutionStatusBarText(); //MW0LGE_21b need to call this here so that drop shadow sizes can be obtained
+
+            // GPU% indicator - small label under the Power/RX2 button strip
+            initGpuUsageMeter();
 
             // set the multifunction setting to the status bar
             DataTable multitable = AndromedaSet.Tables["Multifunction Settings"];
