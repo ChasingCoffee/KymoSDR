@@ -627,6 +627,16 @@ User-verified end-to-end ("they are all proper now including the 2d"):
 
 Build clean x64 Release (0 errors). Fresh-binary discipline note: two test cycles were invalidated by testing a stale exe after source-only reverts — always rebuild + restart Thetis between iterations.
 
+### 2026-08-23 (Solid front wall "2D panel" mode for Fill Color, RUNTIME VERIFIED)
+Follow-up to the Fill Color feature (`b84a70e`); user-verified ("perfect they both match"). Design converged over several iterations — full history kept because the wrong turns are instructive:
+
+1. **Final behaviour (Fill Color checked)**: per-column, in the shared pan_fill block: (a) OPAQUE backdrop stroke crest→baseline in `m_cDX2_display_background_clear_colour` erases every receding row behind the wall; (b) skin image slice restored inside the wall strip via DrawBitmap with src/dest rects replicating the frame-start aspect-fit math (works on BOTH paths — mesh normally never draws the skin, restoring it there is what makes low sliders reveal skin instead of black; this was an explicit user correction); (c) fill = 2D-panafill-style vertical gradient from `_pan3DFillColor` scaled by slider alpha. Works with the checkbox alone (independent of pan_fill). Unchecked = status quo.
+2. **Slider semantics**: bottom gradient stop converges toward the top stop as slider rises (`tailRatio = 0.16/0.55 + (1−0.16/0.55)·alpha`) so 100% is a perfectly uniform opaque wall — fixes "never goes fully opaque" on the standard path where skin texture showed through the gradient tail (mesh hid it behind flat black).
+3. **Live-fill density match**: with fill unchecked, both paths' live fills now run at `liveFillAlpha = 0.95` (was 0.55). Reason: standard's curtain stack compounds translucency so its front read denser than the mesh's single sheet; user tuned mesh 0.75→0.85→0.9→0.95→0.98→0.8 and settled 0.95, then matched standard up to 0.95.
+4. **Rejected variants** (user feedback): full-height panel (baseline→plot-top occlusion) — hides the ENTIRE 3D scene, no rear visible at all; strength-shaded per-column fill — moving brightness bands travel across the wall, "not working like the 2D panadapter"; black-only backdrop on standard — user runs a skin background image and wants fades to reveal it.
+
+Build clean x64 Release (0 errors).
+
 ### 2026-08-23 (Tier 3 parity + mesh opacity + brush-race crash fix, RUNTIME VERIFIED)
 Three items landed and user-verified ("no crash now", parity look "does look right", opaque fix "perfect"):
 

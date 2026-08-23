@@ -5820,8 +5820,16 @@ namespace Thetis
                 // own Data Fill from the main display setup) - never touches the line.
                 bool liveCustomFill = draw3DHistory && _pan3DFillColorEnabled && rx == 1 && !local_mox;
 
+                // the standard path's curtain stack accumulates several translucent
+                // rows directly behind the live fill, so its front reads denser than
+                // the mesh's single sheet; raise the LIVE fill alpha on the mesh path
+                // only to bring the two fronts visually level (rear surface untouched)
+                // live fill opacity for both render paths (tuned with the user:
+                // 0.95 reads level between the mesh sheet and the curtain stack)
+                float liveFillAlpha = 0.95f;
+
                 var liveWfBrushCache = liveUseWaterfallSync || liveUseColormap || liveCustomFill || _b3DMeshDrewFrame
-                    ? new System.Collections.Generic.Dictionary<int, ID2D1SolidColorBrush>()
+                    ? new System.Collections.Generic.Dictionary<int, ID2D1Brush>()
                     : null;
 
                 // make locals
@@ -5936,28 +5944,53 @@ namespace Thetis
                     }
 
                     //pana fill
-                    if (pan_fill)
+                    if (pan_fill || liveCustomFill)
                     {
                         // draw vertical line, this is so much faster than FillGeometry as the geo created would be so complex any fill alogorthm would struggle
                         bottomPoint.X = point.X;
 
                         ID2D1Brush activeFillBrush = fillBrush;
+                        bool bSolidWallBackdrop = false;
+
                         if (liveCustomFill)
                         {
-                            // same strength-keyed solid brush mechanism as the colormaps,
-                            // but shaded from the user's fill colour
-                            float sF = (max - grid_min) / (float)yRange;
-                            if (sF < 0) sF = 0; else if (sF > 1) sF = 1;
-                            float brF = 0.25f + 0.75f * sF;
-                            int rF = (int)(_pan3DFillColor.R * brF);
-                            int gF = (int)(_pan3DFillColor.G * brF);
-                            int bF = (int)(_pan3DFillColor.B * brF);
+                            // SOLID FRONT WALL ("2D pan" mode): the region between the
+                            // live crest and the baseline is backed with the authentic
+                            // background (opaque clear colour + skin image slice) so no
+                            // receding trace can show through at any slider position,
+                            // then filled with a smooth 2D-style vertical gradient scaled
+                            // by the opacity slider. Hard edge at the curve; the 3D
+                            // history above/behind the wall is never touched.
+                            bSolidWallBackdrop = true;
+
+                            int rF = _pan3DFillColor.R;
+                            int gF = _pan3DFillColor.G;
+                            int bF = _pan3DFillColor.B;
                             int aF = (int)(_pan3DFillAlpha * 255f);
                             int fKey = (aF << 24) | (rF << 16) | (gF << 8) | bF;
                             if (!liveWfBrushCache.TryGetValue(fKey, out var customFillBrush))
                             {
-                                customFillBrush = _d2dRenderTarget.CreateSolidColorBrush(
-                                    new Vortice.Mathematics.Color4(rF / 255f, gF / 255f, bF / 255f, _pan3DFillAlpha));
+                                // identical construction to the classic 2D panafill
+                                // gradient (bright near trace fading toward the bottom),
+                                // built from the Fill Color swatch and scaled by the
+                                // slider. The bottom stop converges toward the top stop
+                                // as the slider rises so 100% yields a perfectly uniform,
+                                // fully opaque wall (no skin/history texture showing
+                                // through the tail) while low sliders keep the soft fade.
+                                float tailRatio = (0.16f / 0.55f) + (1f - 0.16f / 0.55f) * _pan3DFillAlpha;
+                                GradientStop[] stopsF = new GradientStop[]
+                                {
+                                    new GradientStop() { Color = new Vortice.Mathematics.Color4(rF / 255f, gF / 255f, bF / 255f, _pan3DFillAlpha), Position = 0.0f },
+                                    new GradientStop() { Color = new Vortice.Mathematics.Color4(rF / 255f, gF / 255f, bF / 255f, _pan3DFillAlpha * tailRatio), Position = 1.0f },
+                                };
+                                var stopsCollF = _d2dRenderTarget.CreateGradientStopCollection(stopsF);
+                                customFillBrush = _d2dRenderTarget.CreateLinearGradientBrush(new LinearGradientBrushProperties()
+                                {
+                                    StartPoint = new Vector2(0, nVerticalShift),
+                                    EndPoint = new Vector2(0, nVerticalShift + H)
+                                },
+                                stopsCollF);
+                                stopsCollF.Dispose();
                                 liveWfBrushCache[fKey] = customFillBrush;
                             }
                             activeFillBrush = customFillBrush;
@@ -5970,8 +6003,8 @@ namespace Thetis
                             int cmKey = (140 << 24) | (_colormapLUT[oC] << 16) | (_colormapLUT[oC + 1] << 8) | _colormapLUT[oC + 2];
                             if (!liveWfBrushCache.TryGetValue(cmKey, out var cmFillBrush))
                             {
-                                cmFillBrush = _d2dRenderTarget.CreateSolidColorBrush(
-                                    new Vortice.Mathematics.Color4(_colormapLUT[oC] / 255f, _colormapLUT[oC + 1] / 255f, _colormapLUT[oC + 2] / 255f, 0.55f));
+                            cmFillBrush = _d2dRenderTarget.CreateSolidColorBrush(
+                                new Vortice.Mathematics.Color4(_colormapLUT[oC] / 255f, _colormapLUT[oC + 1] / 255f, _colormapLUT[oC + 2] / 255f, liveFillAlpha));
                                 liveWfBrushCache[cmKey] = cmFillBrush;
                             }
                             activeFillBrush = cmFillBrush;
@@ -5983,8 +6016,8 @@ namespace Thetis
                             int wfCacheKey = (wfR << 16) | (wfG << 8) | wfB;
                             if (!liveWfBrushCache.TryGetValue(wfCacheKey, out var wfBrush))
                             {
-                                wfBrush = _d2dRenderTarget.CreateSolidColorBrush(
-                                    new Vortice.Mathematics.Color4(wfR / 255f, wfG / 255f, wfB / 255f, 0.55f));
+                            wfBrush = _d2dRenderTarget.CreateSolidColorBrush(
+                                new Vortice.Mathematics.Color4(wfR / 255f, wfG / 255f, wfB / 255f, liveFillAlpha));
                                 liveWfBrushCache[wfCacheKey] = wfBrush;
                             }
                             activeFillBrush = wfBrush;
@@ -6010,7 +6043,7 @@ namespace Thetis
                                     if (!liveWfBrushCache.TryGetValue(clsKey, out var clsFillBrush))
                                     {
                                         clsFillBrush = _d2dRenderTarget.CreateSolidColorBrush(
-                                            new Vortice.Mathematics.Color4(rCls / 255f, gCls / 255f, blCls / 255f, 0.55f));
+                                            new Vortice.Mathematics.Color4(rCls / 255f, gCls / 255f, blCls / 255f, liveFillAlpha));
                                         liveWfBrushCache[clsKey] = clsFillBrush;
                                     }
                                     activeFillBrush = clsFillBrush;
@@ -6035,6 +6068,77 @@ namespace Thetis
                                         stopsColl.Dispose();
                                     }
                                     activeFillBrush = m_bDX2_3d_fill_brush;
+                                }
+                            }
+                        }
+
+                        if (bSolidWallBackdrop)
+                        {
+                            // opaque backdrop pass over the wall region (crest -> baseline):
+                            // erases the receding rows behind the wall so the fill
+                            // composites against clean background only
+                            int bgKey = (255 << 24);
+                            if (!liveWfBrushCache.TryGetValue(bgKey, out var wallBackdropBrush))
+                            {
+                                wallBackdropBrush = _d2dRenderTarget.CreateSolidColorBrush(
+                                    new Vortice.Mathematics.Color4(
+                                        m_cDX2_display_background_clear_colour.R,
+                                        m_cDX2_display_background_clear_colour.G,
+                                        m_cDX2_display_background_clear_colour.B, 1f));
+                                liveWfBrushCache[bgKey] = wallBackdropBrush;
+                            }
+                            _d2dRenderTarget.DrawLine(bottomPoint, point, wallBackdropBrush, local_Decimation);
+
+                            // restore the skin background image slice so the wall sits on
+                            // exactly what an empty 2D pan would show - on BOTH render
+                            // paths (the mesh composite normally hides the skin, so
+                            // restoring it here is what makes low sliders reveal the same
+                            // background the standard path fades to)
+                            if (_bitmapBackground != null)
+                            {
+                                float imgW = _bitmapBackground.PixelSize.Width;
+                                float imgH = _bitmapBackground.PixelSize.Height;
+                                float dX, dY, dW2, dH2;
+                                if (_maintain_background_aspectratio)
+                                {
+                                    float arB = imgW / imgH;
+                                    float tarB = displayTargetWidth / displayTargetHeight;
+                                    if (arB > tarB)
+                                    {
+                                        dW2 = displayTargetWidth;
+                                        dH2 = displayTargetWidth / arB;
+                                        dX = 0f;
+                                        dY = (displayTargetHeight - dH2) / 2f;
+                                    }
+                                    else
+                                    {
+                                        dW2 = displayTargetHeight * arB;
+                                        dH2 = displayTargetHeight;
+                                        dX = (displayTargetWidth - dW2) / 2f;
+                                        dY = 0f;
+                                    }
+                                }
+                                else
+                                {
+                                    dX = 0f; dY = 0f;
+                                    dW2 = displayTargetWidth; dH2 = displayTargetHeight;
+                                }
+
+                                float x0 = point.X - local_Decimation * 0.5f;
+                                float x1 = point.X + local_Decimation * 0.5f;
+                                float cx0 = Math.Max(x0, dX);
+                                float cx1 = Math.Min(x1, dX + dW2);
+                                float stripBottom = nVerticalShift + H;
+                                if (cx1 > cx0 && point.Y < stripBottom)
+                                {
+                                    float sx0 = (cx0 - dX) * imgW / dW2;
+                                    float sx1 = (cx1 - dX) * imgW / dW2;
+                                    float sy0 = Math.Max(0f, (point.Y - dY) * imgH / dH2);
+                                    float syH = (stripBottom - point.Y) * imgH / dH2;
+                                    _d2dRenderTarget.DrawBitmap(_bitmapBackground,
+                                        new RectangleF(cx0, point.Y, cx1 - cx0, stripBottom - point.Y),
+                                        1f, BitmapInterpolationMode.Linear,
+                                        new RectangleF(sx0, sy0, sx1 - sx0, syH));
                                 }
                             }
                         }

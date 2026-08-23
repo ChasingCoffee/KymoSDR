@@ -326,7 +326,7 @@ namespace Thetis
             this.chk3DFillColorEnable.Size = new System.Drawing.Size(100, 17);
             this.chk3DFillColorEnable.TabIndex = 16;
             this.chk3DFillColorEnable.Text = "Fill Color";
-            this.toolTip1.SetToolTip(this.chk3DFillColorEnable, "Use a custom color for the front data fill in 3D mode (overrides Colormap and Waterfall Sync fill colors). Off = default per-colormap fill.");
+            this.toolTip1.SetToolTip(this.chk3DFillColorEnable, "Draw the front wall as a solid panel in this color, like the 2D pan fill (opacity slider below). The 3D history receding behind it is not affected.");
             this.chk3DFillColorEnable.CheckedChanged += new System.EventHandler(this.chk3DFillColorEnable_CheckedChanged);
             //
             // clrbtn3DFillColor
