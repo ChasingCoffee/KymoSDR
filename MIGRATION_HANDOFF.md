@@ -317,7 +317,7 @@ Output: `Project Files/bin/x64/Release/` — Thetis.exe + all native DLLs.
 - [x] Tier 1: temporal interpolation, edge smoothing, side walls, Turbo/Viridis colormaps, grid floor, exponential fog — **CODE COMPLETE 2026-08-20 (below), RUNTIME VERIFIED 2026-08-22 (user sign-off)**
 - [x] **BLOCKER RESOLVED 2026-08-22: uncheck-Waterfall-Sync crash — root cause was `Pan3DLineColor` setter disposing `m_bDX2_3d_fill_brush` WITHOUT nulling it → Classic+Sync-OFF frame drew through a disposed COM brush. Fixed (dispose+null + stopsColl leak); user verified "seems fixed so far". Dumps/WER key intentionally left in place for now. See 2026-08-22 session entries**
 - [x] Tier 2: bloom/glow (ID2D1DeviceContext effects graph) — **DONE + RUNTIME VERIFIED 2026-08-22 (panadapter trace glow "Line Glow", HW-only)**
-- [ ] Tier 3: GPU mesh 3D panadapter (replaces per-column DrawLine; fixes edge stepping) — **FIRST SLICE RUNTIME VERIFIED 2026-08-22** (see Phase-3 roadmap line + session history; polish items remain, NOT yet committed)
+- [ ] Tier 3: GPU mesh 3D panadapter (replaces per-column DrawLine; fixes edge stepping) — **FIRST SLICE DONE + RUNTIME VERIFIED + COMMITTED `89f05af` 2026-08-23** (see Phase-3 roadmap line + session history; polish items remain)
 - [ ] GPU compute shaders for spectrum
 
 ---
@@ -575,7 +575,7 @@ RUNTIME VERIFIED 2026-08-22 (user: "it is glowing now", colour follows the data-
 **MIGRATION FIX (unrelated but blocking)**: Thetis.Tests referenced `..\..\bin\x64\Debug\Thetis.exe`. Post-migration that exe is a native apphost stub (managed assembly is Thetis.dll) — tests silently compiled against a PRE-migration managed exe until today's rebuild replaced it, then failed CS0103/CS0246 ('VstHost', 'VstPluginCatalogFile', 'VstChainState'). HintPath switched to Thetis.dll; full solution incl. tests builds clean again.
 
 ### 2026-08-22 (Tier 3 first slice — GPU mesh 3D panadapter, RUNTIME VERIFIED)
-Build clean x64 Release (EXIT=0). **User verified: "yes its working looks very fluid and solid", then after the BGRA palette fix "palletes are correct color now".** New file `Console/Display.Pan3DMesh.cs` (~730 lines, partial class Display) + `display.cs` made `partial`; Vortice.D3DCompiler 3.8.3 package added to Thetis.csproj (+ explicit `<Compile Include>` — csproj uses explicit Compile items despite SDK-style). Session-only toggle `chkGpuMesh3D` ("GPU 3D mesh (exp.)") in grpDisplayDriverEngine slot (8,47) TabIndex 52; handler pushes `Display.GpuMeshEnabled` live; registered in ForceAllEvents. **NOT YET COMMITTED** (all Tier 3 work; commit next session on user go-ahead).
+Build clean x64 Release (EXIT=0). **User verified: "yes its working looks very fluid and solid", then after the BGRA palette fix "palletes are correct color now".** New file `Console/Display.Pan3DMesh.cs` (~730 lines, partial class Display) + `display.cs` made `partial`; Vortice.D3DCompiler 3.8.3 package added to Thetis.csproj (+ explicit `<Compile Include>` — csproj uses explicit Compile items despite SDK-style). Session-only toggle `chkGpuMesh3D` ("GPU 3D mesh (exp.)") in grpDisplayDriverEngine slot (8,47) TabIndex 52; handler pushes `Display.GpuMeshEnabled` live; registered in ForceAllEvents. **COMMITTED as `89f05af` 2026-08-23.**
 
 Architecture:
 - Heightmap R32Float dynamic texture (strengths [0..1], pow zCurve applied in shaders) + static UV-grid VB + index buffer rebuilt when (rows,cols) change; per-frame palette 256×1 BGRA8 replicating SelectSurfaceColour priority (waterfall sync > colormap > gradient > line colour); params snapshot captured each frame by DrawPanadapterDX2D into `_meshParams`, consumed NEXT frame pre-BeginDraw (one-frame latency invisible).
@@ -688,9 +688,9 @@ Replace line emulation with a Direct3D11 triangle mesh; the port already owns an
 - Coexists with D2D on the shared swap chain: D3D draws surface, D2D overlays grid/text/controls
 - Foundation for compute-shader spectrum processing (final Phase 3 item)
 
-**STATUS 2026-08-22 — FIRST SLICE IMPLEMENTED + RUNTIME VERIFIED** (implementation notes + D3D11 lessons in session history; NOT yet committed):
+**STATUS 2026-08-22 — FIRST SLICE IMPLEMENTED + RUNTIME VERIFIED** (implementation notes + D3D11 lessons in session history; committed `89f05af` 2026-08-23):
 - Done: heightmap texture + UV-grid mesh pipeline (Display.Pan3DMesh.cs), Aether-math VS (zCurve/ridge/perspective), palette PS (slope shade + depth dim + haze), per-frame palette upload mirroring SelectSurfaceColour, pre-BeginDraw dispatch with D2D-line fallback (rules 1–3 honoured), skin-background prepass + scissored plot-strip clear, session-only chkGpuMesh3D toggle.
-- Remaining for full parity/polish: side walls/end caps, grid floor/rails, crest hairline, depth-direction slope shading (Tier 1 has these on the D2D path); measure GPU% post-debug; RDP/WARP fallback sanity test; commit.
+- Remaining for full parity/polish: side walls/end caps, grid floor/rails, crest hairline, depth-direction slope shading (Tier 1 has these on the D2D path); measure GPU% post-debug; RDP/WARP fallback sanity test. (Commit done `89f05af`.)
 
 **Recommended order**: Tier 1 items compound and ship immediate visible results → then commit to Tier 3 as flagship; Tier 2 optional polish either side of it.
 
