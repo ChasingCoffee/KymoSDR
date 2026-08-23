@@ -680,10 +680,18 @@ namespace Thetis
             set
             {
                 _pan3DLineColor = value;
-                if (m_bDX2_3d_fill_brush != null)
+                // disposing m_bDX2_3d_fill_brush here races the render thread if done
+                // unlocked: it may have already loaded the brush into activeFillBrush
+                // for this frame's DrawLine (SEHException inside d2d1). The frame body
+                // holds _objDX2Lock for its entire duration, so taking it here makes
+                // disposal wait for frame end; the next frame recreates lazily.
+                lock (_objDX2Lock)
                 {
-                    m_bDX2_3d_fill_brush?.Dispose();
-                    m_bDX2_3d_fill_brush = null;
+                    if (m_bDX2_3d_fill_brush != null)
+                    {
+                        m_bDX2_3d_fill_brush?.Dispose();
+                        m_bDX2_3d_fill_brush = null;
+                    }
                 }
             }
         }

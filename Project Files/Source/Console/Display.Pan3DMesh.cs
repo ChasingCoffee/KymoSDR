@@ -16,6 +16,15 @@
 // update. Colour = palette texture lookup by raw strength (built per frame from the same
 // SelectSurfaceColour sources as the D2D path), plus horizontal slope shading and linear
 // depth haze to match the established look.
+//
+// Tier-1 parity features rendered by this pass (D2D line renderer equivalents):
+//   - crest hairlines: LineList over the same UV grid, ps_line replicating the PASS 2
+//     outline formula; drawn back-to-front interleaved with sheet blocks so occlusion
+//     matches the D2D fill/outline interleave
+//   - perspective grid floor + side rails: flat vertex-colour lines, D2D alphas 0.10->0.03 / 0.12
+//   - side walls / end caps: edge-trace triangle strips down to absolute bottom,
+//     flat colour = front-row edge surface colour x0.32 blended toward bg by mid fog
+// All premultiplied-alpha outputs so the shared AlphaBlend state composites as SourceOver.
 using System;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -49,6 +58,16 @@ namespace Thetis
         private static ID3D11SamplerState _sampPoint;
         private static ID3D11SamplerState _sampLinear;
 
+        // crest hairlines (PASS 2 parity): line-list index buffer over the same UV grid
+        private static ID3D11PixelShader _meshPSLine;
+        private static ID3D11Buffer _meshLineIB;
+
+        // grid floor + side walls: tiny dynamic vertex-colour pipeline
+        private static ID3D11VertexShader _meshVSFlat;
+        private static ID3D11PixelShader _meshPSFlat;
+        private static ID3D11InputLayout _meshFlatIL;
+        private static ID3D11Buffer _meshAuxVB;       // dynamic, premultiplied colour verts
+
         // scissored-clear helpers (repaint the plot strip over a pre-drawn skin image)
         private static ID3D11VertexShader _meshClearVS;
         private static ID3D11PixelShader _meshClearPS;
@@ -56,6 +75,7 @@ namespace Thetis
         private static ID3D11Buffer _meshClearIB;
         private static ID3D11BlendState _meshBlendOpaque;   // no blending = overwrite
         private static ID3D11RasterizerState _meshRSScissor;
+        private static float[] _meshAuxScratch;       // managed staging for _meshAuxVB
         private static int _meshRows = -1;            // built grid dimensions
         private static int _meshCols = -1;
         private static float[] _meshHeightScratch;    // rows*cols strengths
@@ -153,8 +173,53 @@ namespace Thetis
                 float4 col = PaletteTex.SampleLevel(LinearSamp, float2(saturate(s), 0.5), 0);
                 col.rgb *= dim * shade;
                 col.rgb = lerp(col.rgb, CB_Background, saturate(haze));
-                float alpha = 1.0 - v * 0.15;                    // matches D2D fill alpha fade
-                return float4(col.rgb, alpha);
+                // fully opaque: depth is already conveyed by dim + haze, and unlike the
+                // D2D path (many stacked translucent curtains converging to opaque) a
+                // single sheet would let the backdrop bleed through at any alpha < 1
+                return float4(col.rgb, 1.0);
+            }
+
+            // crest hairline (PASS 2 parity): same geometry as the sheet but drawn as
+            // LineList with the D2D outline formula - palette colour brightened by
+            // outlineBright * dim * 1.5, hazed, alpha (1-tS*0.4)*0.85.
+            // Output is PREMULTIPLIED so the shared AlphaBlend state (SrcBlend One /
+            // DestBlend InvSrcAlpha) composites as true SourceOver, matching D2D.
+            float4 ps_line(PSIN i) : SV_Target
+            {
+                float s = HeightTex.SampleLevel(PointSamp, i.uv, 0).r;
+                float v = i.uv.y;
+
+                float4 col = PaletteTex.SampleLevel(LinearSamp, float2(saturate(s), 0.5), 0);
+                float bright = (0.35 + 0.65 * s) * (0.72 + 0.28 * (1.0 - v)) * 1.5;
+                float3 rgb = min(col.rgb * bright, 1.0);
+
+                float haze = v * CB_Haze;
+                rgb = lerp(rgb, CB_Background, saturate(haze));
+
+                float alpha = (1.0 - v * 0.4) * 0.85;
+                return float4(rgb * alpha, alpha);
+            }
+
+            // flat vertex-colour pipeline for the perspective grid floor, side rails
+            // and side walls. Positions arrive in pixel space and share the plot
+            // transform; colours are premultiplied CPU-side.
+            struct FLATIN
+            {
+                float4 pos : SV_POSITION;
+                float4 col : COLOR0;
+            };
+
+            FLATIN vs_flat(float2 px : POSITION, float4 col : COLOR0)
+            {
+                FLATIN o;
+                o.pos = float4(px.x / CB_W * 2.0 - 1.0, 1.0 - px.y / CB_TargetH * 2.0, 0.0, 1.0);
+                o.col = col;
+                return o;
+            }
+
+            float4 ps_flat(FLATIN i) : SV_Target
+            {
+                return i.col;
             }
 
             // clear helpers: scissored fullscreen quad that repaints only the plot
@@ -184,8 +249,14 @@ namespace Thetis
             _meshIL?.Dispose(); _meshIL = null;
             _meshVS?.Dispose(); _meshVS = null;
             _meshPS?.Dispose(); _meshPS = null;
+            _meshPSLine?.Dispose(); _meshPSLine = null;
             _meshVB?.Dispose(); _meshVB = null;
             _meshIB?.Dispose(); _meshIB = null;
+            _meshLineIB?.Dispose(); _meshLineIB = null;
+            _meshVSFlat?.Dispose(); _meshVSFlat = null;
+            _meshPSFlat?.Dispose(); _meshPSFlat = null;
+            _meshFlatIL?.Dispose(); _meshFlatIL = null;
+            _meshAuxVB?.Dispose(); _meshAuxVB = null;
             _meshCB?.Dispose(); _meshCB = null;
             _meshBlend?.Dispose(); _meshBlend = null;
             _meshRS?.Dispose(); _meshRS = null;
@@ -199,6 +270,7 @@ namespace Thetis
             _meshRSScissor?.Dispose(); _meshRSScissor = null;
             _meshRows = -1; _meshCols = -1;
             _meshHeightScratch = null;
+            _meshAuxScratch = null;
             _meshShadersBuilt = false;
         }
 
@@ -221,6 +293,11 @@ namespace Thetis
                 _meshVS = device.CreateVertexShader(vsBytes, null);
                 _meshPS = device.CreatePixelShader(psBytes);
 
+                // crest hairline pixel shader (shares vs_main + UV grid)
+                byte[] psLineBytes = Vortice.D3DCompiler.Compiler.Compile(MESH_HLSL, "ps_line", "pan3dmesh.hlsl", "ps_5_0",
+                    Vortice.D3DCompiler.ShaderFlags.None, Vortice.D3DCompiler.EffectFlags.None).ToArray();
+                _meshPSLine = device.CreatePixelShader(psLineBytes);
+
                 // clear variants (scissored quad repaint of the plot strip)
                 byte[] cvsBytes = Vortice.D3DCompiler.Compiler.Compile(MESH_HLSL, "vs_clear", "pan3dmesh.hlsl", "vs_5_0",
                     Vortice.D3DCompiler.ShaderFlags.None, Vortice.D3DCompiler.EffectFlags.None).ToArray();
@@ -228,6 +305,19 @@ namespace Thetis
                     Vortice.D3DCompiler.ShaderFlags.None, Vortice.D3DCompiler.EffectFlags.None).ToArray();
                 _meshClearVS = device.CreateVertexShader(cvsBytes, null);
                 _meshClearPS = device.CreatePixelShader(cpsBytes);
+
+                // flat vertex-colour pipeline (grid floor / rails / walls)
+                byte[] vsFlatBytes = Vortice.D3DCompiler.Compiler.Compile(MESH_HLSL, "vs_flat", "pan3dmesh.hlsl", "vs_5_0",
+                    Vortice.D3DCompiler.ShaderFlags.None, Vortice.D3DCompiler.EffectFlags.None).ToArray();
+                byte[] psFlatBytes = Vortice.D3DCompiler.Compiler.Compile(MESH_HLSL, "ps_flat", "pan3dmesh.hlsl", "ps_5_0",
+                    Vortice.D3DCompiler.ShaderFlags.None, Vortice.D3DCompiler.EffectFlags.None).ToArray();
+                _meshVSFlat = device.CreateVertexShader(vsFlatBytes, null);
+                _meshPSFlat = device.CreatePixelShader(psFlatBytes);
+                _meshFlatIL = device.CreateInputLayout(new Vortice.Direct3D11.InputElementDescription[]
+                {
+                    new Vortice.Direct3D11.InputElementDescription("POSITION", 0, Format.R32G32_Float, 0, 0),
+                    new Vortice.Direct3D11.InputElementDescription("COLOR", 0, Format.R32G32B32A32_Float, 8, 0),
+                }, vsFlatBytes);
 
                 Vortice.Direct3D11.InputElementDescription[] layout = new Vortice.Direct3D11.InputElementDescription[]
                 {
@@ -277,6 +367,8 @@ namespace Thetis
             {
                 _meshVB?.Dispose(); _meshVB = null;
                 _meshIB?.Dispose(); _meshIB = null;
+                _meshLineIB?.Dispose(); _meshLineIB = null;
+                _meshAuxVB?.Dispose(); _meshAuxVB = null;
                 _meshHeightSRV?.Dispose(); _meshHeightSRV = null;
                 _meshHeightTex?.Dispose(); _meshHeightTex = null;
 
@@ -309,6 +401,26 @@ namespace Thetis
                     }
                 }
                 _meshIB = device.CreateBuffer(idx, new BufferDescription((uint)(idx.Length * sizeof(uint)), BindFlags.IndexBuffer, ResourceUsage.Immutable));
+
+                // crest hairline line-list: per row, connect adjacent columns.
+                // Row-contiguous so each row draws with a single indexed call.
+                uint[] lidx = new uint[rows * (cols - 1) * 2];
+                int li = 0;
+                for (int r = 0; r < rows; r++)
+                {
+                    for (int c = 0; c < cols - 1; c++)
+                    {
+                        uint a = (uint)(r * cols + c);
+                        lidx[li++] = a;
+                        lidx[li++] = a + 1;
+                    }
+                }
+                _meshLineIB = device.CreateBuffer(lidx, new BufferDescription((uint)(lidx.Length * sizeof(uint)), BindFlags.IndexBuffer, ResourceUsage.Immutable));
+
+                // dynamic aux vertices (grid floor + rails lines, then wall triangles),
+                // stride float2 pos + float4 premultiplied colour
+                uint auxVerts = AuxVertexBudget(rows);
+                _meshAuxVB = device.CreateBuffer(new BufferDescription(auxVerts * 32, BindFlags.VertexBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
 
                 _meshHeightTex = device.CreateTexture2D(new Texture2DDescription()
                 {
@@ -344,6 +456,7 @@ namespace Thetis
                 _meshRows = rows;
                 _meshCols = cols;
                 _meshHeightScratch = new float[rows * cols];
+                _meshAuxScratch = new float[AuxVertexBudget(rows) * 8];
                 return true;
             }
             catch (Exception e)
@@ -479,18 +592,23 @@ namespace Thetis
                 dc.Unmap((ID3D11Resource)_meshHeightTex, 0);
 
                 // ---- palette texture (same colour selection rules as SelectSurfaceColour) ----
-                BuildMeshPalette(dc, yRange);
+                uint[] palette = ComputePaletteArray(yRange);
+                UploadPalette(dc, palette);
 
-                // ---- constants ----
+                // ---- constants (hoisted so the CPU-side aux geometry mirrors vs_main) ----
+                float bottomY = _meshParams.Shift + _meshParams.PlotH;
+                float depthSpan = _meshParams.PlotH * _pan3DDepth;
+                float frontRidge = _meshParams.PlotH * _pan3DRidgeHeight;
+                float zCurve = Math.Max(0.05f, _pan3DZCurve);
                 var cb = new MeshConstants
                 {
                     W = _meshParams.W,
                     TargetH = _meshParams.TargetH,
-                    BottomY = _meshParams.Shift + _meshParams.PlotH,
-                    DepthSpan = _meshParams.PlotH * _pan3DDepth,
-                    FrontRidge = _meshParams.PlotH * _pan3DRidgeHeight,
+                    BottomY = bottomY,
+                    DepthSpan = depthSpan,
+                    FrontRidge = frontRidge,
                     BackW = _pan3DPerspective,
-                    ZCurve = Math.Max(0.05f, _pan3DZCurve),
+                    ZCurve = zCurve,
                     Haze = _pan3DDepthFade,
                     BgR = m_cDX2_display_background_clear_colour.R,
                     BgG = m_cDX2_display_background_clear_colour.G,
@@ -542,10 +660,45 @@ namespace Thetis
                         m_cDX2_display_background_clear_colour.B, 1f));
                 }
 
+                // ---- flat pass: perspective grid floor + rails, then side walls.
+                // Drawn BEFORE the surface so rows occlude them (D2D draw order). ----
+                int auxCount = FillAuxVertices(rowCount, cols, palette);
+                if (auxCount > 0 && _meshAuxVB != null && _meshAuxScratch != null)
+                {
+                    MappedSubresource auxMap = dc.Map((ID3D11Resource)_meshAuxVB, 0, MapMode.WriteDiscard, Vortice.Direct3D11.MapFlags.None);
+                    unsafe
+                    {
+                        fixed (float* src = _meshAuxScratch)
+                        {
+                            uint copyBytes = (uint)auxCount * 32;
+                            Buffer.MemoryCopy(src, (void*)auxMap.DataPointer, copyBytes, copyBytes);
+                        }
+                    }
+                    dc.Unmap((ID3D11Resource)_meshAuxVB, 0);
+
+                    dc.IASetInputLayout(_meshFlatIL);
+                    dc.IASetVertexBuffer(0, _meshAuxVB, 32, 0);
+                    dc.VSSetShader(_meshVSFlat);
+                    dc.PSSetShader(_meshPSFlat);
+                    dc.VSSetConstantBuffer(0, _meshCB);
+                    dc.OMSetBlendState(_meshBlend);
+                    dc.RSSetState(_meshRS);
+
+                    dc.IASetPrimitiveTopology(Vortice.Direct3D.PrimitiveTopology.LineList);
+                    dc.Draw(16u, 0u);   // 6 floor gridlines + 2 rails
+                    if (_pan3DSideWalls && auxCount > 16)
+                    {
+                        dc.IASetPrimitiveTopology(Vortice.Direct3D.PrimitiveTopology.TriangleList);
+                        dc.Draw((uint)(auxCount - 16), 16u);
+                    }
+                }
+
+                // ---- surface sheet + crest hairlines, painter back-to-front so a
+                // nearer row's sheet occludes farther outlines exactly like the D2D
+                // fill/outline passes interleaved per row ----
+                dc.IASetInputLayout(_meshIL);
                 dc.IASetVertexBuffer(0, _meshVB, 8, 0);
-                dc.IASetIndexBuffer(_meshIB, Format.R32_UInt, 0);
                 dc.VSSetShader(_meshVS);
-                dc.PSSetShader(_meshPS);
                 dc.VSSetConstantBuffer(0, _meshCB);
                 dc.PSSetConstantBuffer(0, _meshCB);
                 dc.PSSetShaderResource(0, _meshHeightSRV);
@@ -558,7 +711,26 @@ namespace Thetis
                 dc.OMSetBlendState(_meshBlend);
                 dc.RSSetState(_meshRS);
                 dc.RSSetViewport(new Viewport(0f, 0f, displayTargetWidth, displayTargetHeight));
-                dc.DrawIndexed((uint)((rowCount - 1) * (cols - 1) * 6), 0, 0);
+
+                uint quadsPerRow = (uint)(cols - 1) * 6;
+                uint linesPerRow = (uint)(cols - 1) * 2;
+                for (int r = rowCount - 1; r >= 0; r--)
+                {
+                    // crest hairline of row r
+                    dc.PSSetShader(_meshPSLine);
+                    dc.IASetIndexBuffer(_meshLineIB, Format.R32_UInt, 0);
+                    dc.IASetPrimitiveTopology(Vortice.Direct3D.PrimitiveTopology.LineList);
+                    dc.DrawIndexed(linesPerRow, (uint)(r * linesPerRow), 0);
+
+                    // sheet block spanning rows (r-1 .. r), in front of the hairline
+                    if (r > 0)
+                    {
+                        dc.PSSetShader(_meshPS);
+                        dc.IASetIndexBuffer(_meshIB, Format.R32_UInt, 0);
+                        dc.IASetPrimitiveTopology(Vortice.Direct3D.PrimitiveTopology.TriangleList);
+                        dc.DrawIndexed(quadsPerRow, (uint)((r - 1) * quadsPerRow), 0);
+                    }
+                }
                 dc.Flush();
 
                 if (!_meshFailedLogged)
@@ -626,11 +798,13 @@ namespace Thetis
             }
         }
 
-        /// <summary>Per-frame palette upload replicating SelectSurfaceColour priorities:
-        /// waterfall sync > perceptual colormap > gradient > line colour brightness.</summary>
-        private static void BuildMeshPalette(ID3D11DeviceContext dc, int yRange)
+        /// <summary>Per-frame palette replicating SelectSurfaceColour priorities:
+        /// waterfall sync > perceptual colormap > gradient > line colour brightness.
+        /// Returns BGRA-packed uints (A&lt;&lt;24 | R&lt;&lt;16 | G&lt;&lt;8 | B).</summary>
+        private static uint[] ComputePaletteArray(int yRange)
         {
             int grid_min = _meshParams.GridMin;
+            var palette = new uint[MeshPaletteSize];
 
             // mirror the priority logic of DrawPanadapter3DHistoryDX2D
             bool useWaterfallSync = _pan3DWaterfallSync;
@@ -670,47 +844,186 @@ namespace Thetis
                 }
             }
 
+            for (int i = 0; i < MeshPaletteSize; i++)
+            {
+                float strength = i / (float)(MeshPaletteSize - 1);
+                float dBm = grid_min + strength * yRange;
+                int R, G, B;
+                if (useColormap)
+                {
+                    int ci = (int)(strength * 255f);
+                    int o = ((colorMapIdx - 1) * 256 + ci) * 3;
+                    R = _colormapLUT[o]; G = _colormapLUT[o + 1]; B = _colormapLUT[o + 2];
+                }
+                else if (useWaterfallSync)
+                {
+                    GetWaterfallColor(dBm, wfLowThreshold, wfHighThreshold, _rx1_color_scheme,
+                        waterfall_low_color, _rx1_waterfall_grad, _rx1_waterfall_grad_ok, out R, out G, out B);
+                }
+                else if (useGradient)
+                {
+                    int pIdx = (int)(strength * (gradPaletteSize - 1));
+                    R = gradPalette[pIdx].R; G = gradPalette[pIdx].G; B = gradPalette[pIdx].B;
+                }
+                else
+                {
+                    float bright = 0.25f + 0.75f * strength;
+                    R = (int)(_pan3DLineColor.R * bright);
+                    G = (int)(_pan3DLineColor.G * bright);
+                    B = (int)(_pan3DLineColor.B * bright);
+                }
+                if (R < 0) R = 0; else if (R > 255) R = 255;
+                if (G < 0) G = 0; else if (G > 255) G = 255;
+                if (B < 0) B = 0; else if (B > 255) B = 255;
+                // B8G8R8A8_UNorm memory order is [B,G,R,A]; as a little-endian
+                // uint that is A<<24 | R<<16 | G<<8 | B
+                palette[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
+            }
+            return palette;
+        }
+
+        private static void UploadPalette(ID3D11DeviceContext dc, uint[] palette)
+        {
             MappedSubresource map = dc.Map(_meshPaletteTex, 0, MapMode.WriteDiscard, Vortice.Direct3D11.MapFlags.None);
             unsafe
             {
-                uint* row = (uint*)map.DataPointer;
-                for (int i = 0; i < MeshPaletteSize; i++)
+                fixed (uint* src = palette)
                 {
-                    float strength = i / (float)(MeshPaletteSize - 1);
-                    float dBm = grid_min + strength * yRange;
-                    int R, G, B;
-                    if (useColormap)
-                    {
-                        int ci = (int)(strength * 255f);
-                        int o = ((colorMapIdx - 1) * 256 + ci) * 3;
-                        R = _colormapLUT[o]; G = _colormapLUT[o + 1]; B = _colormapLUT[o + 2];
-                    }
-                    else if (useWaterfallSync)
-                    {
-                        GetWaterfallColor(dBm, wfLowThreshold, wfHighThreshold, _rx1_color_scheme,
-                            waterfall_low_color, _rx1_waterfall_grad, _rx1_waterfall_grad_ok, out R, out G, out B);
-                    }
-                    else if (useGradient)
-                    {
-                        int pIdx = (int)(strength * (gradPaletteSize - 1));
-                        R = gradPalette[pIdx].R; G = gradPalette[pIdx].G; B = gradPalette[pIdx].B;
-                    }
-                    else
-                    {
-                        float bright = 0.25f + 0.75f * strength;
-                        R = (int)(_pan3DLineColor.R * bright);
-                        G = (int)(_pan3DLineColor.G * bright);
-                        B = (int)(_pan3DLineColor.B * bright);
-                    }
-                    if (R < 0) R = 0; else if (R > 255) R = 255;
-                    if (G < 0) G = 0; else if (G > 255) G = 255;
-                    if (B < 0) B = 0; else if (B > 255) B = 255;
-                    // B8G8R8A8_UNorm memory order is [B,G,R,A]; as a little-endian
-                    // uint that is A<<24 | R<<16 | G<<8 | B
-                    row[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
+                    uint copyBytes = MeshPaletteSize * sizeof(uint);
+                    Buffer.MemoryCopy(src, (void*)map.DataPointer, copyBytes, copyBytes);
                 }
             }
             dc.Unmap((ID3D11Resource)_meshPaletteTex, 0);
+        }
+
+        /// <summary>Vertex capacity of _meshAuxVB: grid floor + rails lines then wall triangles.</summary>
+        private static uint AuxVertexBudget(int rows)
+        {
+            return 16u + (uint)Math.Max(0, rows - 1) * 12u;
+        }
+
+        /// <summary>
+        /// Fills the managed staging array for the flat pass: 8 LineList pairs
+        /// (6 perspective floor gridlines + 2 side rails) followed by the two side-wall
+        /// triangle meshes. Geometry mirrors the D2D Tier-1 path exactly; colours are
+        /// premultiplied by alpha CPU-side so the shared AlphaBlend state composites
+        /// as SourceOver.
+        /// </summary>
+        private static int FillAuxVertices(int rows, int cols, uint[] palette)
+        {
+            float[] v = _meshAuxScratch;
+            if (v == null) return 0;
+
+            float W = _meshParams.W;
+            float bottomY = _meshParams.Shift + _meshParams.PlotH;
+            float depthSpan = _meshParams.PlotH * _pan3DDepth;
+            float backW = _pan3DPerspective;
+
+            float lr = _pan3DLineColor.R / 255f;
+            float lg = _pan3DLineColor.G / 255f;
+            float lb = _pan3DLineColor.B / 255f;
+            float bgR = m_cDX2_display_background_clear_colour.R;
+            float bgG = m_cDX2_display_background_clear_colour.G;
+            float bgB = m_cDX2_display_background_clear_colour.B;
+
+            int n = 0;
+            void Emit(float x, float y, float a)
+            {
+                int o = n * 8;
+                v[o] = x; v[o + 1] = y;
+                v[o + 2] = lr * a; v[o + 3] = lg * a; v[o + 4] = lb * a; v[o + 5] = a;
+                n++;
+            }
+
+            // --- perspective grid floor: 6 receding gridlines along smoothstep baselines ---
+            const int gridCount = 5;
+            for (int g = 0; g <= gridCount; g++)
+            {
+                float tg = g / (float)gridCount;
+                float tsG = tg * tg * (3.0f - 2.0f * tg);
+                float yG = bottomY - tsG * depthSpan;
+                float wfG = 1.0f - tsG * (1.0f - backW);
+                float insG = W * (1.0f - wfG) * 0.5f;
+                float aG = 0.10f * (1.0f - tsG) + 0.03f;
+                Emit(insG, yG, aG);
+                Emit(W - insG, yG, aG);
+            }
+
+            // --- side rails: insets/baselines are linear in tS so rails are straight ---
+            float backInset = W * (1.0f - backW) * 0.5f;
+            Emit(0f, bottomY, 0.12f);
+            Emit(backInset, bottomY - depthSpan, 0.12f);
+            Emit(W, bottomY, 0.12f);
+            Emit(W - backInset, bottomY - depthSpan, 0.12f);
+
+            // --- side walls / end caps ---
+            if (_pan3DSideWalls && rows >= 2)
+            {
+                // wall colour: front-row left-edge surface colour, darkened, blended
+                // toward bg by mid fog — identical to the D2D path's flat wall brush
+                float sE = rows > 0 ? _meshHeightScratch[0] : 0f;
+                int pi = (int)(sE * 255f);
+                if (pi < 0) pi = 0; else if (pi > 255) pi = 255;
+                uint pe = palette[pi];
+                float wr = ((pe >> 16) & 255) / 255f;
+                float wg = ((pe >> 8) & 255) / 255f;
+                float wb = (pe & 255) / 255f;
+                float wh = Math.Min(1f, 0.5f * _pan3DDepthFade);   // FogFor(0.5)
+                wr = wr * 0.32f * (1 - wh) + bgR * wh;
+                wg = wg * 0.32f * (1 - wh) + bgG * wh;
+                wb = wb * 0.32f * (1 - wh) + bgB * wh;
+
+                void EmitWallTri(float ax, float ay, float bx, float by, float cx, float cy)
+                {
+                    int o = n * 8;
+                    v[o] = ax; v[o + 1] = ay;
+                    v[o + 2] = wr; v[o + 3] = wg; v[o + 4] = wb; v[o + 5] = 1f;
+                    n++;
+                    o = n * 8;
+                    v[o] = bx; v[o + 1] = by;
+                    v[o + 2] = wr; v[o + 3] = wg; v[o + 4] = wb; v[o + 5] = 1f;
+                    n++;
+                    o = n * 8;
+                    v[o] = cx; v[o + 1] = cy;
+                    v[o + 2] = wr; v[o + 3] = wg; v[o + 4] = wb; v[o + 5] = 1f;
+                    n++;
+                }
+
+                // edge crest Y per row must match vs_main exactly (v = r/(rows-1))
+                float EdgeX(int r, bool left)
+                {
+                    float vv = r / (float)(rows - 1);
+                    float rwf = 1f - vv * (1f - backW);
+                    float inset = W * (1f - rwf) * 0.5f;
+                    return left ? inset : W - inset;
+                }
+                float EdgeY(int r, bool left)
+                {
+                    float vv = r / (float)(rows - 1);
+                    float rwf = 1f - vv * (1f - backW);
+                    float baseline = bottomY - vv * depthSpan;
+                    float s = _meshHeightScratch[r * cols + (left ? 0 : cols - 1)];
+                    if (s < 0f) s = 0f; else if (s > 1f) s = 1f;
+                    float lift = (float)Math.Pow(s, Math.Max(0.05f, _pan3DZCurve));
+                    float y = baseline - lift * (_meshParams.PlotH * _pan3DRidgeHeight) * rwf;
+                    if (y < _meshParams.Shift) y = _meshParams.Shift;
+                    if (y > bottomY) y = bottomY;
+                    return y;
+                }
+
+                for (int side = 0; side < 2; side++)
+                {
+                    bool left = side == 0;
+                    for (int r = 0; r < rows - 1; r++)
+                    {
+                        float xt = EdgeX(r, left), yt = EdgeY(r, left);
+                        float xb = EdgeX(r + 1, left), yb = EdgeY(r + 1, left);
+                        EmitWallTri(xt, yt, xb, yb, xt, bottomY);
+                        EmitWallTri(xb, yb, xb, bottomY, xt, bottomY);
+                    }
+                }
+            }
+            return n;
         }
 
         #endregion
