@@ -352,6 +352,8 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Display.Pan3DMesh.cs" />
+    <Compile Include="Display.Pan2DMesh.cs" />
+    <Compile Include="Display.WaterfallMesh.cs" />
     <Compile Include="GpuUsageMonitor.cs" />
     <Compile Include="display.cs">
       <SubType>Code</SubType>

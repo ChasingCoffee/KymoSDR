@@ -29,6 +29,8 @@
 //     flat colour = front-row edge surface colour x0.32 blended toward bg by mid fog
 // All premultiplied-alpha outputs so the shared AlphaBlend state composites as SourceOver.
 using System;
+// Third-party: GPU interop via Vortice.Windows (MIT License, Copyright (c) Amer Koleci and Contributors).
+// Full license text ships with the app (Licenses folder) and lives in the repo under Project Files\lib\licenses\.
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Vortice.Mathematics;
@@ -89,6 +91,7 @@ namespace Thetis
             public bool Valid;
             public float W, PlotH, TargetH, Shift;
             public int Cols, Decimation, GridMin, GridMax;
+            public int RX;      // which receiver's pane these params describe
         }
         private static MeshFrameParams _meshParams;
 
@@ -101,7 +104,10 @@ namespace Thetis
 
         private static void CaptureMeshFrameParams(int nVerticalShift, int W, int H, int rx, int nDecimatedWidth, int local_Decimation, int grid_min, int grid_max)
         {
-            if (rx != 1) return;
+            // NOTE: whichever rx's pane is drawn LAST owns the single GPU surface
+            // this frame; the other pane falls back to the D2D 3D renderer via
+            // GpuMesh3DOwnerRX. The history ring itself is fed by RX1 only
+            // (pre-existing behaviour shared with the D2D path).
             _meshParams.W = W;
             _meshParams.PlotH = H;
             _meshParams.TargetH = displayTargetHeight;
@@ -110,6 +116,7 @@ namespace Thetis
             _meshParams.Decimation = local_Decimation;
             _meshParams.GridMin = grid_min;
             _meshParams.GridMax = grid_max;
+            _meshParams.RX = rx;
             _meshParams.Valid = true;
         }
 
@@ -306,6 +313,30 @@ namespace Thetis
             _meshParams.Valid = false;
         }
 
+        // Backdrop ownership for ALL mesh passes (3D surface + waterfall): exactly
+        // one pass per frame draws the skin background image (via D2D) or performs
+        // the full background-colour clear; later passes composite over it. Reset
+        // at the top of every frame in RenderDX2D before the mesh dispatches.
+        private static bool _bGpuBackdropDone;
+
+        private static void EnsureGpuBackdrop(ID3D11DeviceContext dc)
+        {
+            if (_bGpuBackdropDone || _meshRTV == null) return;
+            _bGpuBackdropDone = true;
+
+            if (_bitmapBackground != null)
+            {
+                DrawSkinBackgroundPrepass();
+            }
+            else
+            {
+                dc.ClearRenderTargetView(_meshRTV, new Color4(
+                    m_cDX2_display_background_clear_colour.R,
+                    m_cDX2_display_background_clear_colour.G,
+                    m_cDX2_display_background_clear_colour.B, 1f));
+            }
+        }
+
         private static bool BuildMeshPipeline(ID3D11Device device)
         {
             try
@@ -376,7 +407,7 @@ namespace Thetis
             }
             catch (Exception e)
             {
-                Common.LogString("GPU mesh: shader build failed - " + e.Message);
+                Common.MeshDiagLog("GPU mesh: shader build failed - " + e.Message);
                 ReleaseGpuMeshDeviceObjects();
                 return false;
             }
@@ -490,7 +521,7 @@ namespace Thetis
             }
             catch (Exception e)
             {
-                Common.LogString("GPU mesh: grid build failed (" + rows + "x" + cols + ") - " + e.Message);
+                Common.MeshDiagLog("GPU mesh: grid build failed (" + rows + "x" + cols + ") - " + e.Message);
                 ReleaseGpuMeshDeviceObjects();
                 return false;
             }
@@ -507,7 +538,7 @@ namespace Thetis
             }
             catch (Exception e)
             {
-                Common.LogString("GPU mesh: RTV creation failed - " + e.Message);
+                Common.MeshDiagLog("GPU mesh: RTV creation failed - " + e.Message);
                 return false;
             }
         }
@@ -557,9 +588,8 @@ namespace Thetis
                 float phase = 0f;
                 {
                     long nowTicks = DateTime.UtcNow.Ticks;
-                    long interval = _pan3DWaterfallSync
-                        ? (long)(getWaterfallLineIntervalMs(1) * 10000.0)
-                        : _3dPushIntervalTicks;
+                    // matches push throttle; independent of Waterfall Sync (palette-only)
+                    long interval = _3dPushIntervalTicks;
                     if (interval < 10000) interval = 10000;
                     phase = (nowTicks - _3dLastPushTicks) / (float)interval;
                     if (phase < 0f) phase = 0f; else if (phase > 1f) phase = 1f;
@@ -659,10 +689,10 @@ namespace Thetis
 
                 if (_bitmapBackground != null)
                 {
-                    // skin image present: draw it first via D2D so it stays visible
-                    // around the mesh, then repaint ONLY the plot strip with a
-                    // scissored opaque quad instead of a full-target clear
-                    DrawSkinBackgroundPrepass();
+                    // skin image drawn by the shared backdrop step (once per frame
+                    // across all mesh passes); repaint ONLY the plot strip with a
+                    // scissored opaque quad so the 3D scene sits on flat background
+                    EnsureGpuBackdrop(dc);
 
                     dc.RSSetState(_meshRSScissor);
                     dc.RSSetScissorRects(new[] { new Vortice.RawRect(0, (int)_meshParams.Shift,
@@ -685,11 +715,9 @@ namespace Thetis
                 }
                 else
                 {
-                    // no skin image: full clear to the configured background colour
-                    dc.ClearRenderTargetView(_meshRTV, new Color4(
-                        m_cDX2_display_background_clear_colour.R,
-                        m_cDX2_display_background_clear_colour.G,
-                        m_cDX2_display_background_clear_colour.B, 1f));
+                    // no skin image: the shared backdrop step full-clears to the
+                    // configured background colour (once per frame)
+                    EnsureGpuBackdrop(dc);
                 }
 
                 // ---- flat pass: perspective grid floor + rails, then side walls.
@@ -765,13 +793,14 @@ namespace Thetis
                 if (!_meshFailedLogged)
                 {
                     _meshFailedLogged = true;
-                    Common.LogString("GPU mesh surface active (" + rowCount + "x" + cols + ")");
+                    Common.MeshDiagLog("GPU mesh surface active (" + rowCount + "x" + cols + ")");
                 }
+                GpuMesh3DOwnerRX = _meshParams.RX;   // this pane's D2D 3D fallback is skipped
                 return true;
             }
             catch (Exception e)
             {
-                Common.LogString("GPU mesh render failed - falling back to D2D lines : " + e.Message);
+                Common.MeshDiagLog("GPU mesh render failed - falling back to D2D lines : " + e.Message);
                 ReleaseGpuMeshDeviceObjects();
                 ReleaseGpuMeshFrameState();
                 return false;
@@ -823,13 +852,35 @@ namespace Thetis
             }
             catch (Exception e)
             {
-                Common.LogString("GPU mesh: background prepass failed - " + e.Message);
+                Common.MeshDiagLog("GPU mesh: background prepass failed - " + e.Message);
             }
         }
 
         /// <summary>Per-frame palette replicating SelectSurfaceColour priorities:
         /// waterfall sync > perceptual colormap > gradient > line colour brightness.
         /// Returns BGRA-packed uints (A&lt;&lt;24 | R&lt;&lt;16 | G&lt;&lt;8 | B).</summary>
+        /// <summary>Per-rx waterfall-sync thresholds for the 3D surface colouring
+        /// (shared by the GPU palette and the D2D fallback). Returns false when
+        /// the threshold range is degenerate, which disables sync colouring.</summary>
+        private static bool Get3DWfSyncThresholds(int rx, out float lo, out float hi)
+        {
+            if (rx == 2)
+            {
+                lo = rx2_waterfall_low_threshold;
+                hi = rx2_waterfall_high_threshold;
+                if (rx2_waterfall_agc && !m_bRX2_spectrum_thresholds)
+                    lo = _RX2waterfallPreviousMinValue - m_fWaterfallAGCOffsetRX2;
+            }
+            else
+            {
+                lo = waterfall_low_threshold;
+                hi = waterfall_high_threshold;
+                if (rx1_waterfall_agc && !m_bRX1_spectrum_thresholds)
+                    lo = _RX1waterfallPreviousMinValue - m_fWaterfallAGCOffsetRX1;
+            }
+            return hi - lo > 0;
+        }
+
         private static uint[] ComputePaletteArray(int yRange)
         {
             int grid_min = _meshParams.GridMin;
@@ -837,15 +888,9 @@ namespace Thetis
 
             // mirror the priority logic of DrawPanadapter3DHistoryDX2D
             bool useWaterfallSync = _pan3DWaterfallSync;
-            float wfLowThreshold = waterfall_low_threshold;
-            float wfHighThreshold = waterfall_high_threshold;
-            if (rx1_waterfall_agc && !m_bRX1_spectrum_thresholds)
-            {
-                wfLowThreshold = _RX1waterfallPreviousMinValue;
-                wfLowThreshold -= m_fWaterfallAGCOffsetRX1;
-            }
-            float wfRange = wfHighThreshold - wfLowThreshold;
-            if (wfRange <= 0) useWaterfallSync = false;
+            float wfLowThreshold = 0f, wfHighThreshold = 0f;
+            if (useWaterfallSync)
+                useWaterfallSync = Get3DWfSyncThresholds(_meshParams.RX, out wfLowThreshold, out wfHighThreshold);
 
             int colorMapIdx = _pan3DColorMap;
             bool useColormap = colorMapIdx > 0 && !useWaterfallSync;

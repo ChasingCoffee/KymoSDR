@@ -599,6 +599,17 @@ namespace Thetis
 
             }
         }
+        /// <summary>
+        /// [4.6] GPU mesh / spectrum-glow diagnostics sink. Currently disabled —
+        /// uncomment the body to restore ErrorLog output when chasing GPU issues;
+        /// all MeshDiagLog call sites keep their original message text.
+        /// </summary>
+        public static void MeshDiagLog(string entry)
+        {
+            //if (m_sLogPath == "") return;
+            //if (entry == "") return;
+            //LogString(entry);
+        }
         public static void LogException(Exception e)
         {
             // MW0LGE very simple logger

@@ -63,6 +63,9 @@ using System.Runtime.Serialization;
 using CatAtonic;
 using CATQueueBatching;
 
+// Third-party: DirectX interop via Vortice.Windows (MIT License, Copyright (c) Amer Koleci and
+// Contributors) and its SharpGenTools runtime layer (MIT). Full license texts ship with the app in the
+// Licenses folder and live in the repo under Project Files\lib\licenses\.
 //directX
 using SharpGen.Runtime;
 using Vortice;
@@ -32196,7 +32199,7 @@ namespace Thetis
                         {
                             lastError = e;
                             releasePartialMeterDX();
-                            Common.LogString("Meter DirectX init failed using " + Display.describeDXAttempt(attempt.Item1, attempt.Item2) + " : " + e.Message);
+                            Common.MeshDiagLog("Meter DirectX init failed using " + Display.describeDXAttempt(attempt.Item1, attempt.Item2) + " : " + e.Message);
                         }
                     }
 
@@ -32209,7 +32212,7 @@ namespace Thetis
 
                     m_eRenderPath = okAttempt.Item1 == DriverType.Warp ? Display.DXRenderPath.WarpSoftware : Display.DXRenderPath.Hardware;
 
-                    Common.LogString("Meter DirectX initialised : render path=" + (m_eRenderPath == Display.DXRenderPath.WarpSoftware ? "WARP software" : "Hardware") + " [" + Display.describeDXAttempt(okAttempt.Item1, okAttempt.Item2) + "], feature level=" + Display.featureLevelString() + (Display.ForceCPURendering ? " (forced CPU)" : ""));
+                    Common.MeshDiagLog("Meter DirectX initialised : render path=" + (m_eRenderPath == Display.DXRenderPath.WarpSoftware ? "WARP software" : "Hardware") + " [" + Display.describeDXAttempt(okAttempt.Item1, okAttempt.Item2) + "], feature level=" + Display.featureLevelString() + (Display.ForceCPURendering ? " (forced CPU)" : ""));
                 }
                 catch (Exception e)
                 {

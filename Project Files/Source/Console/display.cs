@@ -60,6 +60,9 @@ namespace Thetis
     using System.Buffers;
     using System.Diagnostics;
 
+    // Third-party: DirectX/GPU interop via Vortice.Windows (MIT License, Copyright (c) Amer Koleci and
+    // Contributors) and its SharpGenTools runtime layer (MIT). Full license texts ship with the app in the
+    // Licenses folder and live in the repo under Project Files\lib\licenses\.
     using SharpGen.Runtime;
     using Vortice;
     using Vortice.Direct2D1;
@@ -3456,6 +3459,10 @@ namespace Thetis
         private static bool m_bGlowLayerActive;
         private static bool m_bGlowCompositeLogged;
         private static bool _b3DMeshDrewFrame;          // Tier 3: mesh drew the surface this frame (before D2D BeginDraw)
+        internal static int GpuMesh3DOwnerRX;           // which rx's pane the GPU 3D surface served this frame (0 = none)
+        private static bool _bWfMeshDrewFrame;          // Tier 3: mesh drew a waterfall pane this frame (before D2D BeginDraw)
+        internal static bool SpecMeshWasUsedThisFrame;  // TEMP diag: panafill mesh ran this frame
+        private static bool _specEndDrawFailLogged;     // TEMP diag
         private static ID3D11Device _device;
         private static IDXGIFactory1 _factory1;
         private static readonly Object _objDX2Lock = new Object();
@@ -3557,6 +3564,8 @@ namespace Thetis
 
                     releaseGlowLayer();
                     ReleaseGpuMeshDeviceObjects();
+                    ReleaseWaterfallMeshObjects();
+                    ReleaseSpectrumFillObjects();
                     _backBufferBitmap?.Dispose();
                     _d2dRenderTarget = null;
                     _d2dDeviceContext?.Dispose();
@@ -3791,7 +3800,7 @@ namespace Thetis
                         {
                             lastError = e;
                             releasePartialDX2DDevice();
-                            Common.LogString("DirectX init failed using " + describeDXAttempt(attempt.Item1, attempt.Item2) + " : " + e.Message);
+                            Common.MeshDiagLog("DirectX init failed using " + describeDXAttempt(attempt.Item1, attempt.Item2) + " : " + e.Message);
                         }
                     }
 
@@ -3825,7 +3834,7 @@ namespace Thetis
                     _3dMedianPrev = medBuf;
                     _3dMedianCount = 0;
 
-                    Common.LogString("DirectX initialised : render path=" + RenderPathString() + ", adapter='" + _gpu + "', feature level=" + featureLevelString() + (m_bForceCPURendering ? " (forced CPU)" : ""));
+                    Common.MeshDiagLog("DirectX initialised : render path=" + RenderPathString() + ", adapter='" + _gpu + "', feature level=" + featureLevelString() + (m_bForceCPURendering ? " (forced CPU)" : ""));
                 }
                 catch (Exception e)
                 {
@@ -3949,6 +3958,8 @@ namespace Thetis
 
             releaseGlowLayer();
             ReleaseGpuMeshDeviceObjects();
+            ReleaseWaterfallMeshObjects();
+            ReleaseSpectrumFillObjects();
             _backBufferBitmap?.Dispose();
             _d2dRenderTarget = null;
             _d2dDeviceContext?.Dispose();
@@ -4013,14 +4024,14 @@ namespace Thetis
                     _glowBlurImage = _glowBlurEffect.QueryInterface<ID2D1Image>();
 
                     m_bGlowLayerActive = true;
-                    Common.LogString("Spectrum glow layer active (" + width + "x" + height + ")");
+                    Common.MeshDiagLog("Spectrum glow layer active (" + width + "x" + height + ")");
                 }
 
                 return m_bGlowLayerActive;
             }
             catch (Exception ex)
             {
-                Common.LogString("Spectrum glow layer init failed : " + ex.Message);
+                Common.MeshDiagLog("Spectrum glow layer init failed : " + ex.Message);
                 releaseGlowLayer();
                 return false;
             }
@@ -4041,7 +4052,7 @@ namespace Thetis
             if (m_bForceCPURendering || m_bWarpDowngradeAttempted || m_eRenderPath != DXRenderPath.Hardware || displayTarget == null) return false;
 
             m_bWarpDowngradeAttempted = true;
-            Common.LogString("DirectX hardware rendering failed (" + reason + ") - switching to WARP software rendering");
+            Common.MeshDiagLog("DirectX hardware rendering failed (" + reason + ") - switching to WARP software rendering");
 
             ShutdownDX2D();
             initDX2D(DriverType.Warp, null);
@@ -4119,6 +4130,7 @@ namespace Thetis
                     if (_d2dDeviceContext != null) _d2dDeviceContext.Target = null;
                     releaseGlowLayer();
                     ReleaseGpuMeshFrameState();
+                    ReleaseSpectrumFillFrameState();
                     _backBufferBitmap?.Dispose();
                     _surface?.Dispose();
 
@@ -4338,11 +4350,16 @@ namespace Thetis
                     _bNoiseFloorAlreadyCalculatedRX1 = false; // keeps track of noise floor processing, only want to do it once, even if pana + water shown
                     _bNoiseFloorAlreadyCalculatedRX2 = false;
 
-                    // Tier 3 GPU mesh: draw the 3D surface straight into the backbuffer
-                    // BEFORE the D2D frame begins. When it succeeds, the D2D clear +
-                    // background fill below are skipped so the surface survives; grid,
-                    // text, live trace and all overlays still come from D2D on top.
+                    // Tier 3 GPU mesh passes (3D surface + waterfall): drawn straight
+                    // into the backbuffer BEFORE the D2D frame begins. When any pass
+                    // succeeds, the D2D clear + background fill below are skipped so
+                    // the GPU content survives; grid, text, traces and all overlays
+                    // still come from D2D on top.
+                    _bGpuBackdropDone = false;
+                    GpuMesh3DOwnerRX = 0;
                     _b3DMeshDrewFrame = RenderGpuMesh3D();
+                    _bWfMeshDrewFrame = RenderGpuWaterfall();
+                    ClearWaterfallPaneCaptures();
 
                     _d2dRenderTarget.BeginDraw();
 
@@ -4359,7 +4376,7 @@ namespace Thetis
                     _d2dRenderTarget.Transform = t;
 
                     RectangleF rectDest = new RectangleF(0, 0, displayTargetWidth, displayTargetHeight);
-                    if (!_b3DMeshDrewFrame)
+                    if (!_b3DMeshDrewFrame && !_bWfMeshDrewFrame)
                     {
                         //always clear without using alpha
                         _d2dRenderTarget.Clear(m_cDX2_display_background_clear_colour);
@@ -4693,7 +4710,14 @@ namespace Thetis
                 jump:
                     try
                     {
-                        _d2dRenderTarget.EndDraw();
+                        ulong endTag1, endTag2;
+                        Result _endRes = _d2dRenderTarget.EndDraw(out endTag1, out endTag2);
+                        if (_endRes.Failure && !_specEndDrawFailLogged && SpecMeshWasUsedThisFrame)
+                        {
+                            _specEndDrawFailLogged = true;
+                            Common.MeshDiagLog("GPU 2D panafill diag: EndDraw FAILED code=" + _endRes.Code +
+                                " tags=0x" + endTag1.ToString("X") + "/0x" + endTag2.ToString("X"));
+                        }
                     }
                     catch (SharpGenException ex) when (ex.ResultCode == Vortice.Direct2D1.ResultCode.RecreateTarget)
                     {
@@ -5471,15 +5495,15 @@ namespace Thetis
             }
             yRange = grid_max - grid_min;
 
-            // draw 3D history BEFORE the grid, so filters/cursor render on top
-            if (draw3DHistory && !local_mox)
-            {
-                // snapshot params for the GPU mesh path (consumed pre-BeginDraw next frame)
-                CaptureMeshFrameParams(nVerticalShift, W, H, rx, nDecimatedWidth, m_nDecimation, grid_min, grid_max);
-                if (!_b3DMeshDrewFrame)
-                    DrawPanadapter3DHistoryDX2D(nVerticalShift, W, H, rx, bottom,
-                        null, 0, grid_max, nDecimatedWidth, m_nDecimation);
-            }
+                // draw 3D history BEFORE the grid, so filters/cursor render on top
+                if (draw3DHistory && !local_mox)
+                {
+                    // snapshot params for the GPU mesh path (consumed pre-BeginDraw next frame)
+                    CaptureMeshFrameParams(nVerticalShift, W, H, rx, nDecimatedWidth, m_nDecimation, grid_min, grid_max);
+                    if (!_b3DMeshDrewFrame || GpuMesh3DOwnerRX != rx)   // only skip for the pane the GPU surface actually served
+                        DrawPanadapter3DHistoryDX2D(nVerticalShift, W, H, rx, bottom,
+                            null, 0, grid_max, nDecimatedWidth, m_nDecimation);
+                }
 
             //if (grid_control) //[2.10.3.9]MW0LGE raw grid control option now just turns off the grid, all other elements are shown
             //{
@@ -5526,11 +5550,10 @@ namespace Thetis
 
                     data_ready = false;
 
-                    // write to 3D panadapter ring buffer — throttled to match waterfall speed when sync is on
+                    // write to 3D panadapter ring buffer at the spinner-configured rate;
+                    // Waterfall Sync couples palette/levels only, never scroll rate
                     long nowTicks = DateTime.UtcNow.Ticks;
-                    long effectiveInterval = _pan3DWaterfallSync
-                        ? (long)(getWaterfallLineIntervalMs(1) * 10000.0) // ms to 100ns ticks
-                        : _3dPushIntervalTicks;
+                    long effectiveInterval = _3dPushIntervalTicks;
                     if (effectiveInterval < 10000) effectiveInterval = 10000; // floor at 1ms
                     if (_pan3DEnabled && _3dHistoryBuffer != null &&
                         (nowTicks - _3dLastPushTicks >= effectiveInterval))
@@ -5792,6 +5815,21 @@ namespace Thetis
                     modifyDataForNotches(ref data, rx, bottom, local_mox, displayduplex, W);
                 }
 
+                // Tier 3 GPU mesh panafill: when armed, render the crest-to-baseline
+                // fill below into an offscreen GPU sheet and composite it with a
+                // single DrawBitmap right here - the exact stacking position of the
+                // per-column strokes it replaces (after grid, before peaks/line).
+                // Plain 2D panadapters only; the 3D-history overlay keeps its own
+                // live fill. Any failure leaves the legacy column loop untouched.
+                bool bSpecFillMesh = false;
+                if (!draw3DHistory && pan_fill)
+                {
+                    bSpecFillMesh = TryRenderSpectrumFillMesh(rx, nVerticalShift, W, H,
+                        nDecimatedWidth, data, fOffset, grid_min, grid_max, local_mox);
+                    if (bSpecFillMesh)
+                        BlitSpectrumFillMesh(rx, nVerticalShift, W, H);
+                }
+
                 float averageSum = 0;
                 int averageCount = 1;
                 float currentAverage = rx == 1 ? m_fFFTBinAverageRX1 + 2 : m_fFFTBinAverageRX2 + 2; // +2 so we dont include samples close to our current average, this perhaps should be configurable, buffer?
@@ -5828,7 +5866,7 @@ namespace Thetis
                 // 0.95 reads level between the mesh sheet and the curtain stack)
                 float liveFillAlpha = 0.95f;
 
-                var liveWfBrushCache = liveUseWaterfallSync || liveUseColormap || liveCustomFill || _b3DMeshDrewFrame
+                var liveWfBrushCache = liveUseWaterfallSync || liveUseColormap || liveCustomFill || (_b3DMeshDrewFrame && GpuMesh3DOwnerRX == rx)
                     ? new System.Collections.Generic.Dictionary<int, ID2D1Brush>()
                     : null;
 
@@ -5944,7 +5982,7 @@ namespace Thetis
                     }
 
                     //pana fill
-                    if (pan_fill || liveCustomFill)
+                    if ((pan_fill || liveCustomFill) && !bSpecFillMesh)
                     {
                         // draw vertical line, this is so much faster than FillGeometry as the geo created would be so complex any fill alogorthm would struggle
                         bottomPoint.X = point.X;
@@ -6026,7 +6064,7 @@ namespace Thetis
                         {
                             if (!m_bUseLinearGradient)
                             {
-                                if (_b3DMeshDrewFrame && rx == 1)
+                                if (GpuMesh3DOwnerRX == rx)   // GPU mesh served THIS pane's backdrop
                                 {
                                     // GPU mesh owns the backdrop: there is no curtain stack
                                     // behind this fill, so the vertical gradient reads as
@@ -6238,7 +6276,7 @@ namespace Thetis
                     if (!m_bGlowCompositeLogged)
                     {
                         m_bGlowCompositeLogged = true;
-                        Common.LogString("Spectrum glow composite running (sigma=6, 2 passes, " + glowSegs.Count + " segments)");
+                        Common.MeshDiagLog("Spectrum glow composite running (sigma=6, 2 passes, " + glowSegs.Count + " segments)");
                     }
                     _d2dDeviceContext.DrawImage(_glowBlurImage, null, null, Vortice.Direct2D1.InterpolationMode.Linear, CompositeMode.SourceOver);
                     _d2dDeviceContext.DrawImage(_glowBlurImage, null, null, Vortice.Direct2D1.InterpolationMode.Linear, CompositeMode.SourceOver);
@@ -6677,17 +6715,12 @@ namespace Thetis
             float frontMaxRidge = H * frontMaxRidgeFrac; // max ridge height at front
 
             // waterfall sync support — TOP priority: when checked it overrides any
-            // colormap, gradient and line colour so the surface matches the waterfall
-            bool useWaterfallSync = _pan3DWaterfallSync && rx == 1;
-            float wfLowThreshold = waterfall_low_threshold;
-            float wfHighThreshold = waterfall_high_threshold;
-            if (rx1_waterfall_agc && !m_bRX1_spectrum_thresholds)
-            {
-                wfLowThreshold = _RX1waterfallPreviousMinValue;
-                wfLowThreshold -= m_fWaterfallAGCOffsetRX1;
-            }
-            float wfRange = wfHighThreshold - wfLowThreshold;
-            if (wfRange <= 0) useWaterfallSync = false;
+            // colormap, gradient and line colour so the surface matches the waterfall.
+            // Per-rx thresholds so RX2's pane matches RX2's waterfall too.
+            bool useWaterfallSync = _pan3DWaterfallSync;
+            float wfLowThreshold = 0f, wfHighThreshold = 0f;
+            if (useWaterfallSync)
+                useWaterfallSync = Get3DWfSyncThresholds(rx, out wfLowThreshold, out wfHighThreshold);
 
             // perceptual colormap — used only when waterfall sync is OFF.
             // snapshot the map index once per frame — the UI thread can change it mid-frame,
@@ -6729,9 +6762,8 @@ namespace Thetis
             float phase = 0f;
             {
                 long nowTicks = DateTime.UtcNow.Ticks;
-                long interval = _pan3DWaterfallSync
-                    ? (long)(getWaterfallLineIntervalMs(1) * 10000.0) // ms to 100ns ticks (matches push throttle)
-                    : _3dPushIntervalTicks;
+                // matches push throttle; independent of Waterfall Sync (palette-only)
+                long interval = _3dPushIntervalTicks;
                 if (interval < 10000) interval = 10000;
                 phase = (nowTicks - _3dLastPushTicks) / (float)interval;
                 if (phase < 0f) phase = 0f;
@@ -8018,6 +8050,10 @@ namespace Thetis
             Matrix3x2 originalTransform = _d2dRenderTarget.Transform;
             _d2dRenderTarget.Transform = Matrix3x2.Identity;
 
+            // Tier 3 GPU mesh waterfall: record this pane's geometry for the next
+            // frame's pre-BeginDraw presentation pass
+            CaptureWaterfallPaneParams(nVerticalShift, W, H, rx);
+
             if (waterfall_data == null || waterfall_data.Length < W)
             {
                 waterfall_data = new float[W];		// array of points to display
@@ -8283,7 +8319,7 @@ namespace Thetis
                     byte[] row = new byte[W * pixel_size];
 
                     ID2D1Bitmap waterfallBitmap;
-                    ID2D1Bitmap topPixels;
+                    ID2D1Bitmap topPixels = null;
                     int horizontalShiftPixels;
                     bool clearExistingBitmap;
 
@@ -8302,15 +8338,12 @@ namespace Thetis
                         waterfallBitmap = _waterfall_bmp2_dx2d;
                     }
 
-                    if (clearExistingBitmap)
-                    {
-                        clearWaterfallBitmapRegion(waterfallBitmap, 0, 0, W, (int)waterfallBitmap.Size.Height);
-                    }
-
-                    int preservedBitmapHeight = (int)waterfallBitmap.Size.Height - (addRow ? 1 : 0);
-                    topPixels = _d2dRenderTarget.CreateBitmap(new Vortice.Mathematics.SizeI((int)waterfallBitmap.Size.Width, preservedBitmapHeight), IntPtr.Zero, 0, new BitmapProperties(new SDXPixelFormat(waterfallBitmap.PixelFormat.Format, ALPHA_MODE)));
-
-                    topPixels.CopyFromBitmap(new System.Drawing.Point(0, 0), waterfallBitmap, new System.Drawing.Rectangle(0, 0, (int)topPixels.Size.Width, preservedBitmapHeight));
+                    // Tier 3 GPU mesh waterfall: when armed, hand the freshly coloured
+                    // row to the GPU ring instead of the D2D bitmap scroll. Decided
+                    // AFTER the colour switch below fills 'row'; the temp-bitmap work
+                    // that used to sit above the switch moved into the D2D branch next
+                    // to the scroll it serves.
+                    bool bMeshCommit = false;
 
                     #region colours
                     switch (cScheme)
@@ -9228,7 +9261,31 @@ namespace Thetis
                     bool stopWaterfallOnTx = (rx == 1 && m_bStopRX1WaterfallOnTX && local_mox) ||
                                              (rx == 2 && m_bStopRX2WaterfallOnTX && local_mox);
 
-                    if (!stopWaterfallOnTx)
+                    int preservedBitmapHeight = (int)waterfallBitmap.Size.Height - (addRow ? 1 : 0);
+
+                    // Tier 3 GPU mesh waterfall: give the GPU ring the line first
+                    // (hold frames are handled internally once it owns the pane; a
+                    // width-change clear is honoured even during TX-stop, matching
+                    // the D2D order). Fall through to the legacy bitmap work when it
+                    // declines or is disarmed.
+                    if (WfMeshArmed && (!stopWaterfallOnTx || clearExistingBitmap))
+                    {
+                        bMeshCommit = WaterfallMeshCommitLine(rx, row, H - 20, addRow, horizontalShiftPixels, clearExistingBitmap);
+                    }
+
+                    if (!bMeshCommit)
+                    {
+                        if (clearExistingBitmap)
+                        {
+                            clearWaterfallBitmapRegion(waterfallBitmap, 0, 0, W, (int)waterfallBitmap.Size.Height);
+                        }
+
+                        topPixels = _d2dRenderTarget.CreateBitmap(new Vortice.Mathematics.SizeI((int)waterfallBitmap.Size.Width, preservedBitmapHeight), IntPtr.Zero, 0, new BitmapProperties(new SDXPixelFormat(waterfallBitmap.PixelFormat.Format, ALPHA_MODE)));
+
+                        topPixels.CopyFromBitmap(new System.Drawing.Point(0, 0), waterfallBitmap, new System.Drawing.Rectangle(0, 0, (int)topPixels.Size.Width, preservedBitmapHeight));
+                    }
+
+                    if (!bMeshCommit && !stopWaterfallOnTx)
                     {
                         if (addRow)
                         {
@@ -9257,9 +9314,10 @@ namespace Thetis
                         {
                             clearWaterfallBitmapRegion(waterfallBitmap, 0, shiftedRowTop, W, preservedBitmapHeight);
                         }
-
-                        if (addRow) recordWaterfallAdvance(rx, H - 20);
                     }
+
+                    // line-advance bookkeeping runs on both the GPU mesh and D2D paths
+                    if (!stopWaterfallOnTx && addRow) recordWaterfallAdvance(rx, H - 20);
 
                     topPixels?.Dispose();
                     topPixels = null;
@@ -9316,13 +9374,20 @@ namespace Thetis
                     }
                 }
 
-                if (rx == 1)
+                // Tier 3 GPU mesh waterfall: when the mesh path owns this pane the
+                // pre-BeginDraw pass already presented it - skip the D2D present.
+                // Ownership is set true on a successful commit and false on any
+                // failure, so it fully reflects this line's commit outcome.
+                if (!(WfMeshArmed && WfMeshOwnsPane(rx)))
                 {
-                    _d2dRenderTarget.DrawBitmap(_waterfall_bmp_dx2d, new RectangleF(0, nVerticalShift + 20, _waterfall_bmp_dx2d.Size.Width, _waterfall_bmp_dx2d.Size.Height), m_fRX1WaterfallOpacity, BitmapInterpolationMode.Linear);
-                }
-                else
-                {
-                    _d2dRenderTarget.DrawBitmap(_waterfall_bmp2_dx2d, new RectangleF(0, nVerticalShift + 20, _waterfall_bmp2_dx2d.Size.Width, _waterfall_bmp2_dx2d.Size.Height), m_fRX2WaterfallOpacity, BitmapInterpolationMode.Linear);
+                    if (rx == 1)
+                    {
+                        _d2dRenderTarget.DrawBitmap(_waterfall_bmp_dx2d, new RectangleF(0, nVerticalShift + 20, _waterfall_bmp_dx2d.Size.Width, _waterfall_bmp_dx2d.Size.Height), m_fRX1WaterfallOpacity, BitmapInterpolationMode.Linear);
+                    }
+                    else
+                    {
+                        _d2dRenderTarget.DrawBitmap(_waterfall_bmp2_dx2d, new RectangleF(0, nVerticalShift + 20, _waterfall_bmp2_dx2d.Size.Width, _waterfall_bmp2_dx2d.Size.Height), m_fRX2WaterfallOpacity, BitmapInterpolationMode.Linear);
+                    }
                 }
             }
 
@@ -9620,6 +9685,8 @@ namespace Thetis
 
             fill = null;
             line = null;
+
+            SpectrumFillBrushesChanged();   // Tier 3 GPU panafill: refresh cached stops
         }
         private static void buildLinearGradientBrushTX(int top, int bottom, int rx)
         {
@@ -9699,6 +9766,8 @@ namespace Thetis
 
             fill = null;
             line = null;
+
+            SpectrumFillBrushesChanged();   // Tier 3 GPU panafill: refresh cached stops
         }
         private static void releaseDX2Resources()
         {

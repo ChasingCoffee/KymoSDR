@@ -1986,6 +1986,7 @@
             this.tpDisplay = new System.Windows.Forms.TabPage();
             this.tcDisplay = new System.Windows.Forms.TabControl();
             this.tpDisplayGeneral = new System.Windows.Forms.TabPage();
+            this.grpDisplay3DPanadapter = new System.Windows.Forms.GroupBoxTS();
             this.grpSpectralWarningLeds = new System.Windows.Forms.GroupBoxTS();
             this.chkSpecWarningLEDGetPixels = new System.Windows.Forms.CheckBoxTS();
             this.chkSpecWarningLEDRenderDelay = new System.Windows.Forms.CheckBoxTS();
@@ -4874,6 +4875,7 @@
             this.tpDisplay.SuspendLayout();
             this.tcDisplay.SuspendLayout();
             this.tpDisplayGeneral.SuspendLayout();
+            this.grpDisplay3DPanadapter.SuspendLayout();
             this.grpSpectralWarningLeds.SuspendLayout();
             this.groupBoxTS13.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.udPeakBlobDropDBMs)).BeginInit();
@@ -32906,8 +32908,7 @@
             // tpDisplayGeneral
             // 
             this.tpDisplayGeneral.BackColor = System.Drawing.SystemColors.Control;
-            this.tpDisplayGeneral.Controls.Add(this.chkDisplay3DPanadapter);
-            this.tpDisplayGeneral.Controls.Add(this.btn3DSettings);
+            this.tpDisplayGeneral.Controls.Add(this.grpDisplay3DPanadapter);
             this.tpDisplayGeneral.Controls.Add(this.grpSpectralWarningLeds);
             this.tpDisplayGeneral.Controls.Add(this.groupBoxTS13);
             this.tpDisplayGeneral.Controls.Add(this.groupBoxTS11);
@@ -32928,7 +32929,7 @@
             // 
             this.grpSpectralWarningLeds.Controls.Add(this.chkSpecWarningLEDGetPixels);
             this.grpSpectralWarningLeds.Controls.Add(this.chkSpecWarningLEDRenderDelay);
-            this.grpSpectralWarningLeds.Location = new System.Drawing.Point(394, 200);
+            this.grpSpectralWarningLeds.Location = new System.Drawing.Point(394, 296);
             this.grpSpectralWarningLeds.Name = "grpSpectralWarningLeds";
             this.grpSpectralWarningLeds.Size = new System.Drawing.Size(147, 97);
             this.grpSpectralWarningLeds.TabIndex = 94;
@@ -33269,8 +33270,8 @@
             this.chkGpuMesh3D.Name = "chkGpuMesh3D";
             this.chkGpuMesh3D.Size = new System.Drawing.Size(130, 17);
             this.chkGpuMesh3D.TabIndex = 52;
-            this.chkGpuMesh3D.Text = "GPU 3D mesh (exp.)";
-            this.toolTip1.SetToolTip(this.chkGpuMesh3D, "Experimental: renders the 3D panadapter surface as a real GPU triangle mesh (Tier 3).\n\nHardware rendering only - automatically falls back to the line renderer on WARP or if the mesh pipeline fails.");
+            this.chkGpuMesh3D.Text = "GPU mesh (exp.)";
+            this.toolTip1.SetToolTip(this.chkGpuMesh3D, "Experimental: renders the 3D panadapter surface and the waterfalls as real GPU meshes (Tier 3).\n\nHardware rendering only - automatically falls back to the D2D renderers on WARP or if any mesh pipeline fails.");
             this.chkGpuMesh3D.UseVisualStyleBackColor = true;
             this.chkGpuMesh3D.CheckedChanged += new System.EventHandler(this.chkGpuMesh3D_CheckedChanged);
             // 
@@ -33918,14 +33919,25 @@
             this.toolTip1.SetToolTip(this.chkDisplayPanFill, "Check to fill the panadapter display line below the data.");
             this.chkDisplayPanFill.CheckedChanged += new System.EventHandler(this.chkDisplayPanFill_CheckedChanged);
             // 
+            // grpDisplay3DPanadapter
+            // 
+            this.grpDisplay3DPanadapter.Controls.Add(this.chkDisplay3DPanadapter);
+            this.grpDisplay3DPanadapter.Controls.Add(this.btn3DSettings);
+            this.grpDisplay3DPanadapter.Location = new System.Drawing.Point(394, 148);
+            this.grpDisplay3DPanadapter.Name = "grpDisplay3DPanadapter";
+            this.grpDisplay3DPanadapter.Size = new System.Drawing.Size(147, 142);
+            this.grpDisplay3DPanadapter.TabIndex = 95;
+            this.grpDisplay3DPanadapter.TabStop = false;
+            this.grpDisplay3DPanadapter.Text = "3D Panadapter";
+            // 
             // chkDisplay3DPanadapter
             // 
             this.chkDisplay3DPanadapter.AutoSize = true;
             this.chkDisplay3DPanadapter.Image = null;
-            this.chkDisplay3DPanadapter.Location = new System.Drawing.Point(394, 150);
+            this.chkDisplay3DPanadapter.Location = new System.Drawing.Point(8, 21);
             this.chkDisplay3DPanadapter.Name = "chkDisplay3DPanadapter";
             this.chkDisplay3DPanadapter.Size = new System.Drawing.Size(65, 17);
-            this.chkDisplay3DPanadapter.TabIndex = 95;
+            this.chkDisplay3DPanadapter.TabIndex = 0;
             this.chkDisplay3DPanadapter.Text = "Enabled";
             this.toolTip1.SetToolTip(this.chkDisplay3DPanadapter, "Enable 3D stacked-trace panadapter with perspective and solid ridges.");
             this.chkDisplay3DPanadapter.CheckedChanged += new System.EventHandler(this.chkDisplay3DPanadapter_CheckedChanged);
@@ -33933,10 +33945,10 @@
             // btn3DSettings
             // 
             this.btn3DSettings.Image = null;
-            this.btn3DSettings.Location = new System.Drawing.Point(394, 172);
+            this.btn3DSettings.Location = new System.Drawing.Point(6, 44);
             this.btn3DSettings.Name = "btn3DSettings";
-            this.btn3DSettings.Size = new System.Drawing.Size(146, 23);
-            this.btn3DSettings.TabIndex = 96;
+            this.btn3DSettings.Size = new System.Drawing.Size(135, 23);
+            this.btn3DSettings.TabIndex = 1;
             this.btn3DSettings.Text = "3D Settings...";
             this.toolTip1.SetToolTip(this.btn3DSettings, "Open the 3D panadapter settings window.");
             this.btn3DSettings.Click += new System.EventHandler(this.btn3DSettings_Click);
@@ -71801,7 +71813,10 @@
             this.tpDisplay.ResumeLayout(false);
             this.tcDisplay.ResumeLayout(false);
             this.tpDisplayGeneral.ResumeLayout(false);
+            this.grpDisplay3DPanadapter.ResumeLayout(false);
+            this.grpDisplay3DPanadapter.PerformLayout();
             this.grpSpectralWarningLeds.ResumeLayout(false);
+            this.grpSpectralWarningLeds.PerformLayout();
             this.groupBoxTS13.ResumeLayout(false);
             this.groupBoxTS13.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.udPeakBlobDropDBMs)).EndInit();
@@ -75453,6 +75468,7 @@
         private ButtonTS btnDeleteColourGripper;
         private ButtonTS btnClearColourGrippers;
         private CheckBoxTS chkPanadpatorGradient;
+        private GroupBoxTS grpDisplay3DPanadapter;
         private GroupBoxTS grpSpectralWarningLeds;
         private CheckBoxTS chkSpecWarningLEDGetPixels;
         private CheckBoxTS chkSpecWarningLEDRenderDelay;

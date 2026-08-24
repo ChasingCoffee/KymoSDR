@@ -1,6 +1,9 @@
 using System;
 using System.Drawing;
 using System.Numerics;
+// Third-party: SharpDX compatibility shim over Vortice.Windows (MIT License, Copyright (c) Amer Koleci and
+// Contributors). Full license text ships with the app (Licenses folder) and lives in the repo under
+// Project Files\lib\licenses\.
 using Vortice;
 using Vortice.Direct2D1;
 using Vortice.DirectWrite;
