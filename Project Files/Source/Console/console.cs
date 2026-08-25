@@ -28335,6 +28335,115 @@ namespace Thetis
 
         #endregion
 
+        #region update check
+        // MW0LGE_22x roadmap #3: quiet startup query against the GitHub releases API. If a newer
+        // release exists, a status-bar label appears that opens the release page when clicked.
+        // Silent on any failure (offline, rate limit) so it never bothers the user.
+
+        private const string c_UpdateCheckApiUrl = "https://api.github.com/repos/nubbyless/SDR-VST3/releases/latest";
+        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel_Update;
+
+        private void initUpdateCheck()
+        {
+            toolStripStatusLabel_Update = new System.Windows.Forms.ToolStripStatusLabel();
+            toolStripStatusLabel_Update.Name = "toolStripStatusLabel_Update";
+            toolStripStatusLabel_Update.AutoSize = true;
+            toolStripStatusLabel_Update.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold); // well visible
+            toolStripStatusLabel_Update.Margin = new System.Windows.Forms.Padding(18, 0, 0, 0); // a few spaces right of the GPU meter
+            toolStripStatusLabel_Update.ForeColor = System.Drawing.Color.LimeGreen;
+            toolStripStatusLabel_Update.Text = "";
+            toolStripStatusLabel_Update.Visible = false;
+            toolStripStatusLabel_Update.Click += (s, e) =>
+            {
+                try
+                {
+                    string url = toolStripStatusLabel_Update.Tag as string;
+                    if (!string.IsNullOrEmpty(url))
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch { }
+            };
+            // seat it a few spaces right of the GPU meter
+            int insertAt = statusStripMain.Items.IndexOf(toolStripStatusLabel_GPU);
+            statusStripMain.Items.Insert(insertAt < 0 ? statusStripMain.Items.Count : insertAt + 1, toolStripStatusLabel_Update);
+
+            checkForUpdateAsync();
+        }
+
+        private async void checkForUpdateAsync()
+        {
+            try
+            {
+                await Task.Delay(5000).ConfigureAwait(true); // let startup + network settle before querying
+
+                string tag = null;
+                string htmlUrl = null;
+                using (System.Net.Http.HttpClient hc = new System.Net.Http.HttpClient())
+                {
+                    hc.Timeout = TimeSpan.FromSeconds(10);
+                    hc.DefaultRequestHeaders.UserAgent.ParseAdd("SDR-VST3-Console"); // GitHub API rejects requests without a UA
+                    hc.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+                    string json = await hc.GetStringAsync(c_UpdateCheckApiUrl).ConfigureAwait(true);
+
+                    Newtonsoft.Json.Linq.JObject o = Newtonsoft.Json.Linq.JObject.Parse(json);
+                    tag = (string)o["tag_name"];
+                    htmlUrl = (string)o["html_url"];
+                }
+
+                if (IsDisposed || Disposing || string.IsNullOrEmpty(tag)) return;
+
+                Version latest = ParseLooseVersion(tag);
+                Version current = ParseLooseVersion(Application.ProductVersion);
+                if (latest != null && current != null && !string.IsNullOrEmpty(htmlUrl))
+                {
+                    if (latest > current)
+                    {
+                        toolStripStatusLabel_Update.Text = "Update available : " + tag;
+                        toolStripStatusLabel_Update.ForeColor = System.Drawing.Color.Red;
+                    }
+                    else
+                    {
+                        toolStripStatusLabel_Update.Text = "Up to date : " + tag;
+                        toolStripStatusLabel_Update.ForeColor = System.Drawing.Color.LimeGreen;
+                    }
+                    toolStripStatusLabel_Update.ToolTipText = "Click to open " + htmlUrl;
+                    toolStripStatusLabel_Update.Tag = htmlUrl;
+                    toolStripStatusLabel_Update.Visible = true;
+                }
+            }
+            catch
+            {
+                // offline / rate limited / shutdown race - stay silent by design
+            }
+        }
+
+        /// <summary>Parses a loose version like "v4.6", "4.6.0.0" or "v4.6.0.1-beta2"; returns null when no digits found.</summary>
+        private static Version ParseLooseVersion(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return null;
+
+            int start = 0;
+            while (start < s.Length && !char.IsDigit(s[start])) start++;
+            if (start >= s.Length) return null;
+
+            int end = start;
+            while (end < s.Length && (char.IsDigit(s[end]) || s[end] == '.')) end++;
+
+            string[] parts = s.Substring(start, end - start).Split('.');
+            int a = 0, b = 0, c = 0, d = 0;
+            try
+            {
+                if (parts.Length > 0) a = int.Parse(parts[0]);
+                if (parts.Length > 1) b = int.Parse(parts[1]);
+                if (parts.Length > 2) c = int.Parse(parts[2]);
+                if (parts.Length > 3) d = int.Parse(parts[3]);
+            }
+            catch { return null; }
+            return new Version(a, b, c, d);
+        }
+
+        #endregion
+
         private void Console_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             if (_is_closing_now)
@@ -45367,6 +45476,9 @@ namespace Thetis
 
             // GPU% indicator - small label under the Power/RX2 button strip
             initGpuUsageMeter();
+
+            // update check - quiet GitHub releases query, status-bar label only when a newer release exists
+            initUpdateCheck();
 
             // set the multifunction setting to the status bar
             DataTable multitable = AndromedaSet.Tables["Multifunction Settings"];

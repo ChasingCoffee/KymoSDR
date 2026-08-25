@@ -948,7 +948,7 @@ Deliberately NOT started; candidate list agreed with user, priority order within
 
 1. Runtime log toggles - DONE 2026-08-24: Setup -> Options-3 -> Diagnostics -> "Log GPU mesh events" checkbox drives Common.MeshDiagLogEnabled at runtime (common.cs); sink writes into ErrorLog.txt, each toggle records an ENABLED/disabled marker line; state persists via SaveForm/RestoreForm and is re-applied on startup (setup.cs chkMeshDiagLog_CheckedChanged).
 2. Crash safety net - global unhandled-exception handler writing timestamped report/minidump to %APPDATA%\OpenHPSDR\SDR-VST3-x64\ and offering to open the folder.
-3. Check-for-updates - query GitHub releases API (nubbyless/SDR-VST3) on startup, offer download.
+3. Check-for-updates - DONE 2026-08-24: console.cs "update check" region; ~5s after Console_Shown an async GET hits api.github.com/repos/nubbyless/SDR-VST3/releases/latest (10s timeout, UA header required by GitHub, silent on any failure); tag vs Application.ProductVersion compared via loose 4-part version parser (handles v-prefix and suffixes). Status-bar label seats right of the GPU meter, bold 11pt, LimeGreen "Up to date : vX" / Red "Update available : vX"; click opens the release html_url in the browser.
 4. GPU paths to default - once 3D/2D mesh + waterfall ring proven stable in the field, flip hardware path to default; keep D2D fallback as automatic recovery only (GPU fallback rule 1 stays).
 5. GPU spectrum overlays - peak-hold/annotations/markers drawn through the existing D3D11 pipeline (cheap now that mesh passes exist).
 6. Code health splits - MeterManager.cs ~45k lines and display.cs ~14k lines into focused partials/modules; retire DXVorticeCompat shim when confident nothing needs the SharpDX surface.
