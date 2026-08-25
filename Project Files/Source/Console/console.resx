@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -973,7 +973,7 @@
     <value>Off</value>
   </data>
   <data name="ptbDisplayPan.Location" type="System.Drawing.Point, System.Drawing">
-    <value>41, 271</value>
+    <value>97, 271</value>
   </data>
   <data name="ptbDisplayPan.Padding" type="System.Windows.Forms.Padding, System.Windows.Forms">
     <value>2, 2, 2, 2</value>
@@ -7016,7 +7016,7 @@ CTRL + Right Click on any Band Button to add Band Stack.</value>
     <value>129</value>
   </data>
   <data name="btnFMMemoryUp.Text" xml:space="preserve">
-    <value>▲</value>
+    <value>â–²</value>
   </data>
   <data name="btnFMMemoryUp.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
     <value>TopCenter</value>
@@ -7058,7 +7058,7 @@ CTRL + Right Click on any Band Button to add Band Stack.</value>
     <value>130</value>
   </data>
   <data name="btnFMMemoryDown.Text" xml:space="preserve">
-    <value>▼</value>
+    <value>â–¼</value>
   </data>
   <data name="btnFMMemoryDown.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
     <value>TopCenter</value>
@@ -7148,7 +7148,7 @@ CTRL + Right Click on any Band Button to add Band Stack.</value>
     <value>136</value>
   </data>
   <data name="chkFMTXLow.Text" xml:space="preserve">
-    <value>—</value>
+    <value>â€”</value>
   </data>
   <data name="chkFMTXLow.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
     <value>TopCenter</value>
@@ -10778,13 +10778,13 @@ Ctrl + Left Click on any Band Button adds to Stack</value>
     <value>296, 271</value>
   </data>
   <data name="lblDisplayZoom.Size" type="System.Drawing.Size, System.Drawing">
-    <value>40, 24</value>
+    <value>84, 24</value>
   </data>
   <data name="lblDisplayZoom.TabIndex" type="System.Int32, mscorlib">
     <value>57</value>
   </data>
   <data name="lblDisplayZoom.Text" xml:space="preserve">
-    <value>Zoom:</value>
+    <value>RX1 Zoom:</value>
   </data>
   <data name="lblDisplayZoom.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
     <value>MiddleLeft</value>
@@ -10817,16 +10817,283 @@ Ctrl + Left Click on any Band Button adds to Stack</value>
     <value>9, 271</value>
   </data>
   <data name="lblDisplayPan.Size" type="System.Drawing.Size, System.Drawing">
-    <value>32, 24</value>
+    <value>84, 24</value>
   </data>
   <data name="lblDisplayPan.TabIndex" type="System.Int32, mscorlib">
     <value>53</value>
   </data>
   <data name="lblDisplayPan.Text" xml:space="preserve">
-    <value>Pan:</value>
+    <value>RX1 Pan:</value>
   </data>
   <data name="lblDisplayPan.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
     <value>MiddleLeft</value>
+  </data>
+  <data name="lblRX2DisplayPan.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Left</value>
+  </data>
+  <data name="lblRX2DisplayPan.ImeMode" type="System.Windows.Forms.ImeMode, System.Windows.Forms">
+    <value>Off</value>
+  </data>
+  <data name="lblRX2DisplayPan.Location" type="System.Drawing.Point, System.Drawing">
+    <value>280, 271</value>
+  </data>
+  <data name="lblRX2DisplayPan.Size" type="System.Drawing.Size, System.Drawing">
+    <value>84, 24</value>
+  </data>
+  <data name="lblRX2DisplayPan.TabIndex" type="System.Int32, mscorlib">
+    <value>210</value>
+  </data>
+  <data name="lblRX2DisplayPan.Text" xml:space="preserve">
+    <value>RX2 Pan:</value>
+  </data>
+  <data name="lblRX2DisplayPan.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
+    <value>MiddleLeft</value>
+  </data>
+  <data name="ptbRX2DisplayPan.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Left</value>
+  </data>
+  <data name="ptbRX2DisplayPan.BackgroundImageLayout" type="System.Windows.Forms.ImageLayout, System.Windows.Forms">
+    <value>Stretch</value>
+  </data>
+  <data name="ptbRX2DisplayPan.Location" type="System.Drawing.Point, System.Drawing">
+    <value>345, 271</value>
+  </data>
+  <data name="ptbRX2DisplayPan.Padding" type="System.Windows.Forms.Padding, System.Windows.Forms">
+    <value>2, 2, 2, 2</value>
+  </data>
+  <data name="ptbRX2DisplayPan.Size" type="System.Drawing.Size, System.Drawing">
+    <value>200, 24</value>
+  </data>
+  <data name="ptbRX2DisplayPan.TabIndex" type="System.Int32, mscorlib">
+    <value>211</value>
+  </data>
+  <data name="ptbRX2DisplayPan.ToolTip" xml:space="preserve">
+    <value>RX2 display pan.</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Left</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.FlatStyle" type="System.Windows.Forms.FlatStyle, System.Windows.Forms">
+    <value>Flat</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.Font" type="System.Drawing.Font, System.Drawing">
+    <value>Microsoft Sans Serif, 8.25pt, style=Bold</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.ImeMode" type="System.Windows.Forms.ImeMode, System.Windows.Forms">
+    <value>Off</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.Location" type="System.Drawing.Point, System.Drawing">
+    <value>550, 271</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.Size" type="System.Drawing.Size, System.Drawing">
+    <value>50, 24</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.TabIndex" type="System.Int32, mscorlib">
+    <value>219</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.Text" xml:space="preserve">
+    <value>Center</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
+    <value>TopCenter</value>
+  </data>
+  <data name="btnRX2DisplayPanCenter.ToolTip" xml:space="preserve">
+    <value>Center the RX2 Pan control</value>
+  </data>
+  <data name="ptbRX2DisplayZoom.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Right</value>
+  </data>
+  <data name="ptbRX2DisplayZoom.BackgroundImageLayout" type="System.Windows.Forms.ImageLayout, System.Windows.Forms">
+    <value>Stretch</value>
+  </data>
+  <data name="ptbRX2DisplayZoom.Location" type="System.Drawing.Point, System.Drawing">
+    <value>335, 297</value>
+  </data>
+  <data name="ptbRX2DisplayZoom.Padding" type="System.Windows.Forms.Padding, System.Windows.Forms">
+    <value>2, 2, 2, 2</value>
+  </data>
+  <data name="ptbRX2DisplayZoom.Size" type="System.Drawing.Size, System.Drawing">
+    <value>160, 24</value>
+  </data>
+  <data name="ptbRX2DisplayZoom.TabIndex" type="System.Int32, mscorlib">
+    <value>212</value>
+  </data>
+  <data name="ptbRX2DisplayZoom.ToolTip" xml:space="preserve">
+    <value>RX2 display zoom.</value>
+  </data>
+  <data name="lblRX2DisplayZoom.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Right</value>
+  </data>
+  <data name="lblRX2DisplayZoom.ImeMode" type="System.Windows.Forms.ImeMode, System.Windows.Forms">
+    <value>Off</value>
+  </data>
+  <data name="lblRX2DisplayZoom.Location" type="System.Drawing.Point, System.Drawing">
+    <value>270, 297</value>
+  </data>
+  <data name="lblRX2DisplayZoom.Size" type="System.Drawing.Size, System.Drawing">
+    <value>84, 24</value>
+  </data>
+  <data name="lblRX2DisplayZoom.TabIndex" type="System.Int32, mscorlib">
+    <value>213</value>
+  </data>
+  <data name="lblRX2DisplayZoom.Text" xml:space="preserve">
+    <value>RX2 Zoom:</value>
+  </data>
+  <data name="lblRX2DisplayZoom.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
+    <value>MiddleLeft</value>
+  </data>
+  <data name="radRX2DisplayZoom05.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Right</value>
+  </data>
+  <data name="radRX2DisplayZoom05.Appearance" type="System.Windows.Forms.Appearance, System.Windows.Forms">
+    <value>Button</value>
+  </data>
+  <data name="radRX2DisplayZoom05.FlatStyle" type="System.Windows.Forms.FlatStyle, System.Windows.Forms">
+    <value>Flat</value>
+  </data>
+  <data name="radRX2DisplayZoom05.Font" type="System.Drawing.Font, System.Drawing">
+    <value>Microsoft Sans Serif, 8.25pt, style=Bold</value>
+  </data>
+  <data name="radRX2DisplayZoom05.ImeMode" type="System.Windows.Forms.ImeMode, System.Windows.Forms">
+    <value>Off</value>
+  </data>
+  <data name="radRX2DisplayZoom05.Location" type="System.Drawing.Point, System.Drawing">
+    <value>540, 297</value>
+  </data>
+  <data name="radRX2DisplayZoom05.Size" type="System.Drawing.Size, System.Drawing">
+    <value>40, 24</value>
+  </data>
+  <data name="radRX2DisplayZoom05.TabIndex" type="System.Int32, mscorlib">
+    <value>214</value>
+  </data>
+  <data name="radRX2DisplayZoom05.Text" xml:space="preserve">
+    <value>0.5x</value>
+  </data>
+  <data name="radRX2DisplayZoom05.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
+    <value>TopCenter</value>
+  </data>
+  <data name="radRX2DisplayZoom05.ToolTip" xml:space="preserve">
+    <value>RX2 zoom to 0.5x</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Right</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.Appearance" type="System.Windows.Forms.Appearance, System.Windows.Forms">
+    <value>Button</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.FlatStyle" type="System.Windows.Forms.FlatStyle, System.Windows.Forms">
+    <value>Flat</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.Font" type="System.Drawing.Font, System.Drawing">
+    <value>Microsoft Sans Serif, 8.25pt, style=Bold</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.ImeMode" type="System.Windows.Forms.ImeMode, System.Windows.Forms">
+    <value>Off</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.Location" type="System.Drawing.Point, System.Drawing">
+    <value>581, 297</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.Size" type="System.Drawing.Size, System.Drawing">
+    <value>40, 24</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.TabIndex" type="System.Int32, mscorlib">
+    <value>215</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.Text" xml:space="preserve">
+    <value>1x</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
+    <value>TopCenter</value>
+  </data>
+  <data name="radRX2DisplayZoom1x.ToolTip" xml:space="preserve">
+    <value>RX2 zoom to 1x</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Right</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.Appearance" type="System.Windows.Forms.Appearance, System.Windows.Forms">
+    <value>Button</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.FlatStyle" type="System.Windows.Forms.FlatStyle, System.Windows.Forms">
+    <value>Flat</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.Font" type="System.Drawing.Font, System.Drawing">
+    <value>Microsoft Sans Serif, 8.25pt, style=Bold</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.ImeMode" type="System.Windows.Forms.ImeMode, System.Windows.Forms">
+    <value>Off</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.Location" type="System.Drawing.Point, System.Drawing">
+    <value>622, 297</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.Size" type="System.Drawing.Size, System.Drawing">
+    <value>40, 24</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.TabIndex" type="System.Int32, mscorlib">
+    <value>216</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.Text" xml:space="preserve">
+    <value>2x</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
+    <value>TopCenter</value>
+  </data>
+  <data name="radRX2DisplayZoom2x.ToolTip" xml:space="preserve">
+    <value>RX2 zoom to 2x</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Right</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.Appearance" type="System.Windows.Forms.Appearance, System.Windows.Forms">
+    <value>Button</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.FlatStyle" type="System.Windows.Forms.FlatStyle, System.Windows.Forms">
+    <value>Flat</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.Font" type="System.Drawing.Font, System.Drawing">
+    <value>Microsoft Sans Serif, 8.25pt, style=Bold</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.ImeMode" type="System.Windows.Forms.ImeMode, System.Windows.Forms">
+    <value>Off</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.Location" type="System.Drawing.Point, System.Drawing">
+    <value>663, 297</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.Size" type="System.Drawing.Size, System.Drawing">
+    <value>40, 24</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.TabIndex" type="System.Int32, mscorlib">
+    <value>217</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.Text" xml:space="preserve">
+    <value>4x</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.TextAlign" type="System.Drawing.ContentAlignment, System.Drawing">
+    <value>TopCenter</value>
+  </data>
+  <data name="radRX2DisplayZoom4x.ToolTip" xml:space="preserve">
+    <value>RX2 zoom to 4x</value>
+  </data>
+  <data name="btnRX2DisplayZTB.Anchor" type="System.Windows.Forms.AnchorStyles, System.Windows.Forms">
+    <value>Bottom, Right</value>
+  </data>
+  <data name="btnRX2DisplayZTB.ImeMode" type="System.Windows.Forms.ImeMode, System.Windows.Forms">
+    <value>Off</value>
+  </data>
+  <data name="btnRX2DisplayZTB.Location" type="System.Drawing.Point, System.Drawing">
+    <value>498, 297</value>
+  </data>
+  <data name="btnRX2DisplayZTB.Size" type="System.Drawing.Size, System.Drawing">
+    <value>40, 24</value>
+  </data>
+  <data name="btnRX2DisplayZTB.TabIndex" type="System.Int32, mscorlib">
+    <value>218</value>
+  </data>
+  <data name="btnRX2DisplayZTB.Text" xml:space="preserve">
+    <value>ZTB</value>
+  </data>
+  <data name="btnRX2DisplayZTB.ToolTip" xml:space="preserve">
+    <value>RX2 Zoom to band. Left click recall, right click store Zoom/Pan/Center per band (Recall/Store mode).</value>
   </data>
   <data name="&gt;&gt;lblDisplayPan.Name" xml:space="preserve">
     <value>lblDisplayPan</value>

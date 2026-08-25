@@ -808,7 +808,11 @@ namespace Thetis
                 switch (ctrl.Name)
                 {
                     case "btnDisplayZTB":
+                    case "btnRX2DisplayZTB": // MW0LGE_22x rx2 twin uses the same donor chain
                         donors = new string[] { "btnDisplayZoom05", "btnDisplayPanCenter", "btnDisplayZoom1x", "btnDisplayZoom2x", "btnDisplayZoom4x" };
+                        break;
+                    case "btnRX2DisplayPanCenter": // MW0LGE_22x rx2 twin of the pan centre button
+                        donors = new string[] { "btnDisplayPanCenter" };
                         break;
                     default:
                         donors = new string[0];
@@ -1557,12 +1561,19 @@ namespace Thetis
 
         private static void SetupRadioButtonImages(RadioButton ctrl)
         {
+            // MW0LGE_22x rx2 display preset buttons reuse the rx1 art sets
+            string artName = ctrl.Name;
+            {
+                string donor = ResolveArtDonor(artName);
+                if (donor != null) artName = donor;
+            }
+
             string skey = "";
             for (int i = 0; i < 8; i++)
             {
-                string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + artName + "-" + i.ToString() + pic_file_ext;
                 if (!File.Exists(spath))
-                    spath = path + "\\" + "Console" + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                    spath = path + "\\" + "Console" + "\\" + artName + "-" + i.ToString() + pic_file_ext;
                 if (File.Exists(spath))
                 {
                     Image img = loadImage(spath); // load to cache it
@@ -1586,11 +1597,11 @@ namespace Thetis
                 for (int i = 0; i < 8; i++)
                 {
                     string sstate = ((ImageState)i).ToString();
-                    string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                    string spath = path + "\\" + ctrl.TopLevelControl.Name + "\\" + artName + "-" + i.ToString() + pic_file_ext;
                     Image img = getImageFromFilePath(spath);
                     if (img == null)
                     {
-                        spath = path + "\\" + "Console" + "\\" + ctrl.Name + "-" + i.ToString() + pic_file_ext;
+                        spath = path + "\\" + "Console" + "\\" + artName + "-" + i.ToString() + pic_file_ext;
                         img = getImageFromFilePath(spath);
                     }
                     if (img != null && !_shared_image_lists[skey].Images.ContainsKey(sstate))
@@ -1780,13 +1791,22 @@ namespace Thetis
             // load images
            // string s = path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-";
 
-            if (File.Exists(path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + "back" + pic_file_ext))
+            // MW0LGE_22x the rx2 display sliders have no art of their own - fall back to the rx1 slider art
+            string artName = ctrl.Name;
+            if (!File.Exists(path + "\\" + ctrl.TopLevelControl.Name + "\\" + artName + "-" + "back" + pic_file_ext)
+                && !File.Exists(path + "\\" + "Console" + "\\" + artName + "-" + "back" + pic_file_ext))
             {
-                ctrl.BackgroundImage = loadImage(path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + "back" + pic_file_ext);
+                string donor = ResolveArtDonor(artName);
+                if (donor != null) artName = donor;
             }
-            else if (File.Exists(path + "\\" + "Console" + "\\" + ctrl.Name + "-" + "back" + pic_file_ext))
+
+            if (File.Exists(path + "\\" + ctrl.TopLevelControl.Name + "\\" + artName + "-" + "back" + pic_file_ext))
             {
-                ctrl.BackgroundImage = loadImage(path + "\\" + "Console" + "\\" + ctrl.Name + "-" + "back" + pic_file_ext);
+                ctrl.BackgroundImage = loadImage(path + "\\" + ctrl.TopLevelControl.Name + "\\" + artName + "-" + "back" + pic_file_ext);
+            }
+            else if (File.Exists(path + "\\" + "Console" + "\\" + artName + "-" + "back" + pic_file_ext))
+            {
+                ctrl.BackgroundImage = loadImage(path + "\\" + "Console" + "\\" + artName + "-" + "back" + pic_file_ext);
             }
             else ctrl.BackgroundImage = null;
 
@@ -1794,19 +1814,34 @@ namespace Thetis
             //                 ctrl.BackgroundImage = /*Image.FromFile*/loadImage(s + "back" + pic_file_ext);
             //             else ctrl.BackgroundImage = null;
 
-            if (File.Exists(path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + "head" + pic_file_ext))
+            if (File.Exists(path + "\\" + ctrl.TopLevelControl.Name + "\\" + artName + "-" + "head" + pic_file_ext))
             {
-                ctrl.HeadImage = loadImage(path + "\\" + ctrl.TopLevelControl.Name + "\\" + ctrl.Name + "-" + "head" + pic_file_ext);
+                ctrl.HeadImage = loadImage(path + "\\" + ctrl.TopLevelControl.Name + "\\" + artName + "-" + "head" + pic_file_ext);
             }
-            else if (File.Exists(path + "\\" + "Console" + "\\" + ctrl.Name + "-" + "head" + pic_file_ext))
+            else if (File.Exists(path + "\\" + "Console" + "\\" + artName + "-" + "head" + pic_file_ext))
             {             
-                ctrl.HeadImage = loadImage(path + "\\" + "Console" + "\\" + ctrl.Name + "-" + "head" + pic_file_ext);
+                ctrl.HeadImage = loadImage(path + "\\" + "Console" + "\\" + artName + "-" + "head" + pic_file_ext);
             }
             else ctrl.HeadImage = null;
 
            // ctrl.HeadImage = File.Exists(s + "head" + pic_file_ext) ? /*Image.FromFile*/loadImage(s + "head" + pic_file_ext) : null;
 
             ctrl.Invalidate();
+        }
+
+        // MW0LGE_22x maps rx2 display controls onto the rx1 art sets so every skin works unmodified
+        private static string ResolveArtDonor(string name)
+        {
+            switch (name)
+            {
+                case "ptbRX2DisplayZoom": return "ptbDisplayZoom";
+                case "ptbRX2DisplayPan": return "ptbDisplayPan";
+                case "radRX2DisplayZoom05": return "radDisplayZoom05";
+                case "radRX2DisplayZoom1x": return "radDisplayZoom1x";
+                case "radRX2DisplayZoom2x": return "radDisplayZoom2x";
+                case "radRX2DisplayZoom4x": return "radDisplayZoom4x";
+                default: return null;
+            }
         }
 
         #endregion

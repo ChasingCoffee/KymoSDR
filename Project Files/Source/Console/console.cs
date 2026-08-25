@@ -2156,6 +2156,8 @@ namespace Thetis
             initializing = true;
 
             ptbDisplayZoom_Scroll(this, EventArgs.Empty);
+            ptbRX2DisplayZoom_Scroll(this, EventArgs.Empty); // MW0LGE_22x
+            ptbRX2DisplayPan_Scroll(this, EventArgs.Empty); // MW0LGE_22x
             ptbRX0Gain_Scroll(this, EventArgs.Empty);
             ptbRX1Gain_Scroll(this, EventArgs.Empty);
             ptbPanMainRX_Scroll(this, EventArgs.Empty);
@@ -19591,6 +19593,193 @@ namespace Thetis
         {
             Zoom = ptbDisplayZoom.Value = ptbDisplayZoom.Minimum;
         }
+
+        // MW0LGE_22x per-rx zoom/pan - RX2 pane has its own sliders
+        public int Zoom2
+        {
+            get { return ptbRX2DisplayZoom.Value; }
+            set
+            {
+                ptbRX2DisplayZoom.Value = value;
+                ptbRX2DisplayZoom_Scroll(this, EventArgs.Empty);
+
+                //max bin detect
+                if (_display_max_bin_enabled[0]) setupDisplayMaxBinDetect(1, false, true);
+                if (_display_max_bin_enabled[1]) setupDisplayMaxBinDetect(2, false, true);
+            }
+        }
+
+        public int Pan2
+        {
+            get { return ptbRX2DisplayPan.Value; }
+            set
+            {
+                ptbRX2DisplayPan.Value = value;
+                ptbRX2DisplayPan_Scroll(this, EventArgs.Empty);
+
+                //max bin detect
+                if (_display_max_bin_enabled[0]) setupDisplayMaxBinDetect(1, false, true);
+                if (_display_max_bin_enabled[1]) setupDisplayMaxBinDetect(2, false, true);
+            }
+        }
+
+        public void PanCentreRX2()
+        {
+            double spur_tune_width = 200e6 / Math.Pow(2, 16);
+
+            int width = Display.RX2DisplayHigh - Display.RX2DisplayLow;
+
+            int max_pan_width = (int)(sample_rate_rx2 - 2 * spur_tune_width - width);
+            if (max_pan_width == 0)
+            {
+                ptbRX2DisplayPan.Value = (ptbRX2DisplayPan.Maximum - ptbRX2DisplayPan.Minimum) / 2;
+                ptbRX2DisplayPan_Scroll(btnDisplayPanCenter, EventArgs.Empty);
+                return;
+            }
+
+            int low = -width / 2; // target -- if width is centered at 0, low will be half the width below 0
+
+            int abs_low = (int)(-(double)sample_rate_rx2 * 0.5 + spur_tune_width);
+
+            int offset = low - abs_low;
+
+            int new_val = (int)((double)offset * (double)ptbRX2DisplayPan.Maximum / (double)max_pan_width);
+            Pan2 = Math.Min(Math.Max(ptbRX2DisplayPan.Minimum, new_val), ptbRX2DisplayPan.Maximum);
+        }
+
+        private void btnDisplayPanCenter_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Middle && rx2_enabled) PanCentreRX2(); // middle click centres the RX2 pane (ke9ns style)
+        }
+
+        private void btnRX2DisplayPanCenter_Click(object sender, EventArgs e)
+        {
+            PanCentreRX2();
+        }
+
+        // MW0LGE_22x legacy expanded layout: exact duplicates of the rx1 groups.
+        // Left side: the rx2 pan trio [label][slider][centre button] - identical construction to the
+        // rx1 pan trio - seated directly after it. Right side: the rx2 zoom group
+        // [label][slider][ztb][presets], an exact translated copy of the rx1 zoom group, floating
+        // just before its left edge. Sliders keep their normal (basis) sizes; nothing stretches.
+        // Both groups autohide independently when the available room runs out - the pan trio is
+        // prioritised, and neither group ever encroaches on the rx1 controls.
+        // Requires ExpandDisplay / ResizeConsole to have positioned the rx1 anchors.
+        private void PositionRX2DisplayClusterLegacy()
+        {
+            int yRow = tb_display_zoom_basis.Y + v_delta;
+            bool rx2vis = rx2_enabled;
+
+            const int GAP_PAN_GROUPS = 12;      // rx1 pan trio -> rx2 pan trio
+            const int GAP_BEFORE_RX1_ZOOM = 6;  // rx2 zoom group -> rx1 zoom group
+            const int GAP_MIN = 8;              // minimum breathing room between groups
+
+            if (!rx2vis)
+            {
+                lblRX2DisplayPan.Hide();
+                ptbRX2DisplayPan.Hide();
+                btnRX2DisplayPanCenter.Hide();
+                lblRX2DisplayZoom.Hide();
+                ptbRX2DisplayZoom.Hide();
+                radRX2DisplayZoom05.Hide();
+                radRX2DisplayZoom1x.Hide();
+                radRX2DisplayZoom2x.Hide();
+                radRX2DisplayZoom4x.Hide();
+                btnRX2DisplayZTB.Hide();
+                return;
+            }
+
+            //
+            // measure the TRUE extents of the rx1 zoom cluster first - the preset radios sit to
+            // the RIGHT of the ztb button, not inside [label..ztb]
+            //
+            int xMin = Math.Min(lblDisplayZoom.Left,
+                      Math.Min(ptbDisplayZoom.Left,
+                      Math.Min(btnDisplayZTB.Left,
+                      Math.Min(radDisplayZoom05.Left,
+                      Math.Min(radDisplayZoom1x.Left,
+                      Math.Min(radDisplayZoom2x.Left, radDisplayZoom4x.Left))))));
+            int xMax = Math.Max(lblDisplayZoom.Right,
+                      Math.Max(ptbDisplayZoom.Right,
+                      Math.Max(btnDisplayZTB.Right,
+                      Math.Max(radDisplayZoom05.Right,
+                      Math.Max(radDisplayZoom1x.Right,
+                      Math.Max(radDisplayZoom2x.Right, radDisplayZoom4x.Right))))));
+
+            //
+            // left: rx2 pan trio, a copy of [lblDisplayPan][ptbDisplayPan][btnDisplayPanCenter].
+            // Must fully clear the rx1 zoom cluster or it hides entirely (pan side is prioritised).
+            //
+            int trioStart = btnDisplayPanCenter.Right + GAP_PAN_GROUPS;
+            int trioSpan = btnDisplayPanCenter.Right - lblDisplayPan.Left; // label -> centre button
+            int panShift = trioStart - lblDisplayPan.Left;
+
+            bool bPanFits = trioStart + trioSpan <= xMin - GAP_MIN;
+
+            // left edge the translated zoom group would land at; it must clear whatever sits on its left
+            int zoomGroupLeft = xMin - GAP_BEFORE_RX1_ZOOM - (xMax - xMin);
+            int zoomClearLeft = bPanFits ? btnRX2DisplayPanCenter.Right : btnDisplayPanCenter.Right;
+            bool bZoomFits = zoomGroupLeft >= zoomClearLeft + GAP_MIN;
+
+            lblRX2DisplayPan.Visible = bPanFits;
+            ptbRX2DisplayPan.Visible = bPanFits;
+            btnRX2DisplayPanCenter.Visible = bPanFits;
+
+            if (bPanFits)
+            {
+                lblRX2DisplayPan.Location = new Point(lblDisplayPan.Left + panShift, yRow);
+                ptbRX2DisplayPan.Location = new Point(ptbDisplayPan.Left + panShift, yRow);
+                ptbRX2DisplayPan.Size = tb_displaypan_size_basis;
+                btnRX2DisplayPanCenter.Location = new Point(btnDisplayPanCenter.Left + panShift, yRow);
+
+                lblRX2DisplayPan.Show();
+                ptbRX2DisplayPan.Show();
+                btnRX2DisplayPanCenter.Show();
+            }
+
+            //
+            // right: rx2 zoom group as an exact translated copy of the rx1 zoom group, ending
+            // just before it (floating with it on resize); hides when the room is gone
+            //
+            int zoomShift = xMin - GAP_BEFORE_RX1_ZOOM - xMax;
+
+            lblRX2DisplayZoom.Visible = bZoomFits;
+            ptbRX2DisplayZoom.Visible = bZoomFits;
+            radRX2DisplayZoom05.Visible = bZoomFits;
+            radRX2DisplayZoom1x.Visible = bZoomFits;
+            radRX2DisplayZoom2x.Visible = bZoomFits;
+            radRX2DisplayZoom4x.Visible = bZoomFits;
+            btnRX2DisplayZTB.Visible = bZoomFits;
+
+            if (bZoomFits)
+            {
+                lblRX2DisplayZoom.Location = new Point(lblDisplayZoom.Left + zoomShift, yRow);
+                ptbRX2DisplayZoom.Location = new Point(ptbDisplayZoom.Left + zoomShift, yRow);
+                ptbRX2DisplayZoom.Size = tb_display_zoom_size_basis;
+                radRX2DisplayZoom05.Location = new Point(radDisplayZoom05.Left + zoomShift, yRow);
+                radRX2DisplayZoom1x.Location = new Point(radDisplayZoom1x.Left + zoomShift, yRow);
+                radRX2DisplayZoom2x.Location = new Point(radDisplayZoom2x.Left + zoomShift, yRow);
+                radRX2DisplayZoom4x.Location = new Point(radDisplayZoom4x.Left + zoomShift, yRow);
+                btnRX2DisplayZTB.Location = new Point(btnDisplayZTB.Left + zoomShift, yRow);
+            }
+        }
+
+        private bool m_bRX2ClusterSeeded = false;
+
+        // MW0LGE_22x whenever rx2 is enabled, start the rx2 sliders matched to rx1 so both panes begin
+        // identical and can then diverge freely (ke9ns .304 behaviour). Visibility itself is handled by
+        // RepositionControlsForCollapsedlDisplay / ExpandDisplay.
+        private void UpdateRX2DisplayClusterVisibility()
+        {
+            if (rx2_enabled && !m_bRX2ClusterSeeded)
+            {
+                ptbRX2DisplayZoom.Value = ptbDisplayZoom.Value;
+                ptbRX2DisplayPan.Value = ptbDisplayPan.Value;
+                ptbRX2DisplayZoom_Scroll(this, EventArgs.Empty);
+                ptbRX2DisplayPan_Scroll(this, EventArgs.Empty);
+            }
+            m_bRX2ClusterSeeded = rx2_enabled;
+        }
         private AGCMode m_RX1agcMode = AGCMode.FIRST;
         public AGCMode RX1AGCMode
         {
@@ -33698,14 +33887,22 @@ namespace Thetis
         private void ptbDisplayPan_Scroll(object sender, System.EventArgs e)
         {
             specRX.GetSpecRX(0).PanSlider = (double)ptbDisplayPan.Value / 1000.0;
-            specRX.GetSpecRX(1).PanSlider = (double)ptbDisplayPan.Value / 1000.0;
             specRX.GetSpecRX(cmaster.inid(1, 0)).PanSlider = (double)ptbDisplayPan.Value / 1000.0;
             CalcDisplayFreq();
-            CalcRX2DisplayFreq();
             CalcTXDisplayFreq();
             if (sender.GetType() == typeof(PrettyTrackBar))
             {
                 ptbDisplayPan.Focus();
+            }
+        }
+
+        private void ptbRX2DisplayPan_Scroll(object sender, System.EventArgs e)
+        {
+            specRX.GetSpecRX(1).PanSlider = (double)ptbRX2DisplayPan.Value / 1000.0;
+            CalcRX2DisplayFreq();
+            if (sender.GetType() == typeof(PrettyTrackBar))
+            {
+                ptbRX2DisplayPan.Focus();
             }
         }
 
@@ -33766,7 +33963,8 @@ namespace Thetis
             if ((int)(spanMHz * 1e6) > spec.SampleRate)
             {
                 // can't fit, so max zoom out
-                Zoom = ptbDisplayZoom.Minimum;
+                if (rx == 2) Zoom2 = ptbRX2DisplayZoom.Minimum;
+                else Zoom = ptbDisplayZoom.Minimum;
             }
             else
             {
@@ -33784,9 +33982,16 @@ namespace Thetis
                 zoom /= 9.0;
 
                 m_bIgnoreZoomCentre = true; //[2.10.3.5]MW0LGE used in ptbDisplayZoom_Scroll to ignore the shift key which might be held for RX2
-                PanCentre();
 
-                Zoom = (int)((zoom * 230.0) + 10.0);
+                if (rx == 2)
+                    PanCentreRX2();
+                else
+                    PanCentre();
+
+                if (rx == 2)
+                    Zoom2 = (int)((zoom * 230.0) + 10.0);
+                else
+                    Zoom = (int)((zoom * 230.0) + 10.0);
 
                 m_bIgnoreZoomCentre = false;
 
@@ -33827,7 +34032,6 @@ namespace Thetis
             double dOldZoomFactor = lastZoomFactor;//MW0LGE21d
 
             specRX.GetSpecRX(0).ZoomSlider = ((double)ptbDisplayZoom.Value - 10.0) / 230.0;
-            specRX.GetSpecRX(1).ZoomSlider = ((double)ptbDisplayZoom.Value - 10.0) / 230.0;
             specRX.GetSpecRX(cmaster.inid(1, 0)).ZoomSlider = ((double)ptbDisplayZoom.Value - 10.0) / 230.0;
             double zoom_factor = 1.0 / ((ptbDisplayZoom.Maximum + ptbDisplayZoom.Minimum - ptbDisplayZoom.Value) * 0.01);
 
@@ -33878,11 +34082,6 @@ namespace Thetis
                     CentreFrequency = VFOAFreq;
                     txtVFOAFreq_LostFocus(this, EventArgs.Empty);
                 }
-                if (rx2_enabled && (ClickTuneRX2Display && zoomingIn) && bCentre)  //MW0LGE - we should do rx2 as well !
-                {
-                    CentreRX2Frequency = VFOBFreq;
-                    txtVFOBFreq_LostFocus(this, EventArgs.Empty);
-                }
             }
 
             lastZoomFactor = zoom_factor;
@@ -33894,7 +34093,74 @@ namespace Thetis
 
             if (dOldZoomFactor != zoom_factor) ZoomFactorChangedHandlers?.Invoke(dOldZoomFactor, zoom_factor, ptbDisplayZoom.Value); //MW0LGE_21d
 
-            SetDisplayZoomGeneralSettings(0, dzb);
+            SetDisplayZoomGeneralSettings(1, dzb);
+        }
+
+        private double lastZoomFactorRX2 = 1.0;
+
+        private void ptbRX2DisplayZoom_Scroll(object sender, System.EventArgs e)
+        {
+            double dOldZoomFactor = lastZoomFactorRX2;
+
+            specRX.GetSpecRX(1).ZoomSlider = ((double)ptbRX2DisplayZoom.Value - 10.0) / 230.0;
+            double zoom_factor = 1.0 / ((ptbRX2DisplayZoom.Maximum + ptbRX2DisplayZoom.Minimum - ptbRX2DisplayZoom.Value) * 0.01);
+
+            DisplayZoomButton dzb;
+
+            if (zoom_factor == 0.5)
+            {
+                radRX2DisplayZoom05.Checked = true;
+                dzb = DisplayZoomButton.B05;
+            }
+            else if (zoom_factor == 1.0)
+            {
+                radRX2DisplayZoom1x.Checked = true;
+                dzb = DisplayZoomButton.B1;
+            }
+            else if (zoom_factor == 2.0)
+            {
+                radRX2DisplayZoom2x.Checked = true;
+                dzb = DisplayZoomButton.B2;
+            }
+            else if (zoom_factor == 4.0)
+            {
+                radRX2DisplayZoom4x.Checked = true;
+                dzb = DisplayZoomButton.B4;
+            }
+            else
+            {
+                radRX2DisplayZoom05.Checked = false;
+                radRX2DisplayZoom1x.Checked = false;
+                radRX2DisplayZoom2x.Checked = false;
+                radRX2DisplayZoom4x.Checked = false;
+                dzb = DisplayZoomButton.NONE;
+            }
+
+            CalcRX2DisplayFreq();
+
+            if (initializing) lastZoomFactorRX2 = zoom_factor;
+            bool zoomingIn = (zoom_factor > lastZoomFactorRX2);
+
+            if (!m_bIgnoreZoomCentre && rx2_enabled) //[2.10.3.5]MW0LGE fixes #345
+            {
+                // MW0LGE shift modifier
+                bool bCentre = !m_bZoomShiftModifier || (m_bZoomShiftModifier && ((!Common.ShiftKeyDown && !m_bZoomShiftModifierReverse) || (Common.ShiftKeyDown && m_bZoomShiftModifierReverse)));
+
+                if ((ClickTuneRX2Display && zoomingIn) && bCentre)  // force centering display when zooming in with CTUN on, to keep the vfo within the display
+                {
+                    CentreRX2Frequency = VFOBFreq;
+                    txtVFOBFreq_LostFocus(this, EventArgs.Empty);
+                }
+            }
+
+            lastZoomFactorRX2 = zoom_factor;
+
+            if (sender.GetType() == typeof(PrettyTrackBar))
+            {
+                ptbRX2DisplayZoom.Focus();
+            }
+
+            SetDisplayZoomGeneralSettings(2, dzb);
         }
 
         private void radDisplayZoom05_CheckedChanged(object sender, System.EventArgs e)
@@ -33946,6 +34212,49 @@ namespace Thetis
         {
             PanCentre();
             Zoom = ptbDisplayZoom.Maximum + ptbDisplayZoom.Minimum - (int)(100.0 / 4.0);
+        }
+
+        // MW0LGE_22x RX2 zoom presets - each pane gets its own cluster
+        private void radRX2DisplayZoom05_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (radRX2DisplayZoom05.Checked)
+            {
+                DisplayZoomPreset(0.5, 1);
+            }
+        }
+        private void radRX2DisplayZoom1x_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (radRX2DisplayZoom1x.Checked)
+            {
+                DisplayZoomPreset(1.0, 1);
+            }
+        }
+        private void radRX2DisplayZoom2x_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (radRX2DisplayZoom2x.Checked)
+            {
+                DisplayZoomPreset(2.0, 1);
+            }
+        }
+        private void radRX2DisplayZoom4x_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (radRX2DisplayZoom4x.Checked)
+            {
+                DisplayZoomPreset(4.0, 1);
+            }
+        }
+        private void DisplayZoomPreset(double factor, int rx)
+        {
+            if (rx == 1)
+                PanCentreRX2();
+            else
+                PanCentre();
+
+            PrettyTrackBar tb = rx == 1 ? ptbRX2DisplayZoom : ptbDisplayZoom;
+            if (rx == 1)
+                Zoom2 = tb.Maximum + tb.Minimum - (int)(100.0 / factor);
+            else
+                Zoom = tb.Maximum + tb.Minimum - (int)(100.0 / factor);
         }
         #endregion
 
@@ -37170,6 +37479,8 @@ namespace Thetis
                 lblRX2ModeBigLabel.Hide();
                 panelVFOLabels.Hide();
                 panelAndromedaMisc.Hide();
+
+                PositionRX2DisplayClusterLegacy(); // MW0LGE_22x keep rx2 cluster fitted on resize (expanded view)
             }
 
             setPAProfileLabelPos();  //[2.10.1.0] MW0LGE
@@ -37645,6 +37956,11 @@ namespace Thetis
             setSmallRX2ModeFilterLabels();
 
             setupZTBButton();
+
+            // MW0LGE_22x rx2 display cluster: seed sliders from rx1 on enable, then relayout
+            UpdateRX2DisplayClusterVisibility();
+            if (collapsedDisplay) RepositionControlsForCollapsedlDisplay();
+            else PositionRX2DisplayClusterLegacy();
 
             // need to update anything on the info bar buttons that is relying on rx2
             SetupInfoBarButton(ucInfoBar.ActionTypes.ActivePeaks, Display.SpectralPeakHoldRX1 || (RX2Enabled && Display.SpectralPeakHoldRX2));
@@ -41487,10 +41803,14 @@ namespace Thetis
             ptbDisplayZoom.Size = tb_display_zoom_size_basis;
             lblDisplayZoom.Location = new Point(ptbDisplayZoom.Location.X - lbl_display_zoom_size_basis.Width, lbl_display_zoom_basis.Y + v_delta);
 
-            lblDisplayPan.Location = new Point(lbl_displaypan_basis.X, lbl_displaypan_basis.Y + v_delta);
+            lblDisplayPan.Location = new Point(ptbDisplayPan.Location.X - lbl_displaypan_size_basis.Width, lbl_displaypan_basis.Y + v_delta); // MW0LGE_22x right-align to the slider like the zoom label, so longer text can't run under it
             ptbDisplayPan.Location = new Point(tb_displaypan_basis.X, tb_displaypan_basis.Y + v_delta);
             ptbDisplayPan.Size = tb_displaypan_size_basis;
             btnDisplayPanCenter.Location = new Point(ptbDisplayPan.Location.X + ptbDisplayPan.Width + 4, ptbDisplayPan.Location.Y);
+
+            // MW0LGE_22x legacy expanded layout: place the rx2 cluster into the dead space between the
+            // pan/centre group and the rx1 zoom cluster. Degrades: drop rx2 buttons first, then hide all.
+            PositionRX2DisplayClusterLegacy();
 
             // :NOTE: Force update on pan control
             Pan = ptbDisplayPan.Value;
@@ -42422,27 +42742,175 @@ namespace Thetis
             panelDisplay.Size = new Size(this.ClientSize.Width, height);
 
             top = infoBar.Location.Y + infoBar.Size.Height + 5;
-            int dynamicWidth = pnlDisplay.Width - (lblDisplayPan.Width + btnDisplayPanCenter.Width + 5 + comboDisplayMode.Width + 5 + lblDisplayZoom.Width + (btnDisplayZTB.Width * 5)); // *5 buttons
 
-            lblDisplayPan.Location = new Point(pnlDisplay.Location.X, top);
-            ptbDisplayPan.Location = new Point(lblDisplayPan.Location.X + lblDisplayPan.Width, top);
-            ptbDisplayPan.Size = new Size(dynamicWidth / 2, tb_display_pan_size_basis.Height);
-            btnDisplayPanCenter.Location = new Point(ptbDisplayPan.Location.X + ptbDisplayPan.Width, top);
+            // MW0LGE_22x dual display control rows/clusters: RX1 cluster at the right, RX2 cluster to its
+            // left when rx2 is enabled. Sliders flex; if the window is too narrow we drop the RX2 preset
+            // buttons first (tier 2) and then the whole RX2 group (tier 3).
+            {
+                int left = pnlDisplay.Location.X;
+                int right = left + pnlDisplay.Width;
+                int availW = right - left;
+                const int GAP = 5;
+                const int CLUSTER_GAP = 10;
+                const int SLIDER_ZTB_GAP = 4;
+                const int MIN_SLIDER_W = 60;
+
+                bool rx2vis = rx2_enabled;
+                bool rx2btns = rx2vis;
+
+                int comboW = Math.Max(comboDisplayMode.Width, comboRX2DisplayMode.Width);
+                int btns1W = btnDisplayZTB.Width + radDisplayZoom05.Width + radDisplayZoom1x.Width + radDisplayZoom2x.Width + radDisplayZoom4x.Width + 4; // four 1px gaps
+                int btns2W = btnRX2DisplayZTB.Width + radRX2DisplayZoom05.Width + radRX2DisplayZoom1x.Width + radRX2DisplayZoom2x.Width + radRX2DisplayZoom4x.Width + 4;
+                int ctr2W = rx2vis ? btnRX2DisplayPanCenter.Width : 0;
+
+                bool bTier2 = false; // drop RX2 preset buttons
+                bool bTier3 = false; // drop whole RX2 cluster
+
+                // fixed widths + gaps for the full (tier 1) rx2 layout
+                int fixedA = lblDisplayPan.Width + lblRX2DisplayPan.Width + btnDisplayPanCenter.Width + ctr2W + comboW
+                           + lblDisplayZoom.Width + lblRX2DisplayZoom.Width
+                           + btns1W + btns2W;
+                int gapsA = 5 * GAP + 2 * SLIDER_ZTB_GAP + CLUSTER_GAP;
+
+                if (availW < fixedA + gapsA + 4 * MIN_SLIDER_W)
+                    bTier2 = true;
+
+                if (bTier2)
+                {
+                    // keep rx2 sliders, lose rx2 buttons
+                    int fixedB = fixedA - btns2W;
+                    int gapsB = 5 * GAP + SLIDER_ZTB_GAP + CLUSTER_GAP;
+
+                    if (availW < fixedB + gapsB + 4 * MIN_SLIDER_W)
+                        bTier3 = true;
+                }
+
+                if (bTier3)
+                    rx2vis = false;
+
+                rx2btns = rx2vis && !bTier2;
+
+                radRX2DisplayZoom05.Visible = rx2btns;
+                radRX2DisplayZoom1x.Visible = rx2btns;
+                radRX2DisplayZoom2x.Visible = rx2btns;
+                radRX2DisplayZoom4x.Visible = rx2btns;
+                btnRX2DisplayZTB.Visible = rx2btns;
+
+                int btns2Eff = rx2btns ? btns2W : 0;
+                int l2Eff = rx2vis ? lblRX2DisplayZoom.Width : 0;
+
+                // total stretch shared by the sliders (2 pan + 1or2 zoom)
+                int gapsEff = rx2vis ? (3 * GAP + 2 * SLIDER_ZTB_GAP + CLUSTER_GAP) : (3 * GAP + SLIDER_ZTB_GAP); // MW0LGE_22x pan trios own their centre buttons now
+                int fixedEff = lblDisplayPan.Width + btnDisplayPanCenter.Width + ctr2W + comboW + lblDisplayZoom.Width + btns1W
+                             + (rx2vis ? lblRX2DisplayPan.Width + l2Eff + btns2Eff : 0);
+                int nStretch = rx2vis ? 4 : 2;
+                int stretch = Math.Max(availW - gapsEff - fixedEff, nStretch * MIN_SLIDER_W);
+                int each = stretch / nStretch;
+
+                int wPan1 = each;
+                int wPan2 = rx2vis ? each : 0;
+                int wZoom1 = each;
+                int wZoom2 = rx2vis ? each : 0;
+
+                // give the rounding leftover to the RX1 zoom slider
+                wZoom1 += stretch - each * nStretch;
+
+                // ---- place left to right ---------------------------------------
+                int cur = left;
+                lblDisplayPan.Location = new Point(cur, top);
+                cur += lblDisplayPan.Width;
+                ptbDisplayPan.Location = new Point(cur, top);
+                ptbDisplayPan.Size = new Size(wPan1, tb_display_pan_size_basis.Height);
+                cur += wPan1;
+                btnDisplayPanCenter.Location = new Point(cur, top); // MW0LGE_22x centre button belongs to ITS OWN pan slider
+                cur += btnDisplayPanCenter.Width;
+
+                if (rx2vis)
+                {
+                    cur += GAP;
+                    lblRX2DisplayPan.Location = new Point(cur, top);
+                    cur += lblRX2DisplayPan.Width;
+                    ptbRX2DisplayPan.Location = new Point(cur, top);
+                    ptbRX2DisplayPan.Size = new Size(wPan2, tb_display_pan_size_basis.Height);
+                    cur += wPan2;
+                    btnRX2DisplayPanCenter.Location = new Point(cur, top);
+                    cur += ctr2W + GAP;
+                    lblRX2DisplayPan.Visible = true; // MW0LGE_22x re-show (may have been hidden by tier fallback or legacy layout)
+                    ptbRX2DisplayPan.Visible = true;
+                    btnRX2DisplayPanCenter.Visible = true;
+                }
+                else
+                {
+                    lblRX2DisplayPan.Visible = false;
+                    ptbRX2DisplayPan.Visible = false;
+                    btnRX2DisplayPanCenter.Visible = false;
+                }
+
+                comboDisplayMode.Parent = panelDisplay;
+                comboRX2DisplayMode.Parent = panelDisplay;
+                comboDisplayMode.Location = new Point(cur, top);
+                comboRX2DisplayMode.Location = new Point(cur, top);
+                cur += comboW + GAP;
+
+                // ---- RX2 zoom cluster (sits left of the RX1 one) -----------------
+                if (rx2vis)
+                {
+                    lblRX2DisplayZoom.Location = new Point(cur, top);
+                    cur += lblRX2DisplayZoom.Width;
+                    ptbRX2DisplayZoom.Location = new Point(cur, top);
+                    ptbRX2DisplayZoom.Size = new Size(wZoom2, tb_display_zoom_size_basis.Height);
+                    cur += wZoom2;
+                    lblRX2DisplayZoom.Visible = true; // MW0LGE_22x re-show (may have been hidden by tier fallback or legacy layout)
+                    ptbRX2DisplayZoom.Visible = true;
+
+                    if (rx2btns)
+                    {
+                        cur += SLIDER_ZTB_GAP;
+                        btnRX2DisplayZTB.Location = new Point(cur, top);
+                        cur += btnRX2DisplayZTB.Width + 1;
+                        radRX2DisplayZoom05.Location = new Point(cur, top);
+                        cur += radRX2DisplayZoom05.Width + 1;
+                        radRX2DisplayZoom1x.Location = new Point(cur, top);
+                        cur += radRX2DisplayZoom1x.Width + 1;
+                        radRX2DisplayZoom2x.Location = new Point(cur, top);
+                        cur += radRX2DisplayZoom2x.Width + 1;
+                        radRX2DisplayZoom4x.Location = new Point(cur, top);
+                        cur += radRX2DisplayZoom4x.Width + 1;
+                    }
+
+                    cur += CLUSTER_GAP;
+                }
+                else
+                {
+                    lblRX2DisplayZoom.Visible = false;
+                    ptbRX2DisplayZoom.Visible = false;
+                }
+
+                // ---- RX1 zoom cluster fills out to the right edge ---------------
+                lblDisplayZoom.Location = new Point(cur, top);
+                cur += lblDisplayZoom.Width;
+                ptbDisplayZoom.Location = new Point(cur, top);
+                ptbDisplayZoom.Size = new Size(right - btns1W - cur, tb_display_zoom_size_basis.Height);
+                cur += ptbDisplayZoom.Width + SLIDER_ZTB_GAP;
+
+                btnDisplayZTB.Location = new Point(cur, top);
+                cur += btnDisplayZTB.Width + 1;
+                radDisplayZoom05.Location = new Point(cur, top);
+                cur += radDisplayZoom05.Width + 1;
+                radDisplayZoom1x.Location = new Point(cur, top);
+                cur += radDisplayZoom1x.Width + 1;
+                radDisplayZoom2x.Location = new Point(cur, top);
+                cur += radDisplayZoom2x.Width + 1;
+                radDisplayZoom4x.Location = new Point(cur, top);
+            }
 
             // :NOTE: Force update on pan control
             Pan = ptbDisplayPan.Value;
-
-            comboDisplayMode.Parent = panelDisplay;
-            comboDisplayMode.Location = new Point(btnDisplayPanCenter.Location.X + btnDisplayPanCenter.Width + 5, top);
-            comboRX2DisplayMode.Parent = panelDisplay;
-            comboRX2DisplayMode.Location = new Point(btnDisplayPanCenter.Location.X + btnDisplayPanCenter.Width + 5, top);
-
-            lblDisplayZoom.Location = new Point(comboDisplayMode.Location.X + comboDisplayMode.Width + 5, top);
-            ptbDisplayZoom.Location = new Point(lblDisplayZoom.Location.X + lblDisplayZoom.Width, top);
-            ptbDisplayZoom.Size = new Size(btnDisplayZTB.Location.X - (lblDisplayZoom.Location.X + lblDisplayZoom.Size.Width), tb_display_zoom_size_basis.Height);
+            if (rx2_enabled) Pan2 = ptbRX2DisplayPan.Value;
 
             // :NOTE: Force update on zoom control
             Zoom = ptbDisplayZoom.Value;
+            if (rx2_enabled) Zoom2 = ptbRX2DisplayZoom.Value;
 
             top = panelDisplay.Location.Y + panelDisplay.Height;
             // G8NJJ to add new Andromeda button bar in place of band, mode controls
@@ -46427,22 +46895,33 @@ namespace Thetis
         public void ZoomToBand(bool bStore)
         {
             int rx; // note, 0 indexed rx, rx1 = 0, rx2 = 1
+
+            if (RX2Enabled && Common.ShiftKeyDown)
+                rx = 1; //rx2
+            else
+                rx = 0; //rx1
+
+            ZoomToBandChannel(rx, bStore);
+        }
+
+        // MW0LGE_22x rx is 0 indexed (0 = rx1, 1 = rx2) - each display cluster acts on its own rx
+        public void ZoomToBandChannel(int rx, bool bStore)
+        {
             Band band;
             double centre;
             DSPMode dsp;
             bool bCTUN;
 
-            if (RX2Enabled && Common.ShiftKeyDown)
+            if (rx == 1) //rx2
             {
-                rx = 1; //rx2
                 band = RX2Band;
-                centre = CentreRX2Frequency;                
+                centre = CentreRX2Frequency;
             }
             else
             {
                 rx = 0; //rx1
                 band = RX1Band;
-                centre = CentreFrequency;                                
+                centre = CentreFrequency;
             }
 
             // store recall ZTB
@@ -46450,13 +46929,14 @@ namespace Thetis
             {
                 // store
                 ztb_data_by_band[rx][(int)band].CentreFrequency = centre;
-                ztb_data_by_band[rx][(int)band].ZoomSliderPosition = ptbDisplayZoom.Value;
-                ztb_data_by_band[rx][(int)band].PanSliderPosition = ptbDisplayPan.Value;
+                ztb_data_by_band[rx][(int)band].ZoomSliderPosition = rx == 1 ? ptbRX2DisplayZoom.Value : ptbDisplayZoom.Value;
+                ztb_data_by_band[rx][(int)band].PanSliderPosition = rx == 1 ? ptbRX2DisplayPan.Value : ptbDisplayPan.Value;
                 ztb_data_by_band[rx][(int)band].Initalised = true;
                 return;
             }
 
-            if (rx == 1) { //rx2
+            if (rx == 1)
+            { //rx2
                 if (!chkX2TR.Checked) chkX2TR.Checked = true;
                 dsp = RX2DSPMode;
                 bCTUN = chkX2TR.Checked;
@@ -46483,8 +46963,16 @@ namespace Thetis
 
                     m_bIgnoreLimitsForZTB = true;
 
-                    if (Pan != ztb.PanSliderPosition) Pan = ztb.PanSliderPosition;
-                    if (Zoom != ztb.ZoomSliderPosition) Zoom = ztb.ZoomSliderPosition;
+                    if (rx == 0)
+                    {
+                        if (Pan != ztb.PanSliderPosition) Pan = ztb.PanSliderPosition;
+                        if (Zoom != ztb.ZoomSliderPosition) Zoom = ztb.ZoomSliderPosition;
+                    }
+                    else
+                    {
+                        if (Pan2 != ztb.PanSliderPosition) Pan2 = ztb.PanSliderPosition;
+                        if (Zoom2 != ztb.ZoomSliderPosition) Zoom2 = ztb.ZoomSliderPosition;
+                    }
 
                     if (rx == 0)
                     {
@@ -46531,11 +47019,29 @@ namespace Thetis
                 toolTip1.SetToolTip(btnDisplayZTB, "Recall/Store mode. Left click to recall, right to store Zoom/Pan/Center per band, per RX. Shift for RX2.");
             else
                 toolTip1.SetToolTip(btnDisplayZTB, "Zoom to the band using Region band edges. Shift for RX2.");
+
+            if (m_bZTBisRecallStore)
+                toolTip1.SetToolTip(btnRX2DisplayZTB, "RX2 Recall/Store mode. Left click to recall, right to store Zoom/Pan/Center per band.");
+            else
+                toolTip1.SetToolTip(btnRX2DisplayZTB, "RX2: Zoom to the band using Region band edges.");
         }
 
         private void btnDisplayZTB_MouseUp(object sender, MouseEventArgs e)
         {
             if(e.Button == MouseButtons.Right) btnDisplayZTB_Click(sender, e);
+        }
+
+        // MW0LGE_22x RX2 ZTB - acts on the rx2 channel directly, no shift modifier needed
+        private void btnRX2DisplayZTB_Click(object sender, EventArgs e)
+        {
+            MouseEventArgs me = e as MouseEventArgs;
+            bool is_right = me != null && me.Button == MouseButtons.Right;
+            ZoomToBandChannel(1, is_right);
+        }
+
+        private void btnRX2DisplayZTB_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right) btnRX2DisplayZTB_Click(sender, e);
         }
 
         private void Console_Activated(object sender, EventArgs e)
