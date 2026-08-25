@@ -943,4 +943,17 @@ The DXRenderer inner class (MeterManager.cs:31642-41708) contains **all** SharpD
 - **Source-code attribution**: all six files that consume Vortice.Windows/SharpGenTools carry a short MIT attribution comment above their Vortice using-block (display.cs ~line 63, MeterManager.cs, DXVorticeCompat.cs, Display.Pan3DMesh.cs / Pan2DMesh.cs / WaterfallMesh.cs). Only Vortice/SharpGen are NEW to this migration (replaced SharpDX); every other third-party package predates it and is disclosed via installer + Licenses folder instead. App rebuilds clean.
 - MSI rebuilt: SDR-VST3-v4.6.0.0.x64.msi now 658 files (+18 licenses); verified via Component table join Directory_=LicensesDir -> all 18 present. AUDIT GOTCHA: SELECT * FROM File column order is File, Component_, FileName... - GetString(2) is COMPONENT not filename; filter on GetString(3) or join via Component.Directory_.
 
+## Future upgrade roadmap (parked 2026-08-23 - revisit once v4.6 field stability is confirmed)
+Deliberately NOT started; candidate list agreed with user, priority order within groups:
+
+1. Runtime log toggles - DONE 2026-08-24: Setup -> Options-3 -> Diagnostics -> "Log GPU mesh events" checkbox drives Common.MeshDiagLogEnabled at runtime (common.cs); sink writes into ErrorLog.txt, each toggle records an ENABLED/disabled marker line; state persists via SaveForm/RestoreForm and is re-applied on startup (setup.cs chkMeshDiagLog_CheckedChanged).
+2. Crash safety net - global unhandled-exception handler writing timestamped report/minidump to %APPDATA%\OpenHPSDR\SDR-VST3-x64\ and offering to open the folder.
+3. Check-for-updates - query GitHub releases API (nubbyless/SDR-VST3) on startup, offer download.
+4. GPU paths to default - once 3D/2D mesh + waterfall ring proven stable in the field, flip hardware path to default; keep D2D fallback as automatic recovery only (GPU fallback rule 1 stays).
+5. GPU spectrum overlays - peak-hold/annotations/markers drawn through the existing D3D11 pipeline (cheap now that mesh passes exist).
+6. Code health splits - MeterManager.cs ~45k lines and display.cs ~14k lines into focused partials/modules; retire DXVorticeCompat shim when confident nothing needs the SharpDX surface.
+7. CI releases - GitHub Actions workflow: build app + WiX MSI on tagged release, attach SDR-VST3-v<ver>.x64.msi artifact.
+
+Top picks if only two get done first: #1 (runtime log toggle) and #7 (CI releases) - low effort, recurring value.
+
 

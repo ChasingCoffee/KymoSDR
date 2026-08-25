@@ -405,6 +405,8 @@
             this.tpOptions3 = new System.Windows.Forms.TabPage();
             this.groupBoxTS57 = new System.Windows.Forms.GroupBoxTS();
             this.groupBoxTS58 = new System.Windows.Forms.GroupBoxTS();
+            this.groupBoxTS71 = new System.Windows.Forms.GroupBoxTS();
+            this.chkMeshDiagLog = new System.Windows.Forms.CheckBoxTS();
             this.radVFOSYNC_nothing = new System.Windows.Forms.RadioButtonTS();
             this.radVFOSYNC_ab = new System.Windows.Forms.RadioButtonTS();
             this.radVFOSYNC_ba = new System.Windows.Forms.RadioButtonTS();
@@ -10950,11 +10952,35 @@
             // 
             this.tpOptions3.BackColor = System.Drawing.SystemColors.Control;
             this.tpOptions3.Controls.Add(this.groupBoxTS57);
+            this.tpOptions3.Controls.Add(this.groupBoxTS71);
             this.tpOptions3.Location = new System.Drawing.Point(4, 22);
             this.tpOptions3.Name = "tpOptions3";
             this.tpOptions3.Size = new System.Drawing.Size(716, 384);
             this.tpOptions3.TabIndex = 3;
             this.tpOptions3.Text = "Options-3";
+            // 
+            // groupBoxTS71
+            // 
+            this.groupBoxTS71.Controls.Add(this.chkMeshDiagLog);
+            this.groupBoxTS71.Location = new System.Drawing.Point(210, 8);
+            this.groupBoxTS71.Name = "groupBoxTS71";
+            this.groupBoxTS71.Size = new System.Drawing.Size(190, 56);
+            this.groupBoxTS71.TabIndex = 34;
+            this.groupBoxTS71.TabStop = false;
+            this.groupBoxTS71.Text = "Diagnostics";
+            // 
+            // chkMeshDiagLog
+            // 
+            this.chkMeshDiagLog.AutoSize = true;
+            this.chkMeshDiagLog.Image = null;
+            this.chkMeshDiagLog.Location = new System.Drawing.Point(14, 23);
+            this.chkMeshDiagLog.Name = "chkMeshDiagLog";
+            this.chkMeshDiagLog.Size = new System.Drawing.Size(146, 17);
+            this.chkMeshDiagLog.TabIndex = 0;
+            this.chkMeshDiagLog.Text = "Log GPU mesh events";
+            this.toolTip1.SetToolTip(this.chkMeshDiagLog, "Write GPU mesh / spectrum glow diagnostic messages into ErrorLog.txt (in the application data folder).\n\nTakes effect immediately; enable before switching GPU modes to capture init/fallback events.");
+            this.chkMeshDiagLog.UseVisualStyleBackColor = true;
+            this.chkMeshDiagLog.CheckedChanged += new System.EventHandler(this.chkMeshDiagLog_CheckedChanged);
             // 
             // groupBoxTS57
             // 
@@ -75402,6 +75428,7 @@
         private ButtonTS btnQSOTimerSelectWAV;
         private CheckBoxTS chkQSOTimerResetOnMOX;
         private CheckBoxTS chkQSOTimerOnlyDuringMOX;
+        private CheckBoxTS chkMeshDiagLog;
         private CheckBoxTS chkQSOTimerEnabled;
         private CheckBoxTS chkQSOTimerResetOnExpiry;
         private CheckBoxTS chkQSOTimerFlashTimerIfResetOnExpiry;
@@ -77076,6 +77103,7 @@
         private ButtonTS btnLedIndicatorVarPicker;
         private TabPage tpOptions3;
         private GroupBoxTS groupBoxTS57;
+        private GroupBoxTS groupBoxTS71;
         private CheckBoxTS chkVFOsync_filter;
         private CheckBoxTS chkVFOsync_mode;
         private CheckBoxTS chkVFOsync_freq;

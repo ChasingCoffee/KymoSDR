@@ -599,16 +599,30 @@ namespace Thetis
 
             }
         }
+        private static bool m_bMeshDiagLogEnabled = false;
         /// <summary>
-        /// [4.6] GPU mesh / spectrum-glow diagnostics sink. Currently disabled —
-        /// uncomment the body to restore ErrorLog output when chasing GPU issues;
-        /// all MeshDiagLog call sites keep their original message text.
+        /// [4.6.1] Runtime toggle for the GPU mesh / spectrum-glow diagnostics sink
+        /// (Setup -> Options-3). Replaces the old uncomment-the-body workflow; all
+        /// MeshDiagLog call sites keep their original message text.
+        /// </summary>
+        public static bool MeshDiagLogEnabled
+        {
+            get { return m_bMeshDiagLogEnabled; }
+            set
+            {
+                if (m_bMeshDiagLogEnabled == value) return;
+                m_bMeshDiagLogEnabled = value;
+                LogString("GPU mesh diagnostic logging " + (value ? "ENABLED" : "disabled")); // always recorded, so the log shows when tracking started/stopped
+            }
+        }
+        /// <summary>
+        /// GPU mesh / spectrum-glow diagnostics sink - writes into ErrorLog.txt only while
+        /// MeshDiagLogEnabled is set at runtime.
         /// </summary>
         public static void MeshDiagLog(string entry)
         {
-            //if (m_sLogPath == "") return;
-            //if (entry == "") return;
-            //LogString(entry);
+            if (!m_bMeshDiagLogEnabled) return;
+            LogString(entry);
         }
         public static void LogException(Exception e)
         {

@@ -3050,6 +3050,7 @@ namespace Thetis
 
             //options3 tab
             chkVFOsync_settings_changed(this, e);
+            chkMeshDiagLog_CheckedChanged(this, e); // MW0LGE_22x apply restored state to the runtime diag sink
 
             // auto start tab
             updateAutoLaunchControls();
@@ -19911,6 +19912,11 @@ namespace Thetis
         {
             if (initializing) return;
             Display.GpuMeshEnabled = chkGpuMesh3D.Checked;
+        }
+
+        private void chkMeshDiagLog_CheckedChanged(object sender, EventArgs e)
+        {
+            Common.MeshDiagLogEnabled = chkMeshDiagLog.Checked; // MW0LGE_22x runtime toggle, no restart needed
         }
 
         private void chkBlobPeakHold_CheckedChanged(object sender, EventArgs e)
