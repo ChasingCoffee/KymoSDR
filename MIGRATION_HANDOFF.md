@@ -953,6 +953,7 @@ Deliberately NOT started; candidate list agreed with user, priority order within
 5. GPU spectrum overlays - peak-hold/annotations/markers drawn through the existing D3D11 pipeline (cheap now that mesh passes exist).
 6. Code health splits - MeterManager.cs ~45k lines and display.cs ~14k lines into focused partials/modules; retire DXVorticeCompat shim when confident nothing needs the SharpDX surface.
 7. CI releases - GitHub Actions workflow: build app + WiX MSI on tagged release, attach SDR-VST3-v<ver>.x64.msi artifact.
+8. Error-dialog capture logging - user request 2026-08-24: make error dialogs leave a persistent trace. Add Common.ReportError(caption, message[, exception]) that shows the dialog AND writes a timestamped entry into ErrorLog.txt including app version, render path and stack when an exception is passed; then sweep the HIGH-VALUE MessageBox.Show sites (~310 total, convert selectively): display.cs/common.cs DX init & fallback paths (6), console.cs startup sequence - DB load, VAC, MIDI/CAT, skin load (~16 catch(Exception) blocks). Pairs with #2: #2 catches UNHANDLED exceptions globally at startup/runtime, this captures HANDLED errors that currently only flash a dialog and are lost when the user clicks OK.
 
 Top picks if only two get done first: #1 (runtime log toggle) and #7 (CI releases) - low effort, recurring value.
 
