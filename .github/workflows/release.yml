@@ -16,6 +16,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set version from tag
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $file = "Project Files/Source/Console/AssemblyInfo.cs"
+          $content = Get-Content $file -Raw
+          $content = $content -replace 'AssemblyVersion\(".*?"\)', "AssemblyVersion(`"$version`")"
+          $content = $content -replace 'AssemblyFileVersion\(".*?"\)', "AssemblyFileVersion(`"$version.0.0`")"
+          Set-Content $file $content -NoNewline
+          Write-Host "Version set to $version"
+
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
