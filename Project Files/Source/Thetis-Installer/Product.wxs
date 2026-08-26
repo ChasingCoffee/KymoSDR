@@ -629,18 +629,7 @@
               />
       </Component>
 
-      <Component Guid="*">
-        <File Id="System.BuffersDLL"
-              Source="$(var.FilesPath)System.Buffers.dll"
-              KeyPath="yes"
-              />
-      </Component>
-		<Component Guid="*">
-        <File Id="SharpDX.DesktopDLL"
-              Source="$(var.FilesPath)SharpDX.Desktop.dll"
-              KeyPath="yes"
-              />
-      </Component>
+		<!-- [4.7] System.Buffers, SharpDX.Desktop removed: inbox / replaced by Vortice -->
 
 		<Component Guid="*">
 			<File Id="Newtonsoft.JsonDLL"
@@ -708,30 +697,9 @@
 		<!-- 
 		Additional
 		-->
-		<Component Guid="*">
-			<File Id="System.Numerics.VectorsDLL"
-				  Source="$(var.FilesPath)System.Numerics.Vectors.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="System.Runtime.CompilerServices.UnsafeDLL"
-				  Source="$(var.FilesPath)System.Runtime.CompilerServices.Unsafe.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="System.Text.Encoding.CodePagesDLL"
-				  Source="$(var.FilesPath)System.Text.Encoding.CodePages.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="System.Threading.Tasks.ExtensionsDLL"
-				  Source="$(var.FilesPath)System.Threading.Tasks.Extensions.dll"
-				  KeyPath="yes"
-              />
-		</Component>
+		<!-- [4.7] System.Numerics.Vectors, System.Runtime.CompilerServices.Unsafe,
+		     System.Text.Encoding.CodePages, System.Threading.Tasks.Extensions,
+		     System.Drawing.Common removed: inbox in .NET 10 -->
 		<Component Guid="*">
 			<File Id="HtmlAgilityPackDLL"
 				  Source="$(var.FilesPath)HtmlAgilityPack.dll"
@@ -741,12 +709,6 @@
 		<Component Guid="*">
 			<File Id="SkiaSharpDLL"
 				  Source="$(var.FilesPath)SkiaSharp.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="System.Drawing.CommonDLL"
-				  Source="$(var.FilesPath)System.Drawing.Common.dll"
 				  KeyPath="yes"
               />
 		</Component>
@@ -809,18 +771,7 @@
 				  KeyPath="yes"
               />
 		</Component>
-		<Component Guid="*">
-			<File Id="System.Collections.ImmutableDLL"
-				  Source="$(var.FilesPath)System.Collections.Immutable.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="System.Reflection.MetadataDLL"
-				  Source="$(var.FilesPath)System.Reflection.Metadata.dll"
-				  KeyPath="yes"
-              />
-		</Component>
+		<!-- [4.7] System.Collections.Immutable, System.Reflection.Metadata removed: inbox in .NET 10 -->
 		<!-- 
 		End CodeAnalysis for Led/MultiMeter section
 		-->
@@ -865,20 +816,8 @@
               />
 		</Component>
 		<Component Guid="*">
-			<File Id="Microsoft.Bcl.AsyncInterfacesDLL"
-				  Source="$(var.FilesPath)Microsoft.Bcl.AsyncInterfaces.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
 			<File Id="Microsoft.Extensions.DependencyInjection.AbstractionsDLL"
 				  Source="$(var.FilesPath)Microsoft.Extensions.DependencyInjection.Abstractions.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="Microsoft.Win32.RegistryDLL"
-				  Source="$(var.FilesPath)Microsoft.Win32.Registry.dll"
 				  KeyPath="yes"
               />
 		</Component>
@@ -906,95 +845,21 @@
 				  KeyPath="yes"
               />
 		</Component>
-		<Component Guid="*">
-			<File Id="System.Security.AccessControlDLL"
-				  Source="$(var.FilesPath)System.Security.AccessControl.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="System.Security.Principal.WindowsDLL"
-				  Source="$(var.FilesPath)System.Security.Principal.Windows.dll"
-				  KeyPath="yes"
-              />
-		</Component>
 		<!-- 
 		End Discord
 		-->
 		
-		<Component Guid="*">
-			<File Id="System.MemoryDLL"
-				  Source="$(var.FilesPath)System.Memory.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="MicrosoftBclHashCodeDLL"
-				  Source="$(var.FilesPath)Microsoft.Bcl.HashCode.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="MicrosoftBclMemoryDLL"
-				  Source="$(var.FilesPath)Microsoft.Bcl.Memory.dll"
-				  KeyPath="yes"
-              />
-		</Component>
+		<!-- [4.7] Legacy .NET Framework polyfills removed: inbox in .NET 10 -->
 		<Component Guid="*">
 			<File Id="MicrosoftNETStringToolsDLL"
 				  Source="$(var.FilesPath)Microsoft.NET.StringTools.dll"
 				  KeyPath="yes"
               />
 		</Component>
-		<Component Guid="*">
-			<File Id="SystemFormatsNrbfDLL"
-				  Source="$(var.FilesPath)System.Formats.Nrbf.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="SystemLinqAsyncEnumerableDLL"
-				  Source="$(var.FilesPath)System.Linq.AsyncEnumerable.dll"
-				  KeyPath="yes"
-              />
-		</Component>
-		<Component Guid="*">
-			<File Id="SystemResourcesExtensionsDLL"
-				  Source="$(var.FilesPath)System.Resources.Extensions.dll"
-				  KeyPath="yes"
-              />
-		</Component>
+		<!-- [4.7] System.Formats.Nrbf, System.Linq.AsyncEnumerable removed: inbox in .NET 10 -->
+		<!-- [4.7] System.Resources.Extensions removed: inbox in .NET 10 -->
 		
-      <Component Guid="*">
-        <File Id="SharpDX.Direct2D1DLL"
-              Source="$(var.FilesPath)SharpDX.Direct2D1.dll"
-              KeyPath="yes"
-              />
-      </Component>
-      <Component Guid="*">
-        <File Id="SharpDX.Direct3D11DLL"
-              Source="$(var.FilesPath)SharpDX.Direct3D11.dll"
-              KeyPath="yes"
-              />
-      </Component>
-      <Component Guid="*">
-        <File Id="SharpDX.DXGIDLL"
-              Source="$(var.FilesPath)SharpDX.DXGI.dll"
-              KeyPath="yes"
-              />
-      </Component>
-      <Component Guid="*">
-        <File Id="SharpDXDLL"
-              Source="$(var.FilesPath)SharpDX.dll"
-              KeyPath="yes"
-              />
-      </Component>
-      <Component Guid="*">
-        <File Id="SharpDX.MathematicsDLL"
-              Source="$(var.FilesPath)SharpDX.Mathematics.dll"
-              KeyPath="yes"
-              />
-      </Component>
+		<!-- [4.7] SharpDX removed: replaced by Vortice.Windows -->
 		<Component Guid="*">
 			<File Id="WindowsFirewallHelperDLL"
 				  Source="$(var.FilesPath)WindowsFirewallHelper.dll"
