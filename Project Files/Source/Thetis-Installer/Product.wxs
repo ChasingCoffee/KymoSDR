@@ -821,12 +821,7 @@
 				  KeyPath="yes"
               />
 		</Component>
-		<Component Guid="*">
-			<File Id="System.CodeDomDLL"
-				  Source="$(var.FilesPath)System.CodeDom.dll"
-				  KeyPath="yes"
-              />
-		</Component>
+		<!-- [4.7] System.CodeDom removed: inbox in .NET 10 -->
 		<Component Guid="*">
 			<File Id="System.Interactive.AsyncDLL"
 				  Source="$(var.FilesPath)System.Interactive.Async.dll"
