@@ -2514,6 +2514,7 @@ namespace Thetis
             chkForceCPURendering_CheckedChanged(this, e);
             chkSpectrumGlow_CheckedChanged(this, e);
             chkGpuMesh3D_CheckedChanged(this, e);
+            chkGpuComputeShaders_CheckedChanged(this, e);
             udDisplayDecimation_ValueChanged(this, e);
             udDisplayGridMax_ValueChanged(this, e);
             udDisplayGridMin_ValueChanged(this, e);
@@ -19912,6 +19913,12 @@ namespace Thetis
         {
             if (initializing) return;
             Display.GpuMeshEnabled = chkGpuMesh3D.Checked;
+        }
+
+        private void chkGpuComputeShaders_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.GpuComputeEnabled = chkGpuComputeShaders.Checked;
         }
 
         private void chkMeshDiagLog_CheckedChanged(object sender, EventArgs e)

@@ -481,11 +481,20 @@ namespace Thetis
                 // ---- strengths (same normalisation as the D2D column loop) ----
                 float[] scratch = _specHeightScratch;
                 if (scratch.Length < nDecimatedWidth) _specHeightScratch = scratch = new float[Math.Max(nDecimatedWidth, scratch.Length * 2)];
-                float invRange = 1f / yRange;
-                for (int i = 0; i < nDecimatedWidth; i++)
+
+                // Tier 3 GPU compute shaders: when armed, offload normalisation
+                // to a GPU compute shader.  Falls back to the CPU loop on failure.
+                bool bComputeNormalised = ComputeArmed && TryDispatchSpectrumCompute(
+                    data, fOffset, grid_min, grid_max, nDecimatedWidth);
+
+                if (!bComputeNormalised)
                 {
-                    float v = (data[i] + fOffset - grid_min) * invRange;
-                    scratch[i] = v < 0f ? 0f : (v > 1f ? 1f : v);
+                    float invRange = 1f / yRange;
+                    for (int i = 0; i < nDecimatedWidth; i++)
+                    {
+                        float v = (data[i] + fOffset - grid_min) * invRange;
+                        scratch[i] = v < 0f ? 0f : (v > 1f ? 1f : v);
+                    }
                 }
 
                 ID3D11DeviceContext dc = _device.ImmediateContext;

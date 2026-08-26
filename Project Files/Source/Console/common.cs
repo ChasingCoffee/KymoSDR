@@ -657,6 +657,91 @@ namespace Thetis
             }
         }
 
+        /// <summary>
+        /// Shows an error MessageBox AND writes a structured entry to ErrorLog.txt.
+        /// Always logs — no toggle. Catches startup errors where no UI state exists yet.
+        /// </summary>
+        public static void ReportError(string caption, string message, Exception ex = null)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Version: " + GetVerNum(true));
+            try { sb.AppendLine("RenderPath: " + Display.RenderPathString()); } catch { sb.AppendLine("RenderPath: Unknown"); }
+            sb.AppendLine("Error: " + caption);
+            sb.AppendLine("Message: " + message);
+            if (ex != null)
+            {
+                sb.AppendLine("Exception: " + ex.Message);
+                if (ex.StackTrace != "")
+                {
+                    sb.AppendLine("---------stacktrace------------");
+                    sb.AppendLine(ex.StackTrace);
+                }
+            }
+            LogString(sb.ToString());
+
+            MessageBox.Show(message, caption,
+                MessageBoxButtons.OK, MessageBoxIcon.Error,
+                MessageBoxDefaultButton.Button1, MB_TOPMOST);
+        }
+
+        /// <summary>
+        /// Writes a standalone crash report to crashes/ subdirectory.
+        /// Returns the file path written, or null on failure.
+        /// </summary>
+        public static string SaveCrashReport(Exception ex)
+        {
+            try
+            {
+                string dir = string.IsNullOrEmpty(m_sLogPath)
+                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"OpenHPSDR\SDR-VST3-x64")
+                    : m_sLogPath;
+                dir = Path.Combine(dir, "crashes");
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                string ts = DateTime.Now.ToString("yyyy-MM-dd_HHmmss");
+                string path = Path.Combine(dir, $"SDR-VST3_{ts}.crash");
+
+                var sb = new StringBuilder();
+                sb.AppendLine("SDR-VST3 Crash Report");
+                sb.AppendLine("Timestamp: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                sb.AppendLine("Version: " + GetVerNum(true));
+                try { sb.AppendLine("RenderPath: " + Display.RenderPathString()); } catch { sb.AppendLine("RenderPath: Unknown"); }
+                sb.AppendLine("OS: " + Environment.OSVersion);
+                sb.AppendLine("CLR: " + Environment.Version);
+                sb.AppendLine("64-bit: " + Environment.Is64BitOperatingSystem);
+                sb.AppendLine("Thread: " + System.Threading.Thread.CurrentThread.ManagedThreadId + " (" + System.Threading.Thread.CurrentThread.Name + ")");
+                sb.AppendLine();
+                sb.AppendLine("=== Exception ===");
+
+                Exception current = ex;
+                int depth = 0;
+                while (current != null)
+                {
+                    if (depth > 0)
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine("--- Inner Exception (depth " + depth + ") ---");
+                    }
+                    sb.AppendLine("Type: " + current.GetType().FullName);
+                    sb.AppendLine("Message: " + current.Message);
+                    if (current.StackTrace != "")
+                    {
+                        sb.AppendLine("Stack Trace:");
+                        sb.AppendLine(current.StackTrace);
+                    }
+                    current = current.InnerException;
+                    depth++;
+                }
+
+                File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+                return path;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
 		// returns the Thetis version number (trailing zero components trimmed, e.g. "4.1")
 		// MW0LGE moved here from titlebar.cs, and used by console.cs and others
 		private static string m_sVersionNumber = "";

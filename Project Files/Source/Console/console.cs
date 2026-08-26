@@ -641,11 +641,8 @@ namespace Thetis
             if (!checkVersions())
             {
                 // version incorrect
-                DialogResult dr = MessageBox.Show("An incorrect version of a required dll has been found.\n" +
-                    "Please resolve the issue otherwise unexpected behaviour may occur.",
-                    "Version error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Stop, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                Common.ReportError("Version error", "An incorrect version of a required dll has been found.\n" +
+                    "Please resolve the issue otherwise unexpected behaviour may occur.");
 
                 _exitConsoleInDispose = false;
                 Environment.Exit(1);
@@ -837,9 +834,9 @@ namespace Thetis
             if (!ok)
             {
                 if (string.IsNullOrEmpty(broken_folder))
-                    MessageBox.Show($"There was an issue loading the database.", "Database Issue", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Database Issue", $"There was an issue loading the database.");
                 else
-                    MessageBox.Show($"There was an issue loading the database. The database has been moved to [{AppDataPath}DB\\broken\\{broken_folder}].", "Database Issue", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Database Issue", $"There was an issue loading the database. The database has been moved to [{AppDataPath}DB\\broken\\{broken_folder}].");
 
                 _exitConsoleInDispose = false;
                 Environment.Exit(1);
@@ -919,8 +916,7 @@ namespace Thetis
                         "Try holding either CTRL key BEFORE Thetis is re-launched,\n" +
                         "and KEEP IT HELD until you see a message at which point you may release it.";
 
-                    MessageBox.Show(msg, "Database Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Database Error", msg, ex);
 
                     _exitConsoleInDispose = false;
                     Environment.Exit(1);
@@ -970,10 +966,10 @@ namespace Thetis
             {
                 Splash.SetStatus("Waiting for PortAudio");
                 bool bOk = portAudioThread.Join(5000);
-                if (!bOk) MessageBox.Show("There was an issue initialising PortAudio", "PortAudio", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                if (!bOk) Common.ReportError("PortAudio", "There was an issue initialising PortAudio");
             }
             if (_portAudioIssue)
-                MessageBox.Show("There was an issue initialising PortAudio", "PortAudio", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                Common.ReportError("PortAudio", "There was an issue initialising PortAudio");
 
             //            
             if (!IsSetupFormNull) SetupForm.SetupCMAsio(_portAudioIssue, Common.HasArg(args, "-cmasioconfig"));
@@ -1401,11 +1397,29 @@ namespace Thetis
         {
             Debug.WriteLine(e.Exception.Message);
             Common.LogException(e.Exception);
+            string path = Common.SaveCrashReport(e.Exception);
+            ShowCrashDialog(path);
         }
         static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
-            Debug.WriteLine((e.ExceptionObject as Exception).Message);
-            Common.LogException(e.ExceptionObject as Exception);
+            Exception ex = e.ExceptionObject as Exception;
+            Debug.WriteLine(ex?.Message);
+            if (ex != null) Common.LogException(ex);
+            string path = Common.SaveCrashReport(ex);
+            ShowCrashDialog(path);
+        }
+        static void ShowCrashDialog(string crashPath)
+        {
+            string text = crashPath != null
+                ? "SDR-VST3 has crashed. A crash report has been saved to:\n\n" + crashPath + "\n\nWould you like to open the folder?"
+                : "SDR-VST3 has crashed. Could not save crash report.";
+            DialogResult dr = MessageBox.Show(text, "SDR-VST3 Crash",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Error,
+                MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+            if (dr == DialogResult.Yes && crashPath != null)
+            {
+                try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + crashPath + "\""); } catch { }
+            }
         }
         public bool Restart
         {
@@ -1566,15 +1580,12 @@ namespace Thetis
                         "Try holding either CTRL key BEFORE Thetis is re-launched,\n" +
                         "and KEEP IT HELD until you see a message at which point you may release it.";
 
-                    MessageBox.Show(msg, "Database Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Database Error", msg, ex);
                 }
                 else
                 {
                     string msg = build_exception_text(ex);
-                    MessageBox.Show(msg, "Fatal Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error,
-                        MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Fatal Error", msg, ex);
                 }
 
                 Application.Exit();
@@ -2406,8 +2417,7 @@ namespace Thetis
                     {
                         if (!IsSetupFormNull) SetupForm.DisableTCPIPCatServerDueToError();
                         removeTCPIPcatDelegates();
-                        MessageBox.Show("Unable to start the server." + Environment.NewLine + Environment.NewLine + "[ " + m_tcpCATServer.LastError + " ]", "TCPIP CAT Server",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                        Common.ReportError("TCPIP CAT Server", "Unable to start the server." + Environment.NewLine + Environment.NewLine + "[ " + m_tcpCATServer.LastError + " ]");
                     }
                 }
                 //
@@ -2526,8 +2536,7 @@ namespace Thetis
                     {
                         if (!IsSetupFormNull) SetupForm.DisableTCIServerDueToError();
                         removeTCIDelegates();
-                        MessageBox.Show("Unable to start the server." + Environment.NewLine + Environment.NewLine + "[ " + m_tcpTCIServer.LastError + " ]", "TCI Server",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                        Common.ReportError("TCI Server", "Unable to start the server." + Environment.NewLine + Environment.NewLine + "[ " + m_tcpTCIServer.LastError + " ]");
                     }
                 }
                 //
@@ -16909,11 +16918,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling CAT on COM" + cat_port + ".\n" +
-                        "Please check CAT settings and try again.",
-                        "CAT Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("CAT Error", "Error enabling CAT on COM" + cat_port + ".\n" +
+                        "Please check CAT settings and try again.");
                     if (!IsSetupFormNull) SetupForm.CATEnabled = false;
                 }
             }
@@ -16950,11 +16956,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling Andromeda on COM" + cat_port + ".\n" +
-                        "Please check settings and try again.",
-                        "Andromeda CAT Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Andromeda CAT Error", "Error enabling Andromeda on COM" + cat_port + ".\n" +
+                        "Please check settings and try again.");
                     if (!IsSetupFormNull)
                     {
                         if (!andromeda_g2_enabled)
@@ -16990,11 +16993,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling Aries on COM" + cat_port + ".\n" +
-                        "Please check settings and try again.",
-                        "Aries CAT Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Aries CAT Error", "Error enabling Aries on COM" + cat_port + ".\n" +
+                        "Please check settings and try again.");
                     if (!IsSetupFormNull) SetupForm.AriesCATEnabled = false;
                 }
             }
@@ -17025,11 +17025,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling Ganymede on COM" + cat_port + ".\n" +
-                        "Please check settings and try again.",
-                        "Ganymede CAT Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Ganymede CAT Error", "Error enabling Ganymede on COM" + cat_port + ".\n" +
+                        "Please check settings and try again.");
                     if (!IsSetupFormNull) SetupForm.GanymedeCATEnabled = false;
                 }
             }
@@ -17058,11 +17055,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling CAT2 on COM" + cat_port + ".\n" +
-                        "Please check CAT2 settings and try again.",
-                        "CAT2 Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("CAT2 Error", "Error enabling CAT2 on COM" + cat_port + ".\n" +
+                        "Please check CAT2 settings and try again.");
                     if (!IsSetupFormNull) SetupForm.CAT2Enabled = false;
                 }
             }
@@ -17091,11 +17085,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling CAT3 on COM" + cat_port + ".\n" +
-                        "Please check CAT3 settings and try again.",
-                        "CAT3 Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("CAT3 Error", "Error enabling CAT3 on COM" + cat_port + ".\n" +
+                        "Please check CAT3 settings and try again.");
                     if (!IsSetupFormNull) SetupForm.CAT3Enabled = false;
                 }
             }
@@ -17124,11 +17115,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling CAT4 on COM" + cat_port + ".\n" +
-                        "Please check CAT4 settings and try again.",
-                        "CAT4 Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("CAT4 Error", "Error enabling CAT4 on COM" + cat_port + ".\n" +
+                        "Please check CAT4 settings and try again.");
                     if (!IsSetupFormNull) SetupForm.CAT4Enabled = false;
                 }
             }
@@ -17233,9 +17221,8 @@ namespace Thetis
                         {
                             SetupForm.copyCATPropsToDialogVars(); // need to make sure the props on the setup page get reset 
                         }
-                        MessageBox.Show("Could not initialize PTT Bit Bang control.  Exception was:\n\n " + ex.Message +
-                            "\n\nPTT Bit Bang control has been disabled.", "Error Initializing PTT control",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                        Common.ReportError("Error Initializing PTT control", "Could not initialize PTT Bit Bang control.  Exception was:\n\n " + ex.Message +
+                            "\n\nPTT Bit Bang control has been disabled.", ex);
 
                     }
                 }

@@ -2012,6 +2012,7 @@
             this.chkVSyncDX = new System.Windows.Forms.CheckBoxTS();
             this.chkForceCPURendering = new System.Windows.Forms.CheckBoxTS();
             this.chkGpuMesh3D = new System.Windows.Forms.CheckBoxTS();
+            this.chkGpuComputeShaders = new System.Windows.Forms.CheckBoxTS();
             this.chkSpectrumGlow = new System.Windows.Forms.CheckBoxTS();
             this.chkAccurateFrameTiming = new System.Windows.Forms.CheckBoxTS();
             this.chkAntiAlias = new System.Windows.Forms.CheckBoxTS();
@@ -33249,13 +33250,14 @@
             this.grpDisplayDriverEngine.Controls.Add(this.chkVSyncDX);
             this.grpDisplayDriverEngine.Controls.Add(this.chkForceCPURendering);
             this.grpDisplayDriverEngine.Controls.Add(this.chkGpuMesh3D);
+            this.grpDisplayDriverEngine.Controls.Add(this.chkGpuComputeShaders);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAccurateFrameTiming);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAntiAlias);
             this.grpDisplayDriverEngine.Controls.Add(this.comboDisplayThreadPriority);
             this.grpDisplayDriverEngine.Controls.Add(this.chkShowFPS);
             this.grpDisplayDriverEngine.Location = new System.Drawing.Point(566, 166);
             this.grpDisplayDriverEngine.Name = "grpDisplayDriverEngine";
-            this.grpDisplayDriverEngine.Size = new System.Drawing.Size(147, 145);
+            this.grpDisplayDriverEngine.Size = new System.Drawing.Size(147, 175);
             this.grpDisplayDriverEngine.TabIndex = 46;
             this.grpDisplayDriverEngine.TabStop = false;
             this.grpDisplayDriverEngine.Text = "DirectX Display Settings";
@@ -33266,7 +33268,7 @@
             this.chkVSyncDX.Checked = true;
             this.chkVSyncDX.CheckState = System.Windows.Forms.CheckState.Checked;
             this.chkVSyncDX.Image = null;
-            this.chkVSyncDX.Location = new System.Drawing.Point(8, 95);
+            this.chkVSyncDX.Location = new System.Drawing.Point(8, 118);
             this.chkVSyncDX.Name = "chkVSyncDX";
             this.chkVSyncDX.Size = new System.Drawing.Size(57, 17);
             this.chkVSyncDX.TabIndex = 50;
@@ -33279,7 +33281,7 @@
             // 
             this.chkForceCPURendering.AutoSize = true;
             this.chkForceCPURendering.Image = null;
-            this.chkForceCPURendering.Location = new System.Drawing.Point(8, 119);
+            this.chkForceCPURendering.Location = new System.Drawing.Point(8, 136);
             this.chkForceCPURendering.Name = "chkForceCPURendering";
             this.chkForceCPURendering.Size = new System.Drawing.Size(120, 17);
             this.chkForceCPURendering.TabIndex = 51;
@@ -33292,7 +33294,7 @@
             //
             this.chkGpuMesh3D.AutoSize = true;
             this.chkGpuMesh3D.Image = null;
-            this.chkGpuMesh3D.Location = new System.Drawing.Point(8, 47);
+            this.chkGpuMesh3D.Location = new System.Drawing.Point(8, 64);
             this.chkGpuMesh3D.Name = "chkGpuMesh3D";
             this.chkGpuMesh3D.Size = new System.Drawing.Size(130, 17);
             this.chkGpuMesh3D.TabIndex = 52;
@@ -33300,6 +33302,19 @@
             this.toolTip1.SetToolTip(this.chkGpuMesh3D, "Experimental: renders the 3D panadapter surface and the waterfalls as real GPU meshes (Tier 3).\n\nHardware rendering only - automatically falls back to the D2D renderers on WARP or if any mesh pipeline fails.");
             this.chkGpuMesh3D.UseVisualStyleBackColor = true;
             this.chkGpuMesh3D.CheckedChanged += new System.EventHandler(this.chkGpuMesh3D_CheckedChanged);
+            // 
+            // chkGpuComputeShaders
+            // 
+            this.chkGpuComputeShaders.AutoSize = true;
+            this.chkGpuComputeShaders.Image = null;
+            this.chkGpuComputeShaders.Location = new System.Drawing.Point(8, 82);
+            this.chkGpuComputeShaders.Name = "chkGpuComputeShaders";
+            this.chkGpuComputeShaders.Size = new System.Drawing.Size(135, 17);
+            this.chkGpuComputeShaders.TabIndex = 53;
+            this.chkGpuComputeShaders.Text = "GPU compute shaders (exp.)";
+            this.toolTip1.SetToolTip(this.chkGpuComputeShaders, "Experimental: offloads waterfall colour conversion and spectrum normalisation to GPU compute shaders.\n\nHardware rendering only - automatically falls back to the CPU paths on WARP or if any compute pipeline fails.");
+            this.chkGpuComputeShaders.UseVisualStyleBackColor = true;
+            this.chkGpuComputeShaders.CheckedChanged += new System.EventHandler(this.chkGpuComputeShaders_CheckedChanged);
             // 
             // chkSpectrumGlow
             // 
@@ -33320,7 +33335,7 @@
             // 
             this.chkAccurateFrameTiming.AutoSize = true;
             this.chkAccurateFrameTiming.Image = null;
-            this.chkAccurateFrameTiming.Location = new System.Drawing.Point(8, 143);
+            this.chkAccurateFrameTiming.Location = new System.Drawing.Point(8, 154);
             this.chkAccurateFrameTiming.Name = "chkAccurateFrameTiming";
             this.chkAccurateFrameTiming.Size = new System.Drawing.Size(128, 17);
             this.chkAccurateFrameTiming.TabIndex = 49;
@@ -33334,7 +33349,7 @@
             // 
             this.chkAntiAlias.AutoSize = true;
             this.chkAntiAlias.Image = null;
-            this.chkAntiAlias.Location = new System.Drawing.Point(8, 71);
+            this.chkAntiAlias.Location = new System.Drawing.Point(8, 100);
             this.chkAntiAlias.Name = "chkAntiAlias";
             this.chkAntiAlias.Size = new System.Drawing.Size(80, 17);
             this.chkAntiAlias.TabIndex = 48;
@@ -75371,6 +75386,7 @@
         private CheckBoxTS chkVSyncDX;
         private CheckBoxTS chkForceCPURendering;
         private CheckBoxTS chkGpuMesh3D;
+        private CheckBoxTS chkGpuComputeShaders;
         private CheckBoxTS chkSpectrumGlow;
         private LabelTS lblBlobMS;
         private NumericUpDownTS udBlobPeakHoldMS;

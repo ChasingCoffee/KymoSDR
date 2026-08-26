@@ -1382,7 +1382,7 @@ namespace Thetis
                         if (!resizeDX2D(out string err))
                         {
                             ShutdownDX2D();
-                            MessageBox.Show("Unable to resize DirectX render target (Target). DirectX has been shut down.\n\n" + err, "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                            Common.ReportError("Thetis DirectX", "Unable to resize DirectX render target (Target). DirectX has been shut down.\n\n" + err);
                             return;
                         }
 
@@ -3566,6 +3566,7 @@ namespace Thetis
                     ReleaseGpuMeshDeviceObjects();
                     ReleaseWaterfallMeshObjects();
                     ReleaseSpectrumFillObjects();
+                    ReleaseComputeResources();
                     _backBufferBitmap?.Dispose();
                     _d2dRenderTarget = null;
                     _d2dDeviceContext?.Dispose();
@@ -3606,7 +3607,7 @@ namespace Thetis
                 }
                 catch (Exception e)
                 {
-                    MessageBox.Show("Problem Shutting Down DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Thetis DirectX", "Problem Shutting Down DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", e);
                 }
             }
         }
@@ -3840,7 +3841,7 @@ namespace Thetis
                 {
                     // issue setting up dx
                     ShutdownDX2D();
-                    MessageBox.Show("Problem initialising DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Thetis DirectX", "Problem initialising DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", e);
                 }
             }
         }
@@ -3960,6 +3961,7 @@ namespace Thetis
             ReleaseGpuMeshDeviceObjects();
             ReleaseWaterfallMeshObjects();
             ReleaseSpectrumFillObjects();
+            ReleaseComputeResources();
             _backBufferBitmap?.Dispose();
             _d2dRenderTarget = null;
             _d2dDeviceContext?.Dispose();
@@ -4104,7 +4106,7 @@ namespace Thetis
                     if (!resizeDX2D(out string err))
                     {
                         ShutdownDX2D();
-                        MessageBox.Show("Unable to resize DirectX render target (ResetDX2DModeDescription). DirectX has been shut down.\n\n" + err, "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                        Common.ReportError("Thetis DirectX", "Unable to resize DirectX render target (ResetDX2DModeDescription). DirectX has been shut down.\n\n" + err);
                         return;
                     }
 
@@ -4776,7 +4778,7 @@ namespace Thetis
                 if (!tryWarpDowngrade(e.Message))
                 {
                     ShutdownDX2D();
-                    MessageBox.Show("Problem in DirectX Renderer !" + System.Environment.NewLine + System.Environment.NewLine + "[ " + e.ToString() + " ]", "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Thetis DirectX", "Problem in DirectX Renderer !" + System.Environment.NewLine + System.Environment.NewLine + "[ " + e.ToString() + " ]", e);
                 }
             }
         }
@@ -9260,6 +9262,19 @@ namespace Thetis
 
                     bool stopWaterfallOnTx = (rx == 1 && m_bStopRX1WaterfallOnTX && local_mox) ||
                                              (rx == 2 && m_bStopRX2WaterfallOnTX && local_mox);
+
+                    // Tier 3 GPU compute shaders: when armed, offload the per-pixel
+                    // colour conversion to a GPU compute shader.  Falls back to the
+                    // CPU colour switch above on any failure (GPU fallback rule 1).
+                    bool bComputeFilledRow = false;
+                    if (ComputeArmed && (!stopWaterfallOnTx || clearExistingBitmap))
+                    {
+                        float linCor = (cScheme == ColorScheme.LinLog) ? LinLogCor :
+                                       (cScheme == ColorScheme.LinRad || cScheme == ColorScheme.LinAuto) ? LinCor : 0f;
+                        bComputeFilledRow = TryDispatchWaterfallCompute(waterfall_data, row, W,
+                            nDecimatedWidth, m_nDecimation, cScheme, low_threshold, high_threshold,
+                            linCor, rx == 2, local_mox);
+                    }
 
                     int preservedBitmapHeight = (int)waterfallBitmap.Size.Height - (addRow ? 1 : 0);
 
