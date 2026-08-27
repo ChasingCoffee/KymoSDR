@@ -405,6 +405,8 @@
             this.tpOptions3 = new System.Windows.Forms.TabPage();
             this.groupBoxTS57 = new System.Windows.Forms.GroupBoxTS();
             this.groupBoxTS58 = new System.Windows.Forms.GroupBoxTS();
+            this.groupBoxTS71 = new System.Windows.Forms.GroupBoxTS();
+            this.chkMeshDiagLog = new System.Windows.Forms.CheckBoxTS();
             this.radVFOSYNC_nothing = new System.Windows.Forms.RadioButtonTS();
             this.radVFOSYNC_ab = new System.Windows.Forms.RadioButtonTS();
             this.radVFOSYNC_ba = new System.Windows.Forms.RadioButtonTS();
@@ -1986,6 +1988,7 @@
             this.tpDisplay = new System.Windows.Forms.TabPage();
             this.tcDisplay = new System.Windows.Forms.TabControl();
             this.tpDisplayGeneral = new System.Windows.Forms.TabPage();
+            this.grpDisplay3DPanadapter = new System.Windows.Forms.GroupBoxTS();
             this.grpSpectralWarningLeds = new System.Windows.Forms.GroupBoxTS();
             this.chkSpecWarningLEDGetPixels = new System.Windows.Forms.CheckBoxTS();
             this.chkSpecWarningLEDRenderDelay = new System.Windows.Forms.CheckBoxTS();
@@ -2007,6 +2010,10 @@
             this.chkANAN8000DLEDisplayVoltsAmps = new System.Windows.Forms.CheckBoxTS();
             this.grpDisplayDriverEngine = new System.Windows.Forms.GroupBoxTS();
             this.chkVSyncDX = new System.Windows.Forms.CheckBoxTS();
+            this.chkForceCPURendering = new System.Windows.Forms.CheckBoxTS();
+            this.chkGpuMesh3D = new System.Windows.Forms.CheckBoxTS();
+            this.chkGpuComputeShaders = new System.Windows.Forms.CheckBoxTS();
+            this.chkSpectrumGlow = new System.Windows.Forms.CheckBoxTS();
             this.chkAccurateFrameTiming = new System.Windows.Forms.CheckBoxTS();
             this.chkAntiAlias = new System.Windows.Forms.CheckBoxTS();
             this.comboDisplayThreadPriority = new System.Windows.Forms.ComboBoxTS();
@@ -2043,6 +2050,8 @@
             this.labelTS608 = new System.Windows.Forms.LabelTS();
             this.udDisplayDecimation = new System.Windows.Forms.NumericUpDownTS();
             this.chkDisplayPanFill = new System.Windows.Forms.CheckBoxTS();
+            this.chkDisplay3DPanadapter = new System.Windows.Forms.CheckBoxTS();
+            this.btn3DSettings = new System.Windows.Forms.ButtonTS();
             this.udDisplayCPUMeter = new System.Windows.Forms.NumericUpDownTS();
             this.lblDisplayCPUMeter = new System.Windows.Forms.LabelTS();
             this.udDisplayPeakText = new System.Windows.Forms.NumericUpDownTS();
@@ -2882,6 +2891,7 @@
             this.btnTXProfileDelete = new System.Windows.Forms.ButtonTS();
             this.btnTXProfileSave = new System.Windows.Forms.ButtonTS();
             this.comboTXProfileName = new System.Windows.Forms.ComboBoxTS();
+            this.btnTXProfileOrder = new System.Windows.Forms.ButtonTS();
             this.grpPATune = new System.Windows.Forms.GroupBoxTS();
             this.radUseFixedDriveTune = new System.Windows.Forms.RadioButtonTS();
             this.radUseDriveSliderTune = new System.Windows.Forms.RadioButtonTS();
@@ -4113,6 +4123,7 @@
             this.timer_RawInputMouseWheel = new System.Windows.Forms.Timer(this.components);
             this.tmrCFCOMPGain = new System.Windows.Forms.Timer(this.components);
             this.tmrCheckProfile = new System.Windows.Forms.Timer(this.components);
+            this.timerPhRot = new System.Windows.Forms.Timer(this.components);
             this.tcMMsettings = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.grpHistoryItem = new System.Windows.Forms.GroupBoxTS();
@@ -4867,6 +4878,7 @@
             this.tpDisplay.SuspendLayout();
             this.tcDisplay.SuspendLayout();
             this.tpDisplayGeneral.SuspendLayout();
+            this.grpDisplay3DPanadapter.SuspendLayout();
             this.grpSpectralWarningLeds.SuspendLayout();
             this.groupBoxTS13.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.udPeakBlobDropDBMs)).BeginInit();
@@ -10941,11 +10953,35 @@
             // 
             this.tpOptions3.BackColor = System.Drawing.SystemColors.Control;
             this.tpOptions3.Controls.Add(this.groupBoxTS57);
+            this.tpOptions3.Controls.Add(this.groupBoxTS71);
             this.tpOptions3.Location = new System.Drawing.Point(4, 22);
             this.tpOptions3.Name = "tpOptions3";
             this.tpOptions3.Size = new System.Drawing.Size(716, 384);
             this.tpOptions3.TabIndex = 3;
             this.tpOptions3.Text = "Options-3";
+            // 
+            // groupBoxTS71
+            // 
+            this.groupBoxTS71.Controls.Add(this.chkMeshDiagLog);
+            this.groupBoxTS71.Location = new System.Drawing.Point(210, 8);
+            this.groupBoxTS71.Name = "groupBoxTS71";
+            this.groupBoxTS71.Size = new System.Drawing.Size(190, 56);
+            this.groupBoxTS71.TabIndex = 34;
+            this.groupBoxTS71.TabStop = false;
+            this.groupBoxTS71.Text = "Diagnostics";
+            // 
+            // chkMeshDiagLog
+            // 
+            this.chkMeshDiagLog.AutoSize = true;
+            this.chkMeshDiagLog.Image = null;
+            this.chkMeshDiagLog.Location = new System.Drawing.Point(14, 23);
+            this.chkMeshDiagLog.Name = "chkMeshDiagLog";
+            this.chkMeshDiagLog.Size = new System.Drawing.Size(146, 17);
+            this.chkMeshDiagLog.TabIndex = 0;
+            this.chkMeshDiagLog.Text = "Log GPU mesh events";
+            this.toolTip1.SetToolTip(this.chkMeshDiagLog, "Write GPU mesh / spectrum glow diagnostic messages into ErrorLog.txt (in the application data folder).\n\nTakes effect immediately; enable before switching GPU modes to capture init/fallback events.");
+            this.chkMeshDiagLog.UseVisualStyleBackColor = true;
+            this.chkMeshDiagLog.CheckedChanged += new System.EventHandler(this.chkMeshDiagLog_CheckedChanged);
             // 
             // groupBoxTS57
             // 
@@ -32899,6 +32935,7 @@
             // tpDisplayGeneral
             // 
             this.tpDisplayGeneral.BackColor = System.Drawing.SystemColors.Control;
+            this.tpDisplayGeneral.Controls.Add(this.grpDisplay3DPanadapter);
             this.tpDisplayGeneral.Controls.Add(this.grpSpectralWarningLeds);
             this.tpDisplayGeneral.Controls.Add(this.groupBoxTS13);
             this.tpDisplayGeneral.Controls.Add(this.groupBoxTS11);
@@ -32921,7 +32958,7 @@
             this.grpSpectralWarningLeds.Controls.Add(this.chkSpecWarningLEDRenderDelay);
             this.grpSpectralWarningLeds.Location = new System.Drawing.Point(394, 296);
             this.grpSpectralWarningLeds.Name = "grpSpectralWarningLeds";
-            this.grpSpectralWarningLeds.Size = new System.Drawing.Size(166, 97);
+            this.grpSpectralWarningLeds.Size = new System.Drawing.Size(147, 97);
             this.grpSpectralWarningLeds.TabIndex = 94;
             this.grpSpectralWarningLeds.TabStop = false;
             this.grpSpectralWarningLeds.Text = "Spectral Warning LEDs";
@@ -32932,7 +32969,7 @@
             this.chkSpecWarningLEDGetPixels.Image = null;
             this.chkSpecWarningLEDGetPixels.Location = new System.Drawing.Point(8, 46);
             this.chkSpecWarningLEDGetPixels.Name = "chkSpecWarningLEDGetPixels";
-            this.chkSpecWarningLEDGetPixels.Size = new System.Drawing.Size(148, 17);
+            this.chkSpecWarningLEDGetPixels.Size = new System.Drawing.Size(131, 17);
             this.chkSpecWarningLEDGetPixels.TabIndex = 52;
             this.chkSpecWarningLEDGetPixels.Text = "GetPixels not ready";
             this.toolTip1.SetToolTip(this.chkSpecWarningLEDGetPixels, "The analyser GetPixels does not have any data for this frame");
@@ -32947,7 +32984,7 @@
             this.chkSpecWarningLEDRenderDelay.Image = null;
             this.chkSpecWarningLEDRenderDelay.Location = new System.Drawing.Point(8, 22);
             this.chkSpecWarningLEDRenderDelay.Name = "chkSpecWarningLEDRenderDelay";
-            this.chkSpecWarningLEDRenderDelay.Size = new System.Drawing.Size(148, 17);
+            this.chkSpecWarningLEDRenderDelay.Size = new System.Drawing.Size(131, 17);
             this.chkSpecWarningLEDRenderDelay.TabIndex = 51;
             this.chkSpecWarningLEDRenderDelay.Text = "Unable to render in time";
             this.toolTip1.SetToolTip(this.chkSpecWarningLEDRenderDelay, "The display engine is unable to render at the requested frame rate");
@@ -33211,13 +33248,16 @@
             // grpDisplayDriverEngine
             // 
             this.grpDisplayDriverEngine.Controls.Add(this.chkVSyncDX);
+            this.grpDisplayDriverEngine.Controls.Add(this.chkForceCPURendering);
+            this.grpDisplayDriverEngine.Controls.Add(this.chkGpuMesh3D);
+            this.grpDisplayDriverEngine.Controls.Add(this.chkGpuComputeShaders);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAccurateFrameTiming);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAntiAlias);
             this.grpDisplayDriverEngine.Controls.Add(this.comboDisplayThreadPriority);
             this.grpDisplayDriverEngine.Controls.Add(this.chkShowFPS);
             this.grpDisplayDriverEngine.Location = new System.Drawing.Point(566, 166);
             this.grpDisplayDriverEngine.Name = "grpDisplayDriverEngine";
-            this.grpDisplayDriverEngine.Size = new System.Drawing.Size(147, 227);
+            this.grpDisplayDriverEngine.Size = new System.Drawing.Size(147, 175);
             this.grpDisplayDriverEngine.TabIndex = 46;
             this.grpDisplayDriverEngine.TabStop = false;
             this.grpDisplayDriverEngine.Text = "DirectX Display Settings";
@@ -33228,7 +33268,7 @@
             this.chkVSyncDX.Checked = true;
             this.chkVSyncDX.CheckState = System.Windows.Forms.CheckState.Checked;
             this.chkVSyncDX.Image = null;
-            this.chkVSyncDX.Location = new System.Drawing.Point(8, 95);
+            this.chkVSyncDX.Location = new System.Drawing.Point(8, 118);
             this.chkVSyncDX.Name = "chkVSyncDX";
             this.chkVSyncDX.Size = new System.Drawing.Size(57, 17);
             this.chkVSyncDX.TabIndex = 50;
@@ -33237,11 +33277,65 @@
             this.chkVSyncDX.UseVisualStyleBackColor = true;
             this.chkVSyncDX.CheckedChanged += new System.EventHandler(this.chkVSyncDX_CheckedChanged);
             // 
+            // chkForceCPURendering
+            // 
+            this.chkForceCPURendering.AutoSize = true;
+            this.chkForceCPURendering.Image = null;
+            this.chkForceCPURendering.Location = new System.Drawing.Point(8, 136);
+            this.chkForceCPURendering.Name = "chkForceCPURendering";
+            this.chkForceCPURendering.Size = new System.Drawing.Size(120, 17);
+            this.chkForceCPURendering.TabIndex = 51;
+            this.chkForceCPURendering.Text = "Force CPU rendering";
+            this.toolTip1.SetToolTip(this.chkForceCPURendering, "Render via the WARP software rasteriser instead of the GPU.\n\nUse if the graphics driver causes problems, e.g. over remote desktop.\nIf automatic mode fails on startup it also falls back to this automatically.");
+            this.chkForceCPURendering.UseVisualStyleBackColor = true;
+            this.chkForceCPURendering.CheckedChanged += new System.EventHandler(this.chkForceCPURendering_CheckedChanged);
+            //
+            // chkGpuMesh3D
+            //
+            this.chkGpuMesh3D.AutoSize = true;
+            this.chkGpuMesh3D.Image = null;
+            this.chkGpuMesh3D.Location = new System.Drawing.Point(8, 64);
+            this.chkGpuMesh3D.Name = "chkGpuMesh3D";
+            this.chkGpuMesh3D.Size = new System.Drawing.Size(130, 17);
+            this.chkGpuMesh3D.TabIndex = 52;
+            this.chkGpuMesh3D.Text = "GPU mesh (exp.)";
+            this.toolTip1.SetToolTip(this.chkGpuMesh3D, "Experimental: renders the 3D panadapter surface and the waterfalls as real GPU meshes (Tier 3).\n\nHardware rendering only - automatically falls back to the D2D renderers on WARP or if any mesh pipeline fails.");
+            this.chkGpuMesh3D.UseVisualStyleBackColor = true;
+            this.chkGpuMesh3D.CheckedChanged += new System.EventHandler(this.chkGpuMesh3D_CheckedChanged);
+            // 
+            // chkGpuComputeShaders
+            // 
+            this.chkGpuComputeShaders.AutoSize = true;
+            this.chkGpuComputeShaders.Image = null;
+            this.chkGpuComputeShaders.Location = new System.Drawing.Point(8, 82);
+            this.chkGpuComputeShaders.Name = "chkGpuComputeShaders";
+            this.chkGpuComputeShaders.Size = new System.Drawing.Size(135, 17);
+            this.chkGpuComputeShaders.TabIndex = 53;
+            this.chkGpuComputeShaders.Text = "GPU compute shaders (exp.)";
+            this.toolTip1.SetToolTip(this.chkGpuComputeShaders, "Experimental: offloads waterfall colour conversion and spectrum normalisation to GPU compute shaders.\n\nHardware rendering only - automatically falls back to the CPU paths on WARP or if any compute pipeline fails.");
+            this.chkGpuComputeShaders.UseVisualStyleBackColor = true;
+            this.chkGpuComputeShaders.CheckedChanged += new System.EventHandler(this.chkGpuComputeShaders_CheckedChanged);
+            // 
+            // chkSpectrumGlow
+            // 
+            this.chkSpectrumGlow.AutoSize = true;
+            this.chkSpectrumGlow.Checked = true;
+            this.chkSpectrumGlow.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkSpectrumGlow.Image = null;
+            this.chkSpectrumGlow.Location = new System.Drawing.Point(9, 240);
+            this.chkSpectrumGlow.Name = "chkSpectrumGlow";
+            this.chkSpectrumGlow.Size = new System.Drawing.Size(110, 17);
+            this.chkSpectrumGlow.TabIndex = 97;
+            this.chkSpectrumGlow.Text = "Line Glow";
+            this.toolTip1.SetToolTip(this.chkSpectrumGlow, "Bloom/glow on the live spectrum trace - follows the data line colour and width above.\r\n\r\nHardware rendering only - automatically ignored when running on the WARP software path (Force CPU rendering).");
+            this.chkSpectrumGlow.UseVisualStyleBackColor = true;
+            this.chkSpectrumGlow.CheckedChanged += new System.EventHandler(this.chkSpectrumGlow_CheckedChanged);
+            // 
             // chkAccurateFrameTiming
             // 
             this.chkAccurateFrameTiming.AutoSize = true;
             this.chkAccurateFrameTiming.Image = null;
-            this.chkAccurateFrameTiming.Location = new System.Drawing.Point(8, 119);
+            this.chkAccurateFrameTiming.Location = new System.Drawing.Point(8, 154);
             this.chkAccurateFrameTiming.Name = "chkAccurateFrameTiming";
             this.chkAccurateFrameTiming.Size = new System.Drawing.Size(128, 17);
             this.chkAccurateFrameTiming.TabIndex = 49;
@@ -33255,7 +33349,7 @@
             // 
             this.chkAntiAlias.AutoSize = true;
             this.chkAntiAlias.Image = null;
-            this.chkAntiAlias.Location = new System.Drawing.Point(8, 71);
+            this.chkAntiAlias.Location = new System.Drawing.Point(8, 100);
             this.chkAntiAlias.Name = "chkAntiAlias";
             this.chkAntiAlias.Size = new System.Drawing.Size(80, 17);
             this.chkAntiAlias.TabIndex = 48;
@@ -33865,6 +33959,40 @@
             this.chkDisplayPanFill.Text = "Fill Panadapter";
             this.toolTip1.SetToolTip(this.chkDisplayPanFill, "Check to fill the panadapter display line below the data.");
             this.chkDisplayPanFill.CheckedChanged += new System.EventHandler(this.chkDisplayPanFill_CheckedChanged);
+            // 
+            // grpDisplay3DPanadapter
+            // 
+            this.grpDisplay3DPanadapter.Controls.Add(this.chkDisplay3DPanadapter);
+            this.grpDisplay3DPanadapter.Controls.Add(this.btn3DSettings);
+            this.grpDisplay3DPanadapter.Location = new System.Drawing.Point(394, 148);
+            this.grpDisplay3DPanadapter.Name = "grpDisplay3DPanadapter";
+            this.grpDisplay3DPanadapter.Size = new System.Drawing.Size(147, 142);
+            this.grpDisplay3DPanadapter.TabIndex = 95;
+            this.grpDisplay3DPanadapter.TabStop = false;
+            this.grpDisplay3DPanadapter.Text = "3D Panadapter";
+            // 
+            // chkDisplay3DPanadapter
+            // 
+            this.chkDisplay3DPanadapter.AutoSize = true;
+            this.chkDisplay3DPanadapter.Image = null;
+            this.chkDisplay3DPanadapter.Location = new System.Drawing.Point(8, 21);
+            this.chkDisplay3DPanadapter.Name = "chkDisplay3DPanadapter";
+            this.chkDisplay3DPanadapter.Size = new System.Drawing.Size(65, 17);
+            this.chkDisplay3DPanadapter.TabIndex = 0;
+            this.chkDisplay3DPanadapter.Text = "Enabled";
+            this.toolTip1.SetToolTip(this.chkDisplay3DPanadapter, "Enable 3D stacked-trace panadapter with perspective and solid ridges.");
+            this.chkDisplay3DPanadapter.CheckedChanged += new System.EventHandler(this.chkDisplay3DPanadapter_CheckedChanged);
+            // 
+            // btn3DSettings
+            // 
+            this.btn3DSettings.Image = null;
+            this.btn3DSettings.Location = new System.Drawing.Point(6, 44);
+            this.btn3DSettings.Name = "btn3DSettings";
+            this.btn3DSettings.Size = new System.Drawing.Size(135, 23);
+            this.btn3DSettings.TabIndex = 1;
+            this.btn3DSettings.Text = "3D Settings...";
+            this.toolTip1.SetToolTip(this.btn3DSettings, "Open the 3D panadapter settings window.");
+            this.btn3DSettings.Click += new System.EventHandler(this.btn3DSettings_Click);
             // 
             // udDisplayCPUMeter
             // 
@@ -46286,7 +46414,7 @@
             this.grpPhRot.Controls.Add(this.chkPHROTEnable);
             this.grpPhRot.Location = new System.Drawing.Point(513, 264);
             this.grpPhRot.Name = "grpPhRot";
-            this.grpPhRot.Size = new System.Drawing.Size(124, 121);
+            this.grpPhRot.Size = new System.Drawing.Size(210, 130);
             this.grpPhRot.TabIndex = 170;
             this.grpPhRot.TabStop = false;
             this.grpPhRot.Text = "Phase Rotator";
@@ -47225,12 +47353,13 @@
             // 
             // grpTXProfile
             // 
+            this.grpTXProfile.Controls.Add(this.btnTXProfileOrder);
             this.grpTXProfile.Controls.Add(this.btnTXProfileDelete);
             this.grpTXProfile.Controls.Add(this.btnTXProfileSave);
             this.grpTXProfile.Controls.Add(this.comboTXProfileName);
             this.grpTXProfile.Location = new System.Drawing.Point(8, 8);
             this.grpTXProfile.Name = "grpTXProfile";
-            this.grpTXProfile.Size = new System.Drawing.Size(143, 75);
+            this.grpTXProfile.Size = new System.Drawing.Size(175, 75);
             this.grpTXProfile.TabIndex = 23;
             this.grpTXProfile.TabStop = false;
             this.grpTXProfile.Text = "Profiles";
@@ -47238,10 +47367,10 @@
             // btnTXProfileDelete
             // 
             this.btnTXProfileDelete.Image = null;
-            this.btnTXProfileDelete.Location = new System.Drawing.Point(89, 48);
+            this.btnTXProfileDelete.Location = new System.Drawing.Point(114, 48);
             this.btnTXProfileDelete.Name = "btnTXProfileDelete";
             this.btnTXProfileDelete.Selectable = true;
-            this.btnTXProfileDelete.Size = new System.Drawing.Size(48, 21);
+            this.btnTXProfileDelete.Size = new System.Drawing.Size(50, 21);
             this.btnTXProfileDelete.TabIndex = 2;
             this.btnTXProfileDelete.Text = "Delete";
             this.toolTip1.SetToolTip(this.btnTXProfileDelete, "Click to delete the currently selected TX Profile.");
@@ -47253,7 +47382,7 @@
             this.btnTXProfileSave.Location = new System.Drawing.Point(6, 48);
             this.btnTXProfileSave.Name = "btnTXProfileSave";
             this.btnTXProfileSave.Selectable = true;
-            this.btnTXProfileSave.Size = new System.Drawing.Size(48, 21);
+            this.btnTXProfileSave.Size = new System.Drawing.Size(50, 21);
             this.btnTXProfileSave.TabIndex = 1;
             this.btnTXProfileSave.Text = "Save";
             this.toolTip1.SetToolTip(this.btnTXProfileSave, "Click to save the current settings to a TX Profile.");
@@ -47269,6 +47398,18 @@
             this.comboTXProfileName.TabIndex = 0;
             this.toolTip1.SetToolTip(this.comboTXProfileName, "Sets the current Transmit Profile to be used.");
             this.comboTXProfileName.SelectedIndexChanged += new System.EventHandler(this.comboTXProfileName_SelectedIndexChanged);
+            // 
+            // btnTXProfileOrder
+            // 
+            this.btnTXProfileOrder.Image = null;
+            this.btnTXProfileOrder.Location = new System.Drawing.Point(60, 48);
+            this.btnTXProfileOrder.Name = "btnTXProfileOrder";
+            this.btnTXProfileOrder.Selectable = true;
+            this.btnTXProfileOrder.Size = new System.Drawing.Size(50, 21);
+            this.btnTXProfileOrder.TabIndex = 3;
+            this.btnTXProfileOrder.Text = "Order...";
+            this.toolTip1.SetToolTip(this.btnTXProfileOrder, "Reorder the TX Profile list.");
+            this.btnTXProfileOrder.Click += new System.EventHandler(this.btnTXProfileOrder_Click);
             // 
             // grpPATune
             // 
@@ -47389,7 +47530,7 @@
             this.grpTXFilter.Controls.Add(this.udTXFilterLow);
             this.grpTXFilter.Controls.Add(this.lblTXFilterLow);
             this.grpTXFilter.Controls.Add(this.udTXFilterHigh);
-            this.grpTXFilter.Location = new System.Drawing.Point(170, 8);
+            this.grpTXFilter.Location = new System.Drawing.Point(190, 8);
             this.grpTXFilter.Name = "grpTXFilter";
             this.grpTXFilter.Size = new System.Drawing.Size(128, 75);
             this.grpTXFilter.TabIndex = 19;
@@ -52754,6 +52895,7 @@
             // 
             this.grpAppPanadapter.Controls.Add(this.chkGridControl_minor);
             this.grpAppPanadapter.Controls.Add(this.chkJoinBandEdges);
+            this.grpAppPanadapter.Controls.Add(this.chkSpectrumGlow);
             this.grpAppPanadapter.Controls.Add(this.tbBandstackOverlayAlpha);
             this.grpAppPanadapter.Controls.Add(this.clrbtnBandstackOverlay);
             this.grpAppPanadapter.Controls.Add(this.labelTS532);
@@ -52852,7 +52994,7 @@
             // tbDataLineAlpha
             // 
             this.tbDataLineAlpha.AutoSize = false;
-            this.tbDataLineAlpha.Location = new System.Drawing.Point(180, 214);
+            this.tbDataLineAlpha.Location = new System.Drawing.Point(180, 186);
             this.tbDataLineAlpha.Maximum = 255;
             this.tbDataLineAlpha.Name = "tbDataLineAlpha";
             this.tbDataLineAlpha.Size = new System.Drawing.Size(66, 18);
@@ -52876,7 +53018,7 @@
             // tbActiveSpectralPeakAlpha
             // 
             this.tbActiveSpectralPeakAlpha.AutoSize = false;
-            this.tbActiveSpectralPeakAlpha.Location = new System.Drawing.Point(180, 186);
+            this.tbActiveSpectralPeakAlpha.Location = new System.Drawing.Point(180, 158);
             this.tbActiveSpectralPeakAlpha.Maximum = 255;
             this.tbActiveSpectralPeakAlpha.Name = "tbActiveSpectralPeakAlpha";
             this.tbActiveSpectralPeakAlpha.Size = new System.Drawing.Size(66, 18);
@@ -52904,7 +53046,7 @@
             this.clrbtnActiveSpectralPeak.Automatic = "Automatic";
             this.clrbtnActiveSpectralPeak.Color = System.Drawing.Color.Gray;
             this.clrbtnActiveSpectralPeak.Image = null;
-            this.clrbtnActiveSpectralPeak.Location = new System.Drawing.Point(130, 186);
+            this.clrbtnActiveSpectralPeak.Location = new System.Drawing.Point(130, 158);
             this.clrbtnActiveSpectralPeak.MoreColors = "More Colors...";
             this.clrbtnActiveSpectralPeak.Name = "clrbtnActiveSpectralPeak";
             this.clrbtnActiveSpectralPeak.Selectable = true;
@@ -52926,7 +53068,7 @@
             // 
             this.lblActiveSpectralPeakColour.AutoSize = true;
             this.lblActiveSpectralPeakColour.Image = null;
-            this.lblActiveSpectralPeakColour.Location = new System.Drawing.Point(6, 191);
+            this.lblActiveSpectralPeakColour.Location = new System.Drawing.Point(6, 163);
             this.lblActiveSpectralPeakColour.Name = "lblActiveSpectralPeakColour";
             this.lblActiveSpectralPeakColour.Size = new System.Drawing.Size(68, 13);
             this.lblActiveSpectralPeakColour.TabIndex = 93;
@@ -53022,7 +53164,7 @@
             0,
             0,
             65536});
-            this.udDisplayLineWidth.Location = new System.Drawing.Point(130, 243);
+            this.udDisplayLineWidth.Location = new System.Drawing.Point(130, 214);
             this.udDisplayLineWidth.Maximum = new decimal(new int[] {
             50,
             0,
@@ -53072,7 +53214,7 @@
             // 
             this.lblDisplayLineWidth.AutoSize = true;
             this.lblDisplayLineWidth.Image = null;
-            this.lblDisplayLineWidth.Location = new System.Drawing.Point(6, 244);
+            this.lblDisplayLineWidth.Location = new System.Drawing.Point(6, 215);
             this.lblDisplayLineWidth.Name = "lblDisplayLineWidth";
             this.lblDisplayLineWidth.Size = new System.Drawing.Size(61, 13);
             this.lblDisplayLineWidth.TabIndex = 43;
@@ -53106,7 +53248,7 @@
             this.clrbtnDataLine.Automatic = "Automatic";
             this.clrbtnDataLine.Color = System.Drawing.Color.White;
             this.clrbtnDataLine.Image = null;
-            this.clrbtnDataLine.Location = new System.Drawing.Point(130, 214);
+            this.clrbtnDataLine.Location = new System.Drawing.Point(130, 186);
             this.clrbtnDataLine.MoreColors = "More Colors...";
             this.clrbtnDataLine.Name = "clrbtnDataLine";
             this.clrbtnDataLine.Selectable = true;
@@ -53131,7 +53273,7 @@
             // 
             this.lblDisplayDataLineColor.AutoSize = true;
             this.lblDisplayDataLineColor.Image = null;
-            this.lblDisplayDataLineColor.Location = new System.Drawing.Point(6, 219);
+            this.lblDisplayDataLineColor.Location = new System.Drawing.Point(6, 191);
             this.lblDisplayDataLineColor.Name = "lblDisplayDataLineColor";
             this.lblDisplayDataLineColor.Size = new System.Drawing.Size(56, 13);
             this.lblDisplayDataLineColor.TabIndex = 41;
@@ -65933,6 +66075,12 @@
             this.tmrCheckProfile.Interval = 1000;
             this.tmrCheckProfile.Tick += new System.EventHandler(this.tmrCheckProfile_Tick);
             // 
+            // timerPhRot
+            // 
+            this.timerPhRot.Enabled = true;
+            this.timerPhRot.Interval = 250;
+            this.timerPhRot.Tick += new System.EventHandler(this.timerPhRot_Tick);
+            // 
             // tcMMsettings
             // 
             this.tcMMsettings.Controls.Add(this.tabPage1);
@@ -71706,7 +71854,10 @@
             this.tpDisplay.ResumeLayout(false);
             this.tcDisplay.ResumeLayout(false);
             this.tpDisplayGeneral.ResumeLayout(false);
+            this.grpDisplay3DPanadapter.ResumeLayout(false);
+            this.grpDisplay3DPanadapter.PerformLayout();
             this.grpSpectralWarningLeds.ResumeLayout(false);
+            this.grpSpectralWarningLeds.PerformLayout();
             this.groupBoxTS13.ResumeLayout(false);
             this.groupBoxTS13.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.udPeakBlobDropDBMs)).EndInit();
@@ -72614,6 +72765,43 @@
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDownTS36)).EndInit();
             this.panelTS4.ResumeLayout(false);
             this.panelTS4.PerformLayout();
+            // Yurij_eu2av: hidden persisted target Feedback Level for PureSignal auto-attenuator
+            this.udPSTargetFeedbackLevel = new System.Windows.Forms.NumericUpDownTS();
+            ((System.ComponentModel.ISupportInitialize)(this.udPSTargetFeedbackLevel)).BeginInit();
+            this.udPSTargetFeedbackLevel.Location = new System.Drawing.Point(-100, -100);
+            this.udPSTargetFeedbackLevel.Name = "udPSTargetFeedbackLevel";
+            this.udPSTargetFeedbackLevel.Size = new System.Drawing.Size(50, 20);
+            this.udPSTargetFeedbackLevel.TabIndex = 999;
+            this.udPSTargetFeedbackLevel.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            this.udPSTargetFeedbackLevel.Maximum = new decimal(new int[] { 256, 0, 0, 0 });
+            this.udPSTargetFeedbackLevel.Value = new decimal(new int[] { 152, 0, 0, 0 });
+            this.udPSTargetFeedbackLevel.Visible = false;
+            ((System.ComponentModel.ISupportInitialize)(this.udPSTargetFeedbackLevel)).EndInit();
+            this.Controls.Add(this.udPSTargetFeedbackLevel);
+            // Yurij_eu2av: hidden persisted PureSignal outlier settings
+            this.udPSOutlierSigma = new System.Windows.Forms.NumericUpDownTS();
+            ((System.ComponentModel.ISupportInitialize)(this.udPSOutlierSigma)).BeginInit();
+            this.udPSOutlierSigma.Location = new System.Drawing.Point(-100, -100);
+            this.udPSOutlierSigma.Name = "udPSOutlierSigma";
+            this.udPSOutlierSigma.Size = new System.Drawing.Size(50, 20);
+            this.udPSOutlierSigma.TabIndex = 999;
+            this.udPSOutlierSigma.DecimalPlaces = 1;
+            this.udPSOutlierSigma.Increment = new decimal(new int[] { 1, 0, 0, 65536 });
+            this.udPSOutlierSigma.Minimum = new decimal(new int[] { 1, 0, 0, 65536 });
+            this.udPSOutlierSigma.Maximum = new decimal(new int[] { 50, 0, 0, 65536 });
+            this.udPSOutlierSigma.Value = new decimal(new int[] { 25, 0, 0, 65536 });
+            this.udPSOutlierSigma.Visible = false;
+            ((System.ComponentModel.ISupportInitialize)(this.udPSOutlierSigma)).EndInit();
+            this.Controls.Add(this.udPSOutlierSigma);
+            this.chkPSOutlierEnable = new System.Windows.Forms.CheckBoxTS();
+            this.chkPSOutlierEnable.AutoSize = true;
+            this.chkPSOutlierEnable.Location = new System.Drawing.Point(-100, -100);
+            this.chkPSOutlierEnable.Name = "chkPSOutlierEnable";
+            this.chkPSOutlierEnable.Size = new System.Drawing.Size(80, 17);
+            this.chkPSOutlierEnable.TabIndex = 999;
+            this.chkPSOutlierEnable.Text = "Outlier";
+            this.chkPSOutlierEnable.Visible = false;
+            this.Controls.Add(this.chkPSOutlierEnable);
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -72824,6 +73012,7 @@
         private ButtonTS btnTXProfileSave;
         private ComboBoxTS comboTXProfileName;
         private ButtonTS btnTXProfileDelete;
+        private ButtonTS btnTXProfileOrder;
         private GroupBoxTS grpTXMonitor;
         private LabelTS lblTXAF;
         private NumericUpDownTS udTXAF;
@@ -72992,6 +73181,8 @@
         private CheckBoxTS chkTXExpert;
         private ButtonTS btnTXProfileDefImport;
         private CheckBoxTS chkDisplayPanFill;
+        private CheckBoxTS chkDisplay3DPanadapter;
+        private ButtonTS btn3DSettings;
         private GroupBoxTS grpAppSkins;
         private ComboBoxTS comboAppSkin;
         private ButtonTS btnSkinExport;
@@ -75193,6 +75384,10 @@
         private ColorButton clrbtnSignalHistoryColour;
         private LabelTS labelTS518;
         private CheckBoxTS chkVSyncDX;
+        private CheckBoxTS chkForceCPURendering;
+        private CheckBoxTS chkGpuMesh3D;
+        private CheckBoxTS chkGpuComputeShaders;
+        private CheckBoxTS chkSpectrumGlow;
         private LabelTS lblBlobMS;
         private NumericUpDownTS udBlobPeakHoldMS;
         private CheckBoxTS chkBlobPeakHold;
@@ -75249,6 +75444,7 @@
         private ButtonTS btnQSOTimerSelectWAV;
         private CheckBoxTS chkQSOTimerResetOnMOX;
         private CheckBoxTS chkQSOTimerOnlyDuringMOX;
+        private CheckBoxTS chkMeshDiagLog;
         private CheckBoxTS chkQSOTimerEnabled;
         private CheckBoxTS chkQSOTimerResetOnExpiry;
         private CheckBoxTS chkQSOTimerFlashTimerIfResetOnExpiry;
@@ -75315,6 +75511,7 @@
         private ButtonTS btnDeleteColourGripper;
         private ButtonTS btnClearColourGrippers;
         private CheckBoxTS chkPanadpatorGradient;
+        private GroupBoxTS grpDisplay3DPanadapter;
         private GroupBoxTS grpSpectralWarningLeds;
         private CheckBoxTS chkSpecWarningLEDGetPixels;
         private CheckBoxTS chkSpecWarningLEDRenderDelay;
@@ -75953,6 +76150,7 @@
         private ComboBoxTS comboUsbDevices;
         private LabelTS lblTXProfileWarning;
         private Timer tmrCheckProfile;
+        private Timer timerPhRot;
         private ButtonTS btnClearTCISpots;
         private GroupBoxTS grpQuickSplit;
         private CheckBoxTS chkQuickSplit;
@@ -76921,6 +77119,7 @@
         private ButtonTS btnLedIndicatorVarPicker;
         private TabPage tpOptions3;
         private GroupBoxTS groupBoxTS57;
+        private GroupBoxTS groupBoxTS71;
         private CheckBoxTS chkVFOsync_filter;
         private CheckBoxTS chkVFOsync_mode;
         private CheckBoxTS chkVFOsync_freq;
@@ -77114,5 +77313,10 @@
         private NumericUpDownTS nudRecording_monoPlaybackGain;
         private CheckBoxTS chkWaterfall_smear;
         private CheckBoxTS chkN1mm_include_cw_shift;
+        private NumericUpDownTS udPSTargetFeedbackLevel;
+        private NumericUpDownTS udPSOutlierSigma;
+        private CheckBoxTS chkPSOutlierEnable;
     }
 }
+
+

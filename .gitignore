@@ -399,7 +399,7 @@ FodyWeavers.xsd
 *.sln.iml
 
 # ----Thetis Specific (c) 2025 MW0LGE - Richard Samphire----
-Project Files/Source/Console/VersionInfo.cs
+# VersionInfo.cs is now tracked (stub for CI, overwritten by PreBuildEvent locally)
 !Project Files/Source/Thetis-Installer/Microsoft_VC*.msm
 Project Files/Source/Thetis-Installer/**/Thumbs.db
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/autom4te.cache
@@ -408,4 +408,7 @@ Project Files/lib/NR_Algorithms_x64/src/rnnoise/old.git
 Project Files/lib/NR_Algorithms_x64/src/libspecbleach/build
 Project Files/lib/NR_Algorithms_x64/src/libspecbleach/old.git
 Project Files/lib/NR_Algorithms_x64/src/libspecbleach/old.github
+
+# Crash dump capture (WER LocalDumps output)
+dumps/
 

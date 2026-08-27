@@ -1,4 +1,4 @@
-﻿/*  MeterManager.cs
+/*  MeterManager.cs
 
 This file is part of a program that implements a Software-Defined Radio.
 
@@ -63,14 +63,25 @@ using System.Runtime.Serialization;
 using CatAtonic;
 using CATQueueBatching;
 
+// Third-party: DirectX interop via Vortice.Windows (MIT License, Copyright (c) Amer Koleci and
+// Contributors) and its SharpGenTools runtime layer (MIT). Full license texts ship with the app in the
+// Licenses folder and live in the repo under Project Files\lib\licenses\.
 //directX
-using SharpDX;
-using SharpDX.Direct2D1;
-using SharpDX.Direct3D;
-using SharpDX.Direct3D11;
-using SharpDX.DXGI;
-using SharpDX.Mathematics.Interop;
+using SharpGen.Runtime;
+using Vortice;
+using Vortice.Direct2D1;
+using Vortice.Direct3D;
+using Vortice.Direct3D11;
+using Vortice.DirectWrite;
+using Vortice.DXGI;
+using System.Numerics;
 using Microsoft.Win32;
+using Color4 = Vortice.Mathematics.Color4;
+using D2DPixelFormat = Vortice.DCommon.PixelFormat;
+using D2DAlphaMode = Vortice.DCommon.AlphaMode;
+using FeatureLevel = Vortice.Direct3D.FeatureLevel;
+using FontStyle = System.Drawing.FontStyle;
+using JsonElement = System.Text.Json.JsonElement;
 
 namespace Thetis
 {
@@ -1526,7 +1537,7 @@ namespace Thetis
             public object GetSetting(string setting, Type type)
             {
                 if (_settings.ContainsKey(setting))
-                    return _settings[setting];
+                    return ConvertLegacyJsonValue(_settings[setting], type);
                 else
                 {
                     if (type == typeof(int))
@@ -1558,7 +1569,10 @@ namespace Thetis
                 T value;
 
                 if (_settings.ContainsKey(setting))
-                    value = (T)_settings[setting];
+                {
+                    object o = ConvertLegacyJsonValue(_settings[setting], typeof(T));
+                    value = o != null ? (T)o : defaultValue;
+                }
                 else
                     value = defaultValue;
 
@@ -1576,10 +1590,22 @@ namespace Thetis
             {
                 try
                 {
-                    //1 for version 1
-                    string tmp = Common.SerializeToBase64<ConcurrentDictionary<string, object>>(_settings); // 1| signifies version 1 of the serialize for future proofing
-                    tmp = tmp.Replace("/", "[backslash]");                    
-                    return "1|" + tmp;
+                    // version 2 : typed entries so that values survive a json round trip
+                    List<SettingBlobEntry> entries = new List<SettingBlobEntry>(_settings.Count);
+                    foreach (KeyValuePair<string, object> kvp in _settings)
+                    {
+                        if (kvp.Value == null) continue;
+
+                        SettingBlobEntry e = new SettingBlobEntry();
+                        e.k = kvp.Key;
+                        e.t = SettingTypeName(kvp.Value);
+                        e.v = kvp.Value;
+                        entries.Add(e);
+                    }
+
+                    string tmp = Common.SerializeToBase64<List<SettingBlobEntry>>(entries);
+                    tmp = tmp.Replace("/", "[backslash]");
+                    return "2|" + tmp;
                 }
                 catch
                 {
@@ -1636,10 +1662,34 @@ namespace Thetis
                     string[] parts = str.Split('|');
                     if (parts.Length != 2) return false;
 
-                    if (parts[0] == "1") // 1 signifies version 1 of the serialize for future proofing
+                    if (parts[0] == "2") // version 2 : typed entries, values materialised eagerly
                     {
                         string tmp = parts[1].Replace("[backslash]", "/");
-                        _settings = Common.DeserializeFromBase64<ConcurrentDictionary<string, object>>(tmp);
+                        List<SettingBlobEntry> entries = Common.DeserializeFromBase64<List<SettingBlobEntry>>(tmp);
+                        if (entries == null) return false;
+
+                        _settings.Clear();
+                        foreach (SettingBlobEntry e in entries)
+                        {
+                            if (e == null || string.IsNullOrEmpty(e.k)) continue;
+
+                            object value;
+                            if (e.v is JsonElement je)
+                                value = SettingValueFromToken(je, e.t);
+                            else
+                                value = e.v;
+
+                            if (value != null) _settings[e.k] = value;
+                        }
+                        return true;
+                    }
+
+                    if (parts[0] == "1") // version 1 : untyped dictionary, json values converted lazily on read
+                    {
+                        string tmp = parts[1].Replace("[backslash]", "/");
+                        ConcurrentDictionary<string, object> d = Common.DeserializeFromBase64<ConcurrentDictionary<string, object>>(tmp);
+                        if (d == null) return false;
+                        _settings = d;
                     }
 
                     return true;
@@ -1670,6 +1720,123 @@ namespace Thetis
                 //}
 
                 //return ok;
+            }
+
+            private class SettingBlobEntry
+            {
+                public string k { get; set; } // key
+                public string t { get; set; } // type token
+                public object v { get; set; } // value
+            }
+
+            private static string SettingTypeName(object v)
+            {
+                if (v is int) return "int";
+                if (v is uint) return "uint";
+                if (v is long) return "long";
+                if (v is float) return "float";
+                if (v is double) return "double";
+                if (v is bool) return "bool";
+                if (v is string) return "string";
+                if (v is Color) return "color";
+                if (v is Guid) return "guid";
+                if (v is FontStyle) return "fontstyle";
+                if (v is Reading) return "reading";
+                if (v is clsBarItem.BarStyle) return "barstyle";
+                if (v is clsBarItem.Units) return "units";
+                if (v is string[]) return "strings";
+                if (v is Guid[]) return "guids";
+                return "aq:" + v.GetType().AssemblyQualifiedName;
+            }
+
+            private static object SettingValueFromToken(JsonElement je, string token)
+            {
+                try
+                {
+                    switch (token)
+                    {
+                        case "int": return je.GetInt32();
+                        case "uint": return je.GetUInt32();
+                        case "long": return je.GetInt64();
+                        case "float": return (float)je.GetDouble();
+                        case "double": return je.GetDouble();
+                        case "bool": return je.GetBoolean();
+                        case "string": return je.GetString();
+                        case "color":
+                            return Color.FromArgb(je.GetProperty("A").GetInt32(), je.GetProperty("R").GetInt32(), je.GetProperty("G").GetInt32(), je.GetProperty("B").GetInt32());
+                        case "guid": return new Guid(je.GetString());
+                        case "fontstyle": return Enum.ToObject(typeof(FontStyle), je.GetInt32());
+                        case "reading": return Enum.ToObject(typeof(Reading), je.GetInt32());
+                        case "barstyle": return Enum.ToObject(typeof(clsBarItem.BarStyle), je.GetInt32());
+                        case "units": return Enum.ToObject(typeof(clsBarItem.Units), je.GetInt32());
+                        case "strings":
+                            {
+                                List<string> l = new List<string>();
+                                foreach (JsonElement e in je.EnumerateArray()) l.Add(e.GetString());
+                                return l.ToArray();
+                            }
+                        case "guids":
+                            {
+                                List<Guid> l = new List<Guid>();
+                                foreach (JsonElement e in je.EnumerateArray()) l.Add(new Guid(e.GetString()));
+                                return l.ToArray();
+                            }
+                        default:
+                            if (token != null && token.StartsWith("aq:"))
+                            {
+                                Type t = Type.GetType(token.Substring(3));
+                                if (t != null) return System.Text.Json.JsonSerializer.Deserialize(je.GetRawText(), t);
+                            }
+                            return null;
+                    }
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            // values deserialised from version 1 blobs arrive boxed as JsonElement, convert on read
+            private static object ConvertLegacyJsonValue(object value, Type targetType)
+            {
+                JsonElement? boxed = value as JsonElement?;
+                if (boxed == null) return value;
+
+                JsonElement je = boxed.Value;
+                try
+                {
+                    if (targetType == typeof(int)) return je.GetInt32();
+                    if (targetType == typeof(uint)) return je.GetUInt32();
+                    if (targetType == typeof(long)) return je.GetInt64();
+                    if (targetType == typeof(float)) return (float)je.GetDouble();
+                    if (targetType == typeof(double)) return je.GetDouble();
+                    if (targetType == typeof(bool)) return je.GetBoolean();
+                    if (targetType == typeof(string)) return je.GetString();
+                    if (targetType == typeof(Color))
+                        return Color.FromArgb(je.GetProperty("A").GetInt32(), je.GetProperty("R").GetInt32(), je.GetProperty("G").GetInt32(), je.GetProperty("B").GetInt32());
+                    if (targetType == typeof(Guid)) return new Guid(je.GetString());
+                    if (targetType == typeof(FontStyle)) return Enum.ToObject(typeof(FontStyle), je.GetInt32());
+                    if (targetType == typeof(Reading)) return Enum.ToObject(typeof(Reading), je.GetInt32());
+                    if (targetType == typeof(clsBarItem.BarStyle)) return Enum.ToObject(typeof(clsBarItem.BarStyle), je.GetInt32());
+                    if (targetType == typeof(clsBarItem.Units)) return Enum.ToObject(typeof(clsBarItem.Units), je.GetInt32());
+                    if (targetType == typeof(string[]))
+                    {
+                        List<string> l = new List<string>();
+                        foreach (JsonElement e in je.EnumerateArray()) l.Add(e.GetString());
+                        return l.ToArray();
+                    }
+                    if (targetType == typeof(Guid[]))
+                    {
+                        List<Guid> l = new List<Guid>();
+                        foreach (JsonElement e in je.EnumerateArray()) l.Add(new Guid(e.GetString()));
+                        return l.ToArray();
+                    }
+                    return System.Text.Json.JsonSerializer.Deserialize(je.GetRawText(), targetType);
+                }
+                catch
+                {
+                    return null;
+                }
             }
 
             //public override string ToString()
@@ -2370,8 +2537,8 @@ namespace Thetis
                 case Reading.SIGNAL_STRENGTH: return "dBm";
                 case Reading.SWR: return ":1";
                 case Reading.VOLTS: return "V";
-                case Reading.AZ: return "°";
-                case Reading.ELE: return "°";
+                case Reading.AZ: return "?";
+                case Reading.ELE: return "?";
                 case Reading.SIGNAL_MAX_BIN: return "dBm";
                 case Reading.ADC_MAX_MAG: return "";
             }
@@ -2689,7 +2856,7 @@ namespace Thetis
                 {
                     MemoryStream ms = _image_streamdata_cache[sKey];
 
-                    Utilities.Dispose(ref ms);
+                    ms?.Dispose();
                     ms = null;
 
                     _image_streamdata_cache.Remove(sKey);
@@ -3265,7 +3432,7 @@ namespace Thetis
             foreach (KeyValuePair<string, MemoryStream> kvp in _image_streamdata_cache)
             {
                 MemoryStream tempStream = kvp.Value;
-                Utilities.Dispose(ref tempStream);
+                tempStream?.Dispose();
                 tempStream = null;
             }
             _image_streamdata_cache.Clear();
@@ -3566,7 +3733,8 @@ namespace Thetis
                         if (nTmp > nWait) nWait = nTmp;
                     }
                 }
-                _meterThread.Join(nWait + 100); // slightly longer
+                if (nWait > 500) nWait = 500; // cap to prevent overflow and excessive wait
+                _meterThread.Join(nWait + 100);
             }
 
             foreach (KeyValuePair<string, frmMeterDisplay> kvp in _lstMeterDisplayForms)
@@ -11659,7 +11827,7 @@ namespace Thetis
             {
                 public WaveRecordHitType HitType { get; set; }
                 public string FilePath { get; set; }
-                public SharpDX.RectangleF Rect { get; set; }
+                public DXRectF Rect { get; set; }
             }
 
             private readonly clsMeter _owningmeter;
@@ -11670,9 +11838,9 @@ namespace Thetis
             private WaveRecordEntry[] _entries;
 
             private List<WaveRecordHitRegion> _hit_regions;
-            private SharpDX.RectangleF _content_rect;
-            private SharpDX.RectangleF _scroll_track_rect;
-            private SharpDX.RectangleF _scroll_thumb_rect;
+            private DXRectF _content_rect;
+            private DXRectF _scroll_track_rect;
+            private DXRectF _scroll_thumb_rect;
             private float _row_pitch_px;
             private float _max_scroll_px;
             private float _scroll_offset_px;
@@ -11722,9 +11890,9 @@ namespace Thetis
                 _entries = Array.Empty<WaveRecordEntry>();
                 _hit_regions = new List<WaveRecordHitRegion>();
 
-                _content_rect = new SharpDX.RectangleF();
-                _scroll_track_rect = new SharpDX.RectangleF();
-                _scroll_thumb_rect = new SharpDX.RectangleF();
+                _content_rect = new DXRectF();
+                _scroll_track_rect = new DXRectF();
+                _scroll_thumb_rect = new DXRectF();
                 _row_pitch_px = 0f;
                 _max_scroll_px = 0f;
                 _scroll_offset_px = 0f;
@@ -12126,9 +12294,9 @@ namespace Thetis
             }
 
             public void SetRenderLayout(
-                SharpDX.RectangleF contentRect,
-                SharpDX.RectangleF scrollTrackRect,
-                SharpDX.RectangleF scrollThumbRect,
+                DXRectF contentRect,
+                DXRectF scrollTrackRect,
+                DXRectF scrollThumbRect,
                 float rowPitch,
                 float maxScroll,
                 bool showScrollbar,
@@ -31641,20 +31809,21 @@ namespace Thetis
         //based on display.cs
         private class DXRenderer
         {
-            private const SharpDX.Direct2D1.AlphaMode _ALPHA_MODE = SharpDX.Direct2D1.AlphaMode.Premultiplied;
+            private const D2DAlphaMode _ALPHA_MODE = D2DAlphaMode.Premultiplied;
             private bool _bDXSetup;
+            private Display.DXRenderPath m_eRenderPath;
             private bool _dxDisplayThreadRunning;
             private Thread _dxRenderThread;
             private PresentFlags _NoVSYNCpresentFlag;
-            private SharpDX.DXGI.Factory1 _factory1;
-            private SharpDX.Direct3D11.Device _device;
+            private IDXGIFactory1 _factory1;
+            private ID3D11Device _device;
             private int _nBufferCount;
-            private Surface _surface;
-            private SwapChain _swapChain;
-            private SwapChain1 _swapChain1;
-            private RenderTarget _renderTarget;
+            private IDXGISurface _surface;
+            private IDXGISwapChain1 _swapChain1;
+            private Format _backBufferFormat;
+            private ID2D1RenderTarget _renderTarget;
             private int _dx_fail_retry;
-            private SharpDX.Direct2D1.Factory _factory;
+            private ID2D1Factory _factory;
             private bool _bAntiAlias;
             private Vector2 _pixelShift;
             private int _nVBlanks;
@@ -31662,10 +31831,10 @@ namespace Thetis
             private int _oldRedrawDelay;
             private object _DXlock = new object();
             //
-            private Dictionary<int, SharpDX.Direct2D1.Brush> _DXBrushes;
+            private Dictionary<int, ID2D1Brush> _DXBrushes;
             private Color4 _backColour_clear_colour;
             private System.Drawing.Color _backgroundColour;
-            private Dictionary<string, SharpDX.Direct2D1.Bitmap> _images;
+            private Dictionary<string, ID2D1Bitmap> _images;
             //private Dictionary<string, BitmapBrush> _bitmap_brushes;
             //
 
@@ -31674,16 +31843,16 @@ namespace Thetis
             private float _pixels_per_point_width;
             private float _pixels_per_point_height;
 
-            private Dictionary<(string, float, FontStyle), SharpDX.DirectWrite.TextFormat> _textFormats; // fonts
-            private SharpDX.DirectWrite.Factory _fontFactory;
+            private Dictionary<(string, float, FontStyle), IDWriteTextFormat> _textFormats; // fonts
+            private IDWriteFactory _fontFactory;
             private readonly Dictionary<(string, float, FontStyle, string), SizeF> _stringMeasure;
             private readonly Queue<(string, float, FontStyle, string)> _stringMeasureKeys;
-            private readonly Dictionary<(string, float, SharpDX.DirectWrite.FontWeight, SharpDX.DirectWrite.FontStyle), SharpDX.DirectWrite.TextFormat> _format_cache;
-            private readonly Queue<(string, float, SharpDX.DirectWrite.FontWeight, SharpDX.DirectWrite.FontStyle)> _format_cache_keys;
+            private readonly Dictionary<(string, float, Vortice.DirectWrite.FontWeight, Vortice.DirectWrite.FontStyle), IDWriteTextFormat> _format_cache;
+            private readonly Queue<(string, float, Vortice.DirectWrite.FontWeight, Vortice.DirectWrite.FontStyle)> _format_cache_keys;
              
             //
-            private SharpDX.Direct2D1.Bitmap _filter_display_waterfall_bmp;
-            private SharpDX.Direct2D1.Bitmap _filter_display_waterfall_bmp_tx;
+            private ID2D1Bitmap _filter_display_waterfall_bmp;
+            private ID2D1Bitmap _filter_display_waterfall_bmp_tx;
             //
 
             private int _rx;
@@ -31714,8 +31883,8 @@ namespace Thetis
 
             private int _quickest_update_interval;
 
-            private StrokeStyle _rounded_stroke_style;
-            private StrokeStyle _dash_style;
+            private ID2D1StrokeStyle _rounded_stroke_style;
+            private ID2D1StrokeStyle _dash_style;
 
             private Guid _touch_guid;
 
@@ -31750,12 +31919,12 @@ namespace Thetis
                 _filter_display_waterfall_bmp = null;
                 _filter_display_waterfall_bmp_tx = null;
 
-                _DXBrushes = new Dictionary<int, SharpDX.Direct2D1.Brush>();
-                _textFormats = new Dictionary<(string, float, FontStyle), SharpDX.DirectWrite.TextFormat>();
+                _DXBrushes = new Dictionary<int, ID2D1Brush>();
+                _textFormats = new Dictionary<(string, float, FontStyle), IDWriteTextFormat>();
                 _stringMeasure = new Dictionary<(string, float, FontStyle, string), SizeF>();
                 _stringMeasureKeys = new Queue<(string, float, FontStyle, string)>();
-                _format_cache = new Dictionary<(string, float, SharpDX.DirectWrite.FontWeight, SharpDX.DirectWrite.FontStyle), SharpDX.DirectWrite.TextFormat>();
-                _format_cache_keys = new Queue<(string, float, SharpDX.DirectWrite.FontWeight, SharpDX.DirectWrite.FontStyle)>();
+                _format_cache = new Dictionary<(string, float, Vortice.DirectWrite.FontWeight, Vortice.DirectWrite.FontStyle), IDWriteTextFormat>();
+                _format_cache_keys = new Queue<(string, float, Vortice.DirectWrite.FontWeight, Vortice.DirectWrite.FontStyle)>();
 
                 _dxDisplayThreadRunning = false;
                 _bAntiAlias = true;
@@ -31780,7 +31949,7 @@ namespace Thetis
                 _backgroundColour = System.Drawing.Color.Black;
                 _backColour_clear_colour = convertColour(System.Drawing.Color.FromArgb(255, System.Drawing.Color.Black));
 
-                _images = new Dictionary<string, SharpDX.Direct2D1.Bitmap>();
+                _images = new Dictionary<string, ID2D1Bitmap>();
                 //_bitmap_brushes = new Dictionary<string, BitmapBrush>();
                 
                 //fps
@@ -31841,7 +32010,7 @@ namespace Thetis
                 {
                     Name = "Multimeter DX Render Thread",
                     Priority = ThreadPriority.Lowest,
-                    IsBackground = false
+                    IsBackground = true
                 };
                 //_dxRenderThread.SetApartmentState(ApartmentState.STA); //[2.10.3]
                 _dxRenderThread.Start();
@@ -31902,7 +32071,7 @@ namespace Thetis
                 System.Drawing.Bitmap cachedBMP = MeterManager.GetBitmap(sID);
                 if (cachedBMP != null)
                 {
-                    SharpDX.Direct2D1.Bitmap dxImg = bitmapFromSystemBitmap(_renderTarget, cachedBMP, sID);
+                    ID2D1Bitmap dxImg = bitmapFromSystemBitmap(_renderTarget, cachedBMP, sID);
                     if (dxImg != null)
                     {
                         dxImg.Tag = cachedBMP.Tag; // true if this image is a skinimage
@@ -31928,7 +32097,7 @@ namespace Thetis
                 //NOTE: can not be used with FlipDiscard atm unfortunately
                 for (int n = 32; n>0; n /= 2)
                 {
-                    if(_device.CheckMultisampleQualityLevels(Format.B8G8R8A8_UNorm, n) > 0)
+                    if(_device.CheckMultisampleQualityLevels(Format.B8G8R8A8_UNorm, (uint)n) > 0)
                     {
                         return n;
                     }
@@ -31951,246 +32120,298 @@ namespace Thetis
                     int majVers = Environment.OSVersion.Version.Major;
                     int minVers = Environment.OSVersion.Version.Minor;
 
-                    SharpDX.Direct3D.FeatureLevel[] featureLevels;
+                    FeatureLevel[] featureLevels;
 
                     if (majVers >= 10) // win10 + 11
                     {
-                        featureLevels = new SharpDX.Direct3D.FeatureLevel[] {
-                            SharpDX.Direct3D.FeatureLevel.Level_12_1,
-                            SharpDX.Direct3D.FeatureLevel.Level_12_0,
-                            SharpDX.Direct3D.FeatureLevel.Level_11_1, // windows 8 and up
-                            SharpDX.Direct3D.FeatureLevel.Level_11_0, // windows 7 and up (level 11 was only partial on 7, not 11_1)
-                            SharpDX.Direct3D.FeatureLevel.Level_10_1,
-                            SharpDX.Direct3D.FeatureLevel.Level_10_0,
-                            SharpDX.Direct3D.FeatureLevel.Level_9_3,
-                            SharpDX.Direct3D.FeatureLevel.Level_9_2,
-                            SharpDX.Direct3D.FeatureLevel.Level_9_1
+                        featureLevels = new FeatureLevel[] {
+                            FeatureLevel.Level_12_1,
+                            FeatureLevel.Level_12_0,
+                            FeatureLevel.Level_11_1, // windows 8 and up
+                            FeatureLevel.Level_11_0, // windows 7 and up (level 11 was only partial on 7, not 11_1)
+                            FeatureLevel.Level_10_1,
+                            FeatureLevel.Level_10_0,
+                            FeatureLevel.Level_9_3,
+                            FeatureLevel.Level_9_2,
+                            FeatureLevel.Level_9_1
                         };
                         _NoVSYNCpresentFlag = PresentFlags.DoNotWait;
                     }
                     else if (majVers == 6 && minVers >= 2) // windows 8, windows 8.1
                     {
-                        featureLevels = new SharpDX.Direct3D.FeatureLevel[] {
-                            SharpDX.Direct3D.FeatureLevel.Level_11_1, // windows 8 and up
-                            SharpDX.Direct3D.FeatureLevel.Level_11_0, // windows 7 and up (level 11 was only partial on 7, not 11_1)
-                            SharpDX.Direct3D.FeatureLevel.Level_10_1,
-                            SharpDX.Direct3D.FeatureLevel.Level_10_0,
-                            SharpDX.Direct3D.FeatureLevel.Level_9_3,
-                            SharpDX.Direct3D.FeatureLevel.Level_9_2,
-                            SharpDX.Direct3D.FeatureLevel.Level_9_1
+                        featureLevels = new FeatureLevel[] {
+                            FeatureLevel.Level_11_1, // windows 8 and up
+                            FeatureLevel.Level_11_0, // windows 7 and up (level 11 was only partial on 7, not 11_1)
+                            FeatureLevel.Level_10_1,
+                            FeatureLevel.Level_10_0,
+                            FeatureLevel.Level_9_3,
+                            FeatureLevel.Level_9_2,
+                            FeatureLevel.Level_9_1
                         };
                         _NoVSYNCpresentFlag = PresentFlags.DoNotWait;
                     }
                     else if (majVers == 6 && minVers < 2) // windows 7, 2008 R2, 2008, vista
                     {
-                        featureLevels = new SharpDX.Direct3D.FeatureLevel[] {
-                            SharpDX.Direct3D.FeatureLevel.Level_11_0, // windows 7 and up (level 11 was only partial on 7, not 11_1)
-                            SharpDX.Direct3D.FeatureLevel.Level_10_1,
-                            SharpDX.Direct3D.FeatureLevel.Level_10_0,
-                            SharpDX.Direct3D.FeatureLevel.Level_9_3,
-                            SharpDX.Direct3D.FeatureLevel.Level_9_2,
-                            SharpDX.Direct3D.FeatureLevel.Level_9_1
+                        featureLevels = new FeatureLevel[] {
+                            FeatureLevel.Level_11_0, // windows 7 and up (level 11 was only partial on 7, not 11_1)
+                            FeatureLevel.Level_10_1,
+                            FeatureLevel.Level_10_0,
+                            FeatureLevel.Level_9_3,
+                            FeatureLevel.Level_9_2,
+                            FeatureLevel.Level_9_1
                         };
                         _NoVSYNCpresentFlag = PresentFlags.None;
                     }
                     else
                     {
-                        featureLevels = new SharpDX.Direct3D.FeatureLevel[] {
-                            SharpDX.Direct3D.FeatureLevel.Level_9_1
+                        featureLevels = new FeatureLevel[] {
+                            FeatureLevel.Level_9_1
                         };
                         _NoVSYNCpresentFlag = PresentFlags.None;
                     }
 
-                    _factory1 = new SharpDX.DXGI.Factory1();
-
-                    Adapter selectedAdapter = null;
-                    if (adaptorInfo != null)
+                    List<Tuple<DriverType, Display.AdaptorInfo>> attempts = new List<Tuple<DriverType, Display.AdaptorInfo>>();
+                    if (Display.ForceCPURendering)
                     {
-                        int totalAdapters = _factory1.GetAdapterCount();
-                        for (int an = 0; an < totalAdapters; an++)
+                        attempts.Add(Tuple.Create(DriverType.Warp, (Display.AdaptorInfo)null));
+                    }
+                    else
+                    {
+                        if (adaptorInfo != null)
+                            attempts.Add(Tuple.Create(DriverType.Unknown, adaptorInfo));
+                        attempts.Add(Tuple.Create(DriverType.Hardware, (Display.AdaptorInfo)null));
+                        attempts.Add(Tuple.Create(DriverType.Warp, (Display.AdaptorInfo)null));
+                    }
+
+                    bool bCreated = false;
+                    Exception lastError = null;
+                    Tuple<DriverType, Display.AdaptorInfo> okAttempt = null;
+                    foreach (Tuple<DriverType, Display.AdaptorInfo> attempt in attempts)
+                    {
+                        try
                         {
-                            Adapter rawAdapter = _factory1.GetAdapter(an);
-                            Adapter1 adapter1 = rawAdapter.QueryInterface<Adapter1>();
-                            AdapterDescription1 addesc = adapter1.Description1;
-                            if (addesc.VendorId == adaptorInfo.VendorId && addesc.DeviceId == adaptorInfo.DeviceId)
-                            {
-                                selectedAdapter = rawAdapter;
-                                Utilities.Dispose(ref adapter1);
-                                break;
-                            }
-                            Utilities.Dispose(ref adapter1);
-                            Utilities.Dispose(ref rawAdapter);
+                            createMeterDXDevice(attempt.Item1, attempt.Item2, featureLevels, debug);
+                            bCreated = true;
+                            okAttempt = attempt;
+                            break;
+                        }
+                        catch (Exception e)
+                        {
+                            lastError = e;
+                            releasePartialMeterDX();
+                            Common.MeshDiagLog("Meter DirectX init failed using " + Display.describeDXAttempt(attempt.Item1, attempt.Item2) + " : " + e.Message);
                         }
                     }
 
-                    if (selectedAdapter != null)
-                    {
-                        _device = new SharpDX.Direct3D11.Device(selectedAdapter, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels);
-                        Utilities.Dispose(ref selectedAdapter);
-                    }
-                    else
-                    {
-                        _device = new SharpDX.Direct3D11.Device(driverType, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels);
-                    }
-
-                    SharpDX.DXGI.Device1 device1 = _device.QueryInterfaceOrNull<SharpDX.DXGI.Device1>();
-                    if (device1 != null)
-                    {
-                        device1.MaximumFrameLatency = 1;
-                        Utilities.Dispose(ref device1);
-                        device1 = null;
-                    }
-
-                    //this code should ideally be used to prevent use of flip if vsync is 0
-                    //but is not used at this time
-                    //SharpDX.DXGI.Factory5 f5 = factory.QueryInterfaceOrNull<SharpDX.DXGI.Factory5>();
-                    //bool bAllowTearing = false;
-                    //if(f5 != null)
-                    //{
-                    //    int size = Marshal.SizeOf(typeof(bool));
-                    //    IntPtr pBool = Marshal.AllocHGlobal(size);
-
-                    //    f5.CheckFeatureSupport(SharpDX.DXGI.Feature.PresentAllowTearing, pBool, size);
-
-                    //    bAllowTearing = Marshal.ReadInt32(pBool) == 1;
-
-                    //    Marshal.FreeHGlobal(pBool);
-                    //}
-                    //
-
-                    // check if the device has a factory4 interface
-                    // if not, then we need to use old bitplit swapeffect
-                    SwapEffect swapEffect;
-
-                    SharpDX.DXGI.Factory4 factory4 = _factory1.QueryInterfaceOrNull<SharpDX.DXGI.Factory4>();
-                    bool bFlipPresent = false;
-                    if (factory4 != null)
-                    {
-                        /*if (!_bUseLegacyBuffers)*/ bFlipPresent = true;
-                        Utilities.Dispose(ref factory4);
-                        factory4 = null;
-                    }
-
-                    //https://walbourn.github.io/care-and-feeding-of-modern-swapchains/
-                    swapEffect = bFlipPresent ? SwapEffect.FlipDiscard : SwapEffect.Discard; //NOTE: FlipSequential should work, but is mostly used for storeapps
-                    _nBufferCount = bFlipPresent ? 2 : 1;
-
-                    //int multiSample = 2; // eg 2 = MSAA_2, 2 times multisampling
-                    //int maxQuality = _device.CheckMultisampleQualityLevels(Format.B8G8R8A8_UNorm, multiSample) - 1;
-                    //maxQuality = Math.Max(0, maxQuality);
-
-                    //20 fps is the fastest that any meter can be defined as 50ms is update limit
-                    _oldRedrawDelay = 20;
-                    ModeDescription md = new ModeDescription(targetWidth, targetHeight,
-                                                               new Rational(_oldRedrawDelay, 1)/*console.DisplayFPS, 1)*/, Format.B8G8R8A8_UNorm);
-
-                    md.ScanlineOrdering = DisplayModeScanlineOrder.Progressive;
-                    md.Scaling = DisplayModeScaling.Centered;
-                    
-                    SwapChainDescription desc = new SwapChainDescription()
-                    {
-                        BufferCount = _nBufferCount,
-                        ModeDescription = md,
-                        IsWindowed = true,
-                        OutputHandle = _displayTarget.Handle,
-                        //SampleDescription = new SampleDescription(multiSample, maxQuality),
-                        SampleDescription = new SampleDescription(1, 0), // no multi sampling (1 sample), no antialiasing
-                        SwapEffect = swapEffect,
-                        Usage = Usage.RenderTargetOutput,// | Usage.BackBuffer,  // dont need usage.backbuffer as it is implied
-                        Flags = SwapChainFlags.None,
-                    };
-
-                    _factory1.MakeWindowAssociation(_displayTarget.Handle, WindowAssociationFlags.IgnoreAll);
-                    _swapChain = new SwapChain(_factory1, _device, desc);
-                    _swapChain1 = _swapChain.QueryInterface<SwapChain1>();
-
-                    _factory = new SharpDX.Direct2D1.Factory(FactoryType.SingleThreaded, DebugLevel.None);
-                    
-                    _surface = _swapChain1.GetBackBuffer<Surface>(0);
-
-                    RenderTargetProperties rtp = new RenderTargetProperties(new SharpDX.Direct2D1.PixelFormat(_swapChain.Description.ModeDescription.Format, _ALPHA_MODE));
-                    _renderTarget = new RenderTarget(_factory, _surface, rtp);
-
-                    if (debug == DeviceCreationFlags.Debug)
-                    {
-                        _device.DebugName = "MeterDeviceDB_" + _rx.ToString();
-                        _swapChain.DebugName = "MeterSwapChainDB_" + _rx.ToString();
-                        _swapChain1.DebugName = "MeterSwapChain1DB_" + _rx.ToString();
-                        _surface.DebugName = "MeterSurfaceDB_" + _rx.ToString();
-                    }
-                    else
-                    {
-                        _device.DebugName = ""; // used in shutdown
-                    }
-
-                    //setup a rounded stroke style to be used by items that want a smooth end to lines
-                    StrokeStyleProperties stroke_style_rounded = new StrokeStyleProperties
-                    {
-                        StartCap = CapStyle.Round,
-                        EndCap = CapStyle.Round,
-                        DashCap = CapStyle.Round
-                    };
-                    _rounded_stroke_style = new StrokeStyle(_factory, stroke_style_rounded);
-
-                    //setup dashed style
-                    StrokeStyleProperties stroke_style_dash = new StrokeStyleProperties
-                    {
-                        DashStyle = DashStyle.Dash,
-                        DashOffset = 2
-                    };
-                    _dash_style = new StrokeStyle(_factory, stroke_style_dash);
-
-                    _dpi_width = _renderTarget.DotsPerInch.Width;
-                    _dpi_height = _renderTarget.DotsPerInch.Width;
-                    _pixels_per_point_width = _dpi_width / 72f;
-                    _pixels_per_point_height = _dpi_height / 72f;
-
-                    _bDXSetup = true;
+                    if (!bCreated)
+                        throw new Exception("No usable DirectX render path" + (lastError != null ? " : " + lastError.Message : ""), lastError);
 
                     setupAliasing();
 
                     buildDXFonts();
+
+                    m_eRenderPath = okAttempt.Item1 == DriverType.Warp ? Display.DXRenderPath.WarpSoftware : Display.DXRenderPath.Hardware;
+
+                    Common.MeshDiagLog("Meter DirectX initialised : render path=" + (m_eRenderPath == Display.DXRenderPath.WarpSoftware ? "WARP software" : "Hardware") + " [" + Display.describeDXAttempt(okAttempt.Item1, okAttempt.Item2) + "], feature level=" + Display.featureLevelString() + (Display.ForceCPURendering ? " (forced CPU)" : ""));
                 }
                 catch (Exception e)
                 {
                     // issue setting up dx
+                    if (!_bDXSetup) releasePartialMeterDX();
                     ShutdownDX();
                     MessageBox.Show("Problem initialising Meter DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", "DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 }
+            }
+            private void createMeterDXDevice(DriverType driverType, Display.AdaptorInfo adaptorInfo, FeatureLevel[] featureLevels, DeviceCreationFlags debug)
+            {
+                _factory1 = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+
+                IDXGIAdapter1 selectedAdapter = null;
+                if (adaptorInfo != null)
+                {
+                    int an = 0;
+                    while (_factory1.EnumAdapters1((uint)an, out IDXGIAdapter1 adapter1).Success)
+                    {
+                        AdapterDescription1 addesc = adapter1.Description1;
+                        if (addesc.VendorId == adaptorInfo.VendorId && addesc.DeviceId == adaptorInfo.DeviceId)
+                        {
+                            selectedAdapter = adapter1;
+                            break;
+                        }
+                        adapter1?.Dispose();
+                        an++;
+                    }
+                }
+
+                if (selectedAdapter != null)
+                {
+                    // when an adapter is supplied the driver type must be unknown
+                    D3D11.D3D11CreateDevice(selectedAdapter, DriverType.Unknown, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
+                    selectedAdapter?.Dispose();
+                }
+                else
+                {
+                    DriverType dt = adaptorInfo != null ? DriverType.Hardware : driverType;
+                    D3D11.D3D11CreateDevice(null, dt, debug | DeviceCreationFlags.PreventAlteringLayerSettingsFromRegistry | DeviceCreationFlags.BgraSupport/* | DeviceCreationFlags.SingleThreaded*/, featureLevels, out _device);
+                }
+
+                IDXGIDevice1 device1 = _device.QueryInterfaceOrNull<IDXGIDevice1>();
+                if (device1 != null)
+                {
+                    device1.MaximumFrameLatency = 1;
+                    device1?.Dispose();
+                    device1 = null;
+                }
+
+                //this code should ideally be used to prevent use of flip if vsync is 0
+                //but is not used at this time
+                //SharpDX.DXGI.Factory5 f5 = factory.QueryInterfaceOrNull<SharpDX.DXGI.Factory5>();
+                //bool bAllowTearing = false;
+                //if(f5 != null)
+                //{
+                //    int size = Marshal.SizeOf(typeof(bool));
+                //    IntPtr pBool = Marshal.AllocHGlobal(size);
+
+                //    f5.CheckFeatureSupport(SharpDX.DXGI.Feature.PresentAllowTearing, pBool, size);
+
+                //    bAllowTearing = Marshal.ReadInt32(pBool) == 1;
+
+                //    Marshal.FreeHGlobal(pBool);
+                //}
+                //
+
+                // check if the device has a factory4 interface
+                // if not, then we need to use old bitplit swapeffect
+                SwapEffect swapEffect;
+
+                IDXGIFactory4 factory4 = _factory1.QueryInterfaceOrNull<IDXGIFactory4>();
+                bool bFlipPresent = false;
+                if (factory4 != null)
+                {
+                    /*if (!_bUseLegacyBuffers)*/ bFlipPresent = true;
+                    factory4?.Dispose();
+                    factory4 = null;
+                }
+
+                //https://walbourn.github.io/care-and-feeding-of-modern-swapchains/
+                swapEffect = bFlipPresent ? SwapEffect.FlipDiscard : SwapEffect.Discard; //NOTE: FlipSequential should work, but is mostly used for storeapps
+                _nBufferCount = bFlipPresent ? 2 : 1;
+
+                //int multiSample = 2; // eg 2 = MSAA_2, 2 times multisampling
+                //int maxQuality = _device.CheckMultisampleQualityLevels(Format.B8G8R8A8_UNorm, multiSample) - 1;
+                //maxQuality = Math.Max(0, maxQuality);
+
+                //20 fps is the fastest that any meter can be defined as 50ms is update limit
+                _oldRedrawDelay = 20;
+
+                SwapChainDescription1 desc = new SwapChainDescription1()
+                {
+                    BufferCount = (uint)_nBufferCount,
+                    Width = (uint)targetWidth,
+                    Height = (uint)targetHeight,
+                    Format = Format.B8G8R8A8_UNorm,
+                    Stereo = false,
+                    //SampleDescription = new SampleDescription(multiSample, maxQuality),
+                    SampleDescription = new SampleDescription(1, 0), // no multi sampling (1 sample), no antialiasing
+                    BufferUsage = Usage.RenderTargetOutput,// | Usage.BackBuffer,  // dont need usage.backbuffer as it is implied
+                    Scaling = bFlipPresent ? Scaling.None : Scaling.Stretch, // stretch must be used for legacy bitblt present
+                    SwapEffect = swapEffect,
+                    AlphaMode = Vortice.DXGI.AlphaMode.Ignore, // swapchain alpha mode must be ignore
+                    Flags = SwapChainFlags.None,
+                };
+
+                _factory1.MakeWindowAssociation(_displayTarget.Handle, WindowAssociationFlags.IgnoreAll);
+                IDXGIFactory2 factory2 = _factory1.QueryInterface<IDXGIFactory2>();
+                _swapChain1 = factory2.CreateSwapChainForHwnd(_device, _displayTarget.Handle, desc, null, null);
+                factory2?.Dispose();
+                _backBufferFormat = Format.B8G8R8A8_UNorm;
+
+                _factory = D2D1.D2D1CreateFactory<ID2D1Factory>(Vortice.Direct2D1.FactoryType.SingleThreaded);
+
+                _surface = _swapChain1.GetBuffer<IDXGISurface>(0);
+
+                RenderTargetProperties rtp = new RenderTargetProperties(new D2DPixelFormat(_backBufferFormat, _ALPHA_MODE));
+                _renderTarget = _factory.CreateDxgiSurfaceRenderTarget(_surface, rtp);
+
+                //setup a rounded stroke style to be used by items that want a smooth end to lines
+                StrokeStyleProperties stroke_style_rounded = new StrokeStyleProperties
+                {
+                    StartCap = CapStyle.Round,
+                    EndCap = CapStyle.Round,
+                    DashCap = CapStyle.Round
+                };
+                _rounded_stroke_style = _factory.CreateStrokeStyle(stroke_style_rounded);
+
+                //setup dashed style
+                StrokeStyleProperties stroke_style_dash = new StrokeStyleProperties
+                {
+                    DashStyle = DashStyle.Dash,
+                    DashOffset = 2
+                };
+                _dash_style = _factory.CreateStrokeStyle(stroke_style_dash);
+
+                _dpi_width = _renderTarget.Dpi.Width;
+                _dpi_height = _renderTarget.Dpi.Width;
+                _pixels_per_point_width = _dpi_width / 72f;
+                _pixels_per_point_height = _dpi_height / 72f;
+
+                _bDXSetup = true;
+            }
+            private void releasePartialMeterDX()
+            {
+                _rounded_stroke_style?.Dispose();
+                _dash_style?.Dispose();
+                _renderTarget?.Dispose();
+                _swapChain1?.Dispose();
+                _surface?.Dispose();
+                _factory?.Dispose();
+                _device?.Dispose();
+                _factory1?.Dispose();
+
+                _rounded_stroke_style = null;
+                _dash_style = null;
+                _renderTarget = null;
+                _swapChain1 = null;
+                _surface = null;
+                _factory = null;
+                _device = null;
+                _factory1 = null;
+
+                _bDXSetup = false;
             }
             private void setupFilterWaterfallBitmap()
             {
                 if (!_bDXSetup) return;
                 if (_filter_display_waterfall_bmp != null && _filter_display_waterfall_bmp_tx != null) return; // already setup, dont do again
 
-                //SharpDX.Direct2D1.Bitmap copy = null;
+                //ID2D1Bitmap copy = null;
                 //if (_filter_display_waterfall_bmp != null)
                 //{
                 //    //make copy of existing bitmpap
-                //    copy = new SharpDX.Direct2D1.Bitmap(_renderTarget, new Size2(MiniSpec.PIXELS, MiniSpec.PIXELS), new BitmapProperties(new SharpDX.Direct2D1.PixelFormat(_swapChain.Description.ModeDescription.Format, SharpDX.Direct2D1.AlphaMode.Premultiplied)));
-                //    copy.CopyFromBitmap(_filter_display_waterfall_bmp, new SharpDX.Point(0, 0), new SharpDX.Rectangle(0, 0, MiniSpec.PIXELS, MiniSpec.PIXELS));
+                //    copy = _renderTarget.CreateBitmap(new Vortice.Mathematics.SizeI(MiniSpec.PIXELS, MiniSpec.PIXELS), new BitmapProperties(new D2DPixelFormat(_backBufferFormat, D2DAlphaMode.Premultiplied)));
+                //    copy.CopyFromBitmap(_filter_display_waterfall_bmp, new Point(0, 0), new SharpDX.Rectangle(0, 0, MiniSpec.PIXELS, MiniSpec.PIXELS));
                 //}
 
                 if (_filter_display_waterfall_bmp != null)
                 {
-                    Utilities.Dispose(ref _filter_display_waterfall_bmp);
+                    _filter_display_waterfall_bmp?.Dispose();
                     _filter_display_waterfall_bmp = null;
                 }
                 if (_filter_display_waterfall_bmp_tx != null)
                 {
-                    Utilities.Dispose(ref _filter_display_waterfall_bmp_tx);
+                    _filter_display_waterfall_bmp_tx?.Dispose();
                     _filter_display_waterfall_bmp_tx = null;
                 }
-                _filter_display_waterfall_bmp = new SharpDX.Direct2D1.Bitmap(_renderTarget, new Size2(MiniSpec.PIXELS, MiniSpec.PIXELS), new BitmapProperties(new SharpDX.Direct2D1.PixelFormat(_swapChain.Description.ModeDescription.Format, SharpDX.Direct2D1.AlphaMode.Premultiplied)));
+                _filter_display_waterfall_bmp = _renderTarget.CreateBitmap(new Vortice.Mathematics.SizeI(MiniSpec.PIXELS, MiniSpec.PIXELS), new BitmapProperties(new D2DPixelFormat(_backBufferFormat, D2DAlphaMode.Premultiplied)));
                 _filter_display_waterfall_bmp.Tag = _sId;
 
-                _filter_display_waterfall_bmp_tx = new SharpDX.Direct2D1.Bitmap(_renderTarget, new Size2(MiniSpec.PIXELS, MiniSpec.PIXELS), new BitmapProperties(new SharpDX.Direct2D1.PixelFormat(_swapChain.Description.ModeDescription.Format, SharpDX.Direct2D1.AlphaMode.Premultiplied)));
+                _filter_display_waterfall_bmp_tx = _renderTarget.CreateBitmap(new Vortice.Mathematics.SizeI(MiniSpec.PIXELS, MiniSpec.PIXELS), new BitmapProperties(new D2DPixelFormat(_backBufferFormat, D2DAlphaMode.Premultiplied)));
                 _filter_display_waterfall_bmp_tx.Tag = _sId;
                 //if(copy != null)
                 //{
                 //    //paste copy into bmp
-                //    _filter_display_waterfall_bmp.CopyFromBitmap(copy, new SharpDX.Point(0, 0));
-                //    Utilities.Dispose(ref copy);
+                //    _filter_display_waterfall_bmp.CopyFromBitmap(copy, new Point(0, 0));
+                //    copy?.Dispose();
                 //    copy = null;
                 //}
             }
@@ -32203,9 +32424,9 @@ namespace Thetis
                     {
                         if (!_bDXSetup) return;
 
-                        ModeDescription modeDesc = new ModeDescription(targetWidth, targetHeight,
-                                                           new Rational(fps, 1), Format.B8G8R8A8_UNorm);
-                        _swapChain1.ResizeTarget(ref modeDesc);
+                        ModeDescription modeDesc = new ModeDescription((uint)targetWidth, (uint)targetHeight,
+                                                           new Rational((uint)fps, 1u), Format.B8G8R8A8_UNorm);
+                        _swapChain1.ResizeTarget(modeDesc);
 
                         //dont need to resize here, as targetwidth and targetheight will not be different
                         //to the rendertarget
@@ -32261,76 +32482,65 @@ namespace Thetis
                     _dxRenderThread.Join(nWait + 100); // slightly longer
                 }
 
-                try
+                lock (_DXlock)
                 {
-                    if (_device != null && _device.ImmediateContext != null)
+                    try
                     {
-                        _device.ImmediateContext.ClearState();
-                        _device.ImmediateContext.Flush();
+                        if (_device != null && _device.ImmediateContext != null)
+                        {
+                            _device.ImmediateContext.ClearState();
+                            _device.ImmediateContext.Flush();
+                        }
+
+                        RemoveAllDXImages();
+
+                        releaseDXFonts();
+                        releaseDXResources();
+
+                        _rounded_stroke_style?.Dispose();
+                        _rounded_stroke_style = null;
+                        _dash_style?.Dispose();
+                        _dash_style = null;
+
+                        if (_filter_display_waterfall_bmp != null)
+                        {
+                            _filter_display_waterfall_bmp?.Dispose();
+                            _filter_display_waterfall_bmp = null;
+                        }
+                        if (_filter_display_waterfall_bmp_tx != null)
+                        {
+                            _filter_display_waterfall_bmp_tx?.Dispose();
+                            _filter_display_waterfall_bmp_tx = null;
+                        }
+
+                        _renderTarget?.Dispose();
+                        _swapChain1?.Dispose();
+                        _surface?.Dispose();
+                        _factory?.Dispose();
+                        _factory1?.Dispose();                    
+
+                        _renderTarget = null;
+                        _swapChain1 = null;
+                        _surface = null;
+                        _factory = null;
+                        _factory1 = null;
+
+                        if (_device != null && _device.ImmediateContext != null)
+                        {
+                            ID3D11DeviceContext dc = _device.ImmediateContext;
+                            dc?.Dispose();
+                            dc = null;
+                        }
+
+                        _device?.Dispose();
+                        _device = null;
+
+                        _bDXSetup = false;
                     }
-
-                    RemoveAllDXImages();
-
-                    releaseDXFonts();
-                    releaseDXResources();
-
-                    Utilities.Dispose(ref _rounded_stroke_style);
-                    _rounded_stroke_style = null;
-                    Utilities.Dispose(ref _dash_style);
-                    _dash_style = null;
-
-                    if (_filter_display_waterfall_bmp != null)
+                    catch (Exception e)
                     {
-                        Utilities.Dispose(ref _filter_display_waterfall_bmp);
-                        _filter_display_waterfall_bmp = null;
+                        MessageBox.Show("Problem Shutting Down Meter DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", "DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                     }
-                    if (_filter_display_waterfall_bmp_tx != null)
-                    {
-                        Utilities.Dispose(ref _filter_display_waterfall_bmp_tx);
-                        _filter_display_waterfall_bmp_tx = null;
-                    }
-
-                    Utilities.Dispose(ref _renderTarget);
-                    Utilities.Dispose(ref _swapChain1);
-                    Utilities.Dispose(ref _swapChain);
-                    Utilities.Dispose(ref _surface);
-                    Utilities.Dispose(ref _factory);
-                    Utilities.Dispose(ref _factory1);                    
-
-                    _renderTarget = null;
-                    _swapChain1 = null;
-                    _swapChain = null;
-                    _surface = null;
-                    _factory = null;
-                    _factory1 = null;
-
-                    if (_device != null && _device.ImmediateContext != null)
-                    {
-                        SharpDX.Direct3D11.DeviceContext dc = _device.ImmediateContext;
-                        Utilities.Dispose(ref dc);
-                        dc = null;
-                    }
-
-                    SharpDX.Direct3D11.DeviceDebug ddb = null;
-                    if (_device != null && _device.DebugName != "")
-                    {
-                        ddb = new SharpDX.Direct3D11.DeviceDebug(_device);
-                        ddb.ReportLiveDeviceObjects(ReportingLevel.Detail);
-                    }
-
-                    if (ddb != null)
-                    {
-                        Utilities.Dispose(ref ddb);
-                        ddb = null;
-                    }
-                    Utilities.Dispose(ref _device);
-                    _device = null;
-
-                    _bDXSetup = false;
-                }
-                catch (Exception e)
-                {
-                    MessageBox.Show("Problem Shutting Down Meter DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", "DirectX", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 }
             }
             internal void RemoveAllDXImages()
@@ -32339,15 +32549,15 @@ namespace Thetis
 
                 lock (_DXlock)
                 {
-                    foreach (KeyValuePair<string, SharpDX.Direct2D1.Bitmap> kvp in _images)
+                    foreach (KeyValuePair<string, ID2D1Bitmap> kvp in _images)
                     {
-                        SharpDX.Direct2D1.Bitmap b = kvp.Value;
-                        Utilities.Dispose(ref b);
+                        ID2D1Bitmap b = kvp.Value;
+                        b?.Dispose();
                     }
                     //foreach (KeyValuePair<string, BitmapBrush> kvp in _bitmap_brushes)
                     //{
-                    //    SharpDX.Direct2D1.BitmapBrush b = kvp.Value;
-                    //    Utilities.Dispose(ref b);
+                    //    ID2D1BitmapBrush b = kvp.Value;
+                    //    b?.Dispose();
                     //}
                     _images.Clear();
                     //_bitmap_brushes.Clear();
@@ -32361,14 +32571,14 @@ namespace Thetis
                 {
                     if (_images.ContainsKey(sKey))
                     {
-                        SharpDX.Direct2D1.Bitmap b = _images[sKey];
-                        Utilities.Dispose(ref b);
+                        ID2D1Bitmap b = _images[sKey];
+                        b?.Dispose();
                         _images.Remove(sKey);
                     }
                     //if (_bitmap_brushes.ContainsKey(sKey))
                     //{
                     //    BitmapBrush b = _bitmap_brushes[sKey];
-                    //    Utilities.Dispose(ref b);
+                    //    b?.Dispose();
                     //    _bitmap_brushes.Remove(sKey);
                     //}
                 }
@@ -32425,18 +32635,23 @@ namespace Thetis
                                     }
                                 }
 
+                                if (_renderTarget == null)
+                                {
+                                    _dxDisplayThreadRunning = false;
+                                    continue;
+                                }
                                 _renderTarget.BeginDraw();
 
                                 // middle pixel align shift
                                 Matrix3x2 t = _renderTarget.Transform;
-                                t.TranslationVector = _pixelShift;
+                                t.Translation = _pixelShift;
                                 _renderTarget.Transform = t;
 
                                 // ensure background for entire form/area is cleared in black, without alpha
                                 _renderTarget.Clear(_backColour_clear_colour);
 
                                 // overlay background colour
-                                SharpDX.RectangleF rect = new SharpDX.RectangleF(-0.5f, -0.5f, targetWidth + 1, targetHeight + 1);
+                                DXRectF rect = new DXRectF(-0.5f, -0.5f, targetWidth + 1, targetHeight + 1);
                                 _renderTarget.FillRectangle(rect, getDXBrushForColour(_backgroundColour));
 
 
@@ -32453,23 +32668,27 @@ namespace Thetis
                                 }
 
                                 //calcFps();
-                                //_renderTarget.DrawText(_nFps.ToString(), getDXTextFormatForFont("Trebuchet MS", 18, FontStyle.Regular), new SharpDX.RectangleF(10, 0, float.PositiveInfinity, float.PositiveInfinity), getDXBrushForColour(System.Drawing.Color.White), DrawTextOptions.None);
+                                //_renderTarget.DrawText(_nFps.ToString(), getDXTextFormatForFont("Trebuchet MS", 18, FontStyle.Regular), new DXRectF(10, 0, float.PositiveInfinity, float.PositiveInfinity), getDXBrushForColour(System.Drawing.Color.White), DrawTextOptions.None);
 
                                 // undo the translate
                                 _renderTarget.Transform = Matrix3x2.Identity;
 
-                                try
+                                Result endResult = _renderTarget.EndDraw();
+                                if (endResult.Failure)
                                 {
-                                    _renderTarget.EndDraw();
-                                }
-                                catch (SharpDXException ex) when (ex.ResultCode == SharpDX.Direct2D1.ResultCode.RecreateTarget)
-                                {
-                                    if (_dx_fail_retry < 10)
+                                    if (endResult == Vortice.Direct2D1.ResultCode.RecreateTarget)
                                     {
-                                        resizeDX(out _);
-                                        _dx_fail_retry++;
-                                        Thread.Sleep(50);
-                                        continue;
+                                        if (_dx_fail_retry < 10)
+                                        {
+                                            resizeDX(out _);
+                                            _dx_fail_retry++;
+                                            Thread.Sleep(50);
+                                            continue;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        throw new SharpGenException(endResult);
                                     }
                                 }
 
@@ -32477,8 +32696,13 @@ namespace Thetis
                                 // note: the only way to have Present non block when using vsync number of blanks 0 , is to use DoNotWait
                                 // however the gpu will error if it is busy doing something and the data can not be queued
                                 // It will error and just ignore everything, we try present and ignore the 0x887A000A error
+                                if (_swapChain1 == null)
+                                {
+                                    _dxDisplayThreadRunning = false;
+                                    continue;
+                                }
                                 PresentFlags pf = _nVBlanks == 0 ? _NoVSYNCpresentFlag : PresentFlags.None;
-                                Result r = _swapChain1.TryPresent(_nVBlanks, pf);
+                                Result r = _swapChain1.Present((uint)_nVBlanks, pf);
 
                                 // check fps delay
                                 if (nSleepTime != _oldRedrawDelay)
@@ -32488,12 +32712,12 @@ namespace Thetis
                                 }
                             //
 
-                                if (r != Result.Ok && !(
-                                    r == SharpDX.DXGI.ResultCode.WasStillDrawing/*0x887A000A*/ ||
+                                if (r.Failure && !(
+                                    r == Vortice.DXGI.ResultCode.WasStillDrawing/*0x887A000A*/ ||
                                     r == 0x087A0001/*DXGI_STATUS_OCCLUDED*/
                                     ) )
                                 {
-                                    if ((r == SharpDX.DXGI.ResultCode.DeviceRemoved || r == SharpDX.DXGI.ResultCode.DeviceReset) && _dx_fail_retry < 10)
+                                    if ((r == Vortice.DXGI.ResultCode.DeviceRemoved || r == Vortice.DXGI.ResultCode.DeviceReset) && _dx_fail_retry < 10)
                                     {
                                         resizeDX(out _);
                                         _dx_fail_retry++;
@@ -32502,9 +32726,9 @@ namespace Thetis
                                     }
 
                                     string sMsg = "";
-                                    if (r == SharpDX.DXGI.ResultCode.InvalidCall/*0x887A0001*/) sMsg = "Present Device Invalid Call" + Environment.NewLine + "" + Environment.NewLine + "[ " + r.ToString() + " ]";    //DXGI_ERROR_INVALID_CALL
-                                    if (r == SharpDX.DXGI.ResultCode.DeviceReset/*0x887A0007*/) sMsg = "Present Device Reset" + Environment.NewLine + "" + Environment.NewLine + "[ " + r.ToString() + " ]";           //DXGI_ERROR_DEVICE_RESET
-                                    if (r == SharpDX.DXGI.ResultCode.DeviceRemoved/*0x887A0005*/) sMsg = "Present Device Removed" + Environment.NewLine + "" + Environment.NewLine + "[ " + r.ToString() + " ]";         //DXGI_ERROR_DEVICE_REMOVED
+                                    if (r == Vortice.DXGI.ResultCode.InvalidCall/*0x887A0001*/) sMsg = "Present Device Invalid Call" + Environment.NewLine + "" + Environment.NewLine + "[ " + r.ToString() + " ]";    //DXGI_ERROR_INVALID_CALL
+                                    if (r == Vortice.DXGI.ResultCode.DeviceReset/*0x887A0007*/) sMsg = "Present Device Reset" + Environment.NewLine + "" + Environment.NewLine + "[ " + r.ToString() + " ]";           //DXGI_ERROR_DEVICE_RESET
+                                    if (r == Vortice.DXGI.ResultCode.DeviceRemoved/*0x887A0005*/) sMsg = "Present Device Removed" + Environment.NewLine + "" + Environment.NewLine + "[ " + r.ToString() + " ]";         //DXGI_ERROR_DEVICE_REMOVED
                                     //if (r == 0x88760870) sMsg = "Present Device DD3DDI Removed" + Environment.NewLine + "" + Environment.NewLine + "[ " + r.ToString() + " ]";  //D3DDDIERR_DEVICEREMOVED
 
                                     if (_dx_fail_retry > 0)
@@ -32551,7 +32775,7 @@ namespace Thetis
                 else
                     _renderTarget.AntialiasMode = AntialiasMode.Aliased; // this will result in non antialiased lines only if multisampling = 1
 
-                _renderTarget.TextAntialiasMode = TextAntialiasMode.Default;
+                _renderTarget.TextAntialiasMode = Vortice.Direct2D1.TextAntialiasMode.Default;
             }
             public int VerticalBlanks
             {
@@ -32605,21 +32829,21 @@ namespace Thetis
             {
                 if (!_bDXSetup) return;
 
-                _fontFactory = new SharpDX.DirectWrite.Factory();
+                _fontFactory = DWrite.DWriteCreateFactory<IDWriteFactory>(Vortice.DirectWrite.FactoryType.Isolated);
             }
             private void releaseDXFonts()
             {
                 if (!_bDXSetup) return;
 
-                foreach (KeyValuePair<(string, float, SharpDX.DirectWrite.FontWeight, SharpDX.DirectWrite.FontStyle), SharpDX.DirectWrite.TextFormat> kv in _format_cache)
+                foreach (KeyValuePair<(string, float, Vortice.DirectWrite.FontWeight, Vortice.DirectWrite.FontStyle), IDWriteTextFormat> kv in _format_cache)
                 {
-                    SharpDX.DirectWrite.TextFormat tf = kv.Value;
-                    Utilities.Dispose(ref tf);
+                    IDWriteTextFormat tf = kv.Value;
+                    tf?.Dispose();
                 }
                 _format_cache.Clear();
                 _format_cache_keys.Clear();
 
-                if (_fontFactory != null) Utilities.Dispose(ref _fontFactory);
+                if (_fontFactory != null) _fontFactory?.Dispose();
 
                 _fontFactory = null;
             }
@@ -32627,10 +32851,10 @@ namespace Thetis
             {
                 if (!_bDXSetup || _DXBrushes == null) return;
 
-                foreach (KeyValuePair<int, SharpDX.Direct2D1.Brush> kvp in _DXBrushes)
+                foreach (KeyValuePair<int, ID2D1Brush> kvp in _DXBrushes)
                 {
-                    SharpDX.Direct2D1.Brush b = kvp.Value;
-                    Utilities.Dispose(ref b);
+                    ID2D1Brush b = kvp.Value;
+                    b?.Dispose();
                     b = null;
                 }
 
@@ -32641,21 +32865,21 @@ namespace Thetis
             {
                 if (!_bDXSetup || _textFormats == null) return;
 
-                foreach (KeyValuePair<(string, float, FontStyle), SharpDX.DirectWrite.TextFormat> kvp in _textFormats)
+                foreach (KeyValuePair<(string, float, FontStyle), IDWriteTextFormat> kvp in _textFormats)
                 {
-                    SharpDX.DirectWrite.TextFormat tf = kvp.Value;
-                    Utilities.Dispose(ref tf);
+                    IDWriteTextFormat tf = kvp.Value;
+                    tf?.Dispose();
                     tf = null;
                 }
 
                 _textFormats.Clear();
                 _textFormats = null;
 
-                if (_fontFactory != null) Utilities.Dispose(ref _fontFactory);
+                if (_fontFactory != null) _fontFactory?.Dispose();
                 _fontFactory = null;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private SharpDX.Direct2D1.Brush getDXBrushForColour(System.Drawing.Color c, int replaceAlpha = -1)
+            private ID2D1Brush getDXBrushForColour(System.Drawing.Color c, int replaceAlpha = -1)
             {
                 if (!_bDXSetup) return null;
 
@@ -32667,7 +32891,7 @@ namespace Thetis
 
                 int key = (a << 24) | (c.R << 16) | (c.G << 8) | c.B; //System.Drawing.Color.FromArgb(a, c.R, c.G, c.B).ToArgb();
 
-                SharpDX.Direct2D1.Brush existingBrush;
+                ID2D1Brush existingBrush;
                 if (_DXBrushes.TryGetValue(key, out existingBrush))
                     return existingBrush;
 
@@ -32676,50 +32900,50 @@ namespace Thetis
                 float fg = c.G / 255f;
                 float fb = c.B / 255f;
 
-                SharpDX.Mathematics.Interop.RawColor4 color4 = new SharpDX.Mathematics.Interop.RawColor4(fr, fg, fb, fa);
-                SharpDX.Direct2D1.SolidColorBrush newBrush = new SharpDX.Direct2D1.SolidColorBrush(_renderTarget, color4);
+                Color4 color4 = new Color4(fr, fg, fb, fa);
+                ID2D1SolidColorBrush newBrush = _renderTarget.CreateSolidColorBrush(color4);
 
                 _DXBrushes.Add(key, newBrush);
                 return newBrush;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private SharpDX.Color4 convertColour(System.Drawing.Color c)
+            private Color4 convertColour(System.Drawing.Color c)
             {
-                return new SharpDX.Color4(c.R / 255f, c.G / 255f, c.B / 255f, c.A / 255f);
+                return new Color4(c.R / 255f, c.G / 255f, c.B / 255f, c.A / 255f);
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private SharpDX.DirectWrite.TextFormat getDXTextFormatForFont(string sFontFamily, float emSize, FontStyle style, bool bAlignRight = false)
+            private IDWriteTextFormat getDXTextFormatForFont(string sFontFamily, float emSize, FontStyle style, bool bAlignRight = false)
             {
                 if (!_bDXSetup) return null;
 
                 float roundedSize = (float)Math.Round(emSize, 1);
                 if (roundedSize == 0) roundedSize = float.Epsilon; // prevents 0 from being used by .TextFormat which would cause a crash
 
-                SharpDX.DirectWrite.TextFormat tf;
+                IDWriteTextFormat tf;
                 (string, float, FontStyle) key = (sFontFamily, roundedSize, style);
                 
                 if (!_textFormats.TryGetValue(key, out tf))
                 {
-                    SharpDX.DirectWrite.FontWeight fontWeight;
+                    Vortice.DirectWrite.FontWeight fontWeight;
                     if ((style & FontStyle.Bold) != 0)
-                        fontWeight = SharpDX.DirectWrite.FontWeight.Bold;
+                        fontWeight = Vortice.DirectWrite.FontWeight.Bold;
                     else
-                        fontWeight = SharpDX.DirectWrite.FontWeight.Regular;
+                        fontWeight = Vortice.DirectWrite.FontWeight.Regular;
 
-                    SharpDX.DirectWrite.FontStyle fontStyleValue;
+                    Vortice.DirectWrite.FontStyle fontStyleValue;
                     if ((style & FontStyle.Italic) != 0)
-                        fontStyleValue = SharpDX.DirectWrite.FontStyle.Italic;
+                        fontStyleValue = Vortice.DirectWrite.FontStyle.Italic;
                     else
-                        fontStyleValue = SharpDX.DirectWrite.FontStyle.Normal;
+                        fontStyleValue = Vortice.DirectWrite.FontStyle.Normal;
 
-                    tf = new SharpDX.DirectWrite.TextFormat(_fontFactory, sFontFamily, fontWeight, fontStyleValue, roundedSize * _pixels_per_point_width);
-                    tf.WordWrapping = SharpDX.DirectWrite.WordWrapping.NoWrap;
+                    tf = _fontFactory.CreateTextFormat(sFontFamily, fontWeight, fontStyleValue, roundedSize * _pixels_per_point_width);
+                    tf.WordWrapping = WordWrapping.NoWrap;
                     _textFormats.Add(key, tf);
                 }
 
                 tf.TextAlignment = bAlignRight
-                    ? SharpDX.DirectWrite.TextAlignment.Trailing
-                    : SharpDX.DirectWrite.TextAlignment.Leading;
+                    ? TextAlignment.Trailing
+                    : TextAlignment.Leading;
 
                 return tf;
             }
@@ -32735,8 +32959,8 @@ namespace Thetis
 
                     try
                     {
-                        Utilities.Dispose(ref _renderTarget);
-                        Utilities.Dispose(ref _surface);
+                        _renderTarget?.Dispose();
+                        _surface?.Dispose();
 
                         _renderTarget = null;
                         _surface = null;
@@ -32744,11 +32968,11 @@ namespace Thetis
                         _device.ImmediateContext.ClearState();
                         _device.ImmediateContext.Flush();
 
-                        _swapChain1.ResizeBuffers(_nBufferCount, targetWidth, targetHeight, _swapChain.Description.ModeDescription.Format, SwapChainFlags.None);
-                        _surface = _swapChain1.GetBackBuffer<Surface>(0);
+                        _swapChain1.ResizeBuffers((uint)_nBufferCount, (uint)targetWidth, (uint)targetHeight, _backBufferFormat, SwapChainFlags.None);
+                        _surface = _swapChain1.GetBuffer<IDXGISurface>(0);
 
-                        RenderTargetProperties rtp = new RenderTargetProperties(new SharpDX.Direct2D1.PixelFormat(_swapChain.Description.ModeDescription.Format, _ALPHA_MODE));
-                        _renderTarget = new RenderTarget(_factory, _surface, rtp);
+                        RenderTargetProperties rtp = new RenderTargetProperties(new D2DPixelFormat(_backBufferFormat, _ALPHA_MODE));
+                        _renderTarget = _factory.CreateDxgiSurfaceRenderTarget(_surface, rtp);
 
                         setupAliasing();
 
@@ -32764,7 +32988,7 @@ namespace Thetis
                         //string msg = "DirectX resizeDX2D() Meter failure\n\nThis can sometimes be caused by other programs 'hooking' into directX," +
                         //    "such as GFX card control software (eg, EVGA Precision Xoc). Close down Thetis, quit as many 'system tray'\nand other " +
                         //    "things as possible and try again." + e.Message;
-                        //if (_device.DeviceRemovedReason == SharpDX.DXGI.ResultCode.DeviceRemoved || _device.DeviceRemovedReason == SharpDX.DXGI.ResultCode.DeviceReset)
+                        //if (_device.DeviceRemovedReason == Vortice.DXGI.ResultCode.DeviceRemoved || _device.DeviceRemovedReason == Vortice.DXGI.ResultCode.DeviceReset)
                         //{
                         //    msg += "\n\nDeviceRemoved or DeviceReset reported by DirectX, this indicates a problem with the graphics device or its driver.\n\nRemoval Code : " + _device.DeviceRemovedReason.Code.ToString();
                         //}
@@ -32872,7 +33096,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            SharpDX.RectangleF rect = new SharpDX.RectangleF(0, 0, tw * rw, tw * rh);
+                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -32881,9 +33105,9 @@ namespace Thetis
                                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                SharpDX.RectangleF clickRect = new SharpDX.RectangleF(x, y, w, h);
+                                DXRectF clickRect = new DXRectF(x, y, w, h);
 
-                                if (clickRect.Contains(new SharpDX.Point(e.X, e.Y)))
+                                if (clickRect.Contains(new Point(e.X, e.Y)))
                                 {
                                     mi.MouseMovePoint = new PointF(e.X, e.Y);
                                     mi.MouseEntered = true;
@@ -32922,7 +33146,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            SharpDX.RectangleF rect = new SharpDX.RectangleF(0, 0, tw * rw, tw * rh);
+                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -32931,9 +33155,9 @@ namespace Thetis
                                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                SharpDX.RectangleF clickRect = new SharpDX.RectangleF(x, y, w, h);
+                                DXRectF clickRect = new DXRectF(x, y, w, h);
 
-                                if (clickRect.Contains(new SharpDX.Point(e.X, e.Y)))
+                                if (clickRect.Contains(new Point(e.X, e.Y)))
                                 {
                                     mi.MouseEntered = true;
                                     int number_of_moves = e.Delta * SystemInformation.MouseWheelScrollLines / 120;
@@ -32972,7 +33196,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            SharpDX.RectangleF rect = new SharpDX.RectangleF(0, 0, tw * rw, tw * rh);
+                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -32981,9 +33205,9 @@ namespace Thetis
                                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                SharpDX.RectangleF clickRect = new SharpDX.RectangleF(x, y, w, h);
+                                DXRectF clickRect = new DXRectF(x, y, w, h);
 
-                                if (clickRect.Contains(new SharpDX.Point(e.X, e.Y)))
+                                if (clickRect.Contains(new Point(e.X, e.Y)))
                                 {
                                     mi.MouseEntered = true;
                                     mi.MouseButton = e.Button;
@@ -33026,7 +33250,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            SharpDX.RectangleF rect = new SharpDX.RectangleF(0, 0, tw * rw, tw * rh);
+                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -33035,9 +33259,9 @@ namespace Thetis
                                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                SharpDX.RectangleF clickRect = new SharpDX.RectangleF(x, y, w, h);
+                                DXRectF clickRect = new DXRectF(x, y, w, h);
 
-                                if (clickRect.Contains(new SharpDX.Point(e.X, e.Y)))
+                                if (clickRect.Contains(new Point(e.X, e.Y)))
                                 {
                                     mi.MouseEntered = true;
                                     mi.MouseButton = e.Button;
@@ -33080,7 +33304,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            SharpDX.RectangleF rect = new SharpDX.RectangleF(0, 0, tw * rw, tw * rh);
+                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -33095,9 +33319,9 @@ namespace Thetis
                                         float w = rect.Width * (mi.Size.Width / m.XRatio);
                                         float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                        SharpDX.RectangleF clickRect = new SharpDX.RectangleF(x, y, w, h);
+                                        DXRectF clickRect = new DXRectF(x, y, w, h);
 
-                                        if (clickRect.Contains(new SharpDX.Point(e.X, e.Y)))
+                                        if (clickRect.Contains(new Point(e.X, e.Y)))
                                         {
                                             m.MouseUp(e, m, cb);
                                         }
@@ -33110,9 +33334,9 @@ namespace Thetis
                                     float w = rect.Width * (mi.Size.Width / m.XRatio);
                                     float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                    SharpDX.RectangleF clickRect = new SharpDX.RectangleF(x, y, w, h);
+                                    DXRectF clickRect = new DXRectF(x, y, w, h);
 
-                                    if (clickRect.Contains(new SharpDX.Point(e.X, e.Y)))
+                                    if (clickRect.Contains(new Point(e.X, e.Y)))
                                     {
                                         mi.MouseButton = e.Button;
                                         mi.MouseUpPoint = new PointF(e.X, e.Y);
@@ -33193,7 +33417,7 @@ namespace Thetis
                         float tw = targetWidth - 1f;
                         float rw = m.XRatio;
                         float rh = m.YRatio;
-                        SharpDX.RectangleF rect = new SharpDX.RectangleF(0, 0, tw * rw, tw * rh);
+                        DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
 
                         for (int i = m.SortedMeterItemsForZOrder.Count - 1; i >= 0; i--)
                         {
@@ -33204,9 +33428,9 @@ namespace Thetis
                             float y = (mi.DisplayTopLeft.Y / m.YRatio) * rect.Height;
                             float w = rect.Width * (mi.Size.Width / m.XRatio);
                             float h = rect.Height * (mi.Size.Height / m.YRatio);
-                            SharpDX.RectangleF clickRect = new SharpDX.RectangleF(x, y, w, h);
+                            DXRectF clickRect = new DXRectF(x, y, w, h);
 
-                            if (clickRect.Contains(new SharpDX.Point(clientPoint.X, clientPoint.Y)))
+                            if (clickRect.Contains(new Point(clientPoint.X, clientPoint.Y)))
                             {
                                 return mi as clsWaveRecord;
                             }
@@ -33242,7 +33466,7 @@ namespace Thetis
 
                         float rw = m.XRatio;
                         float rh = m.YRatio;
-                        SharpDX.RectangleF rect = new SharpDX.RectangleF(0, 0, tw * rw, tw * rh);
+                        DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
 
                         foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                         {                          
@@ -33386,37 +33610,37 @@ namespace Thetis
                 SizeF sizeValue;
                 if (!ignore_caching && _stringMeasure.TryGetValue(key, out sizeValue)) return sizeValue;
 
-                SharpDX.DirectWrite.FontWeight fontWeight = (style & FontStyle.Bold) != 0
-                    ? SharpDX.DirectWrite.FontWeight.Bold
-                    : SharpDX.DirectWrite.FontWeight.Regular;
-                SharpDX.DirectWrite.FontStyle fontStyle = (style & FontStyle.Italic) != 0
-                    ? SharpDX.DirectWrite.FontStyle.Italic
-                    : SharpDX.DirectWrite.FontStyle.Normal;
+                Vortice.DirectWrite.FontWeight fontWeight = (style & FontStyle.Bold) != 0
+                    ? Vortice.DirectWrite.FontWeight.Bold
+                    : Vortice.DirectWrite.FontWeight.Regular;
+                Vortice.DirectWrite.FontStyle fontStyle = (style & FontStyle.Italic) != 0
+                    ? Vortice.DirectWrite.FontStyle.Italic
+                    : Vortice.DirectWrite.FontStyle.Normal;
 
-                (string, float, SharpDX.DirectWrite.FontWeight, SharpDX.DirectWrite.FontStyle) fmtKey = (sFontFamily, roundedSize, fontWeight, fontStyle);
-                SharpDX.DirectWrite.TextFormat tf;
+                (string, float, Vortice.DirectWrite.FontWeight, Vortice.DirectWrite.FontStyle) fmtKey = (sFontFamily, roundedSize, fontWeight, fontStyle);
+                IDWriteTextFormat tf;
                 if (!_format_cache.TryGetValue(fmtKey, out tf))
                 {
-                    tf = new SharpDX.DirectWrite.TextFormat(_fontFactory, sFontFamily, fontWeight, fontStyle, roundedSize);
-                    tf.WordWrapping = SharpDX.DirectWrite.WordWrapping.NoWrap;
+                    tf = _fontFactory.CreateTextFormat(sFontFamily, fontWeight, fontStyle, roundedSize);
+                    tf.WordWrapping = WordWrapping.NoWrap;
                     _format_cache.Add(fmtKey, tf);
                     _format_cache_keys.Enqueue(fmtKey);
                     if (_format_cache.Count > 2000)
                     {
-                        (string, float, SharpDX.DirectWrite.FontWeight, SharpDX.DirectWrite.FontStyle) oldFmtKey = _format_cache_keys.Dequeue();
-                        SharpDX.DirectWrite.TextFormat oldTf;
+                        (string, float, Vortice.DirectWrite.FontWeight, Vortice.DirectWrite.FontStyle) oldFmtKey = _format_cache_keys.Dequeue();
+                        IDWriteTextFormat oldTf;
                         if (_format_cache.TryGetValue(oldFmtKey, out oldTf))
                         {
-                            Utilities.Dispose(ref oldTf);
+                            oldTf?.Dispose();
                             _format_cache.Remove(oldFmtKey);
                         }
                     }
                 }
 
-                SharpDX.DirectWrite.TextLayout layout = new SharpDX.DirectWrite.TextLayout(_fontFactory, sText, tf, float.MaxValue, float.MaxValue);
+                IDWriteTextLayout layout = _fontFactory.CreateTextLayout(sText, tf, float.MaxValue, float.MaxValue);
                 float width = layout.Metrics.Width;
                 float height = layout.Metrics.Height;
-                Utilities.Dispose(ref layout);
+                layout?.Dispose();
 
                 sizeValue = new SizeF(
                     width * _pixels_per_point_width,
@@ -33453,21 +33677,21 @@ namespace Thetis
 
             //    if (!ignore_caching && _stringMeasure.ContainsKey(sKey)) return _stringMeasure[sKey];
 
-            //    SharpDX.DirectWrite.FontWeight fontWeight = SharpDX.DirectWrite.FontWeight.Regular;
-            //    SharpDX.DirectWrite.FontStyle fontStyle = SharpDX.DirectWrite.FontStyle.Normal;
-            //    if (((int)style & (int)FontStyle.Bold) == (int)FontStyle.Bold) fontWeight = SharpDX.DirectWrite.FontWeight.Bold;
-            //    if (((int)style & (int)FontStyle.Italic) == (int)FontStyle.Italic) fontStyle = SharpDX.DirectWrite.FontStyle.Italic;
+            //    Vortice.DirectWrite.FontWeight fontWeight = Vortice.DirectWrite.FontWeight.Regular;
+            //    Vortice.DirectWrite.FontStyle fontStyle = Vortice.DirectWrite.FontStyle.Normal;
+            //    if (((int)style & (int)FontStyle.Bold) == (int)FontStyle.Bold) fontWeight = Vortice.DirectWrite.FontWeight.Bold;
+            //    if (((int)style & (int)FontStyle.Italic) == (int)FontStyle.Italic) fontStyle = Vortice.DirectWrite.FontStyle.Italic;
 
             //    // calculate how big the string would be @ emSize pt
-            //    SharpDX.DirectWrite.TextFormat tf = new SharpDX.DirectWrite.TextFormat(_fontFactory, sFontFamily, fontWeight, fontStyle, emSize);
-            //    tf.WordWrapping = SharpDX.DirectWrite.WordWrapping.NoWrap;
+            //    IDWriteTextFormat tf = _fontFactory.CreateTextFormat(sFontFamily, fontWeight, fontStyle, emSize);
+            //    tf.WordWrapping = WordWrapping.NoWrap;
 
-            //    SharpDX.DirectWrite.TextLayout layout = new SharpDX.DirectWrite.TextLayout(_fontFactory, sText, tf, float.MaxValue, float.MaxValue);
+            //    IDWriteTextLayout layout = _fontFactory.CreateTextLayout(sText, tf, float.MaxValue, float.MaxValue);
             //    float width = layout.Metrics.Width;
             //    float height = layout.Metrics.Height;
-            //    Utilities.Dispose(ref layout);
+            //    layout?.Dispose();
             //    layout = null;
-            //    Utilities.Dispose(ref tf);
+            //    tf?.Dispose();
             //    tf = null;
 
             //    SizeF size = new SizeF(width, height);
@@ -33530,7 +33754,7 @@ namespace Thetis
                 return mi.FadeValue;
             }
             //
-            private void renderNeedleScale(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderNeedleScale(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsNeedleScalePwrItem scale = (clsNeedleScalePwrItem)mi;
 
@@ -33541,7 +33765,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                SharpDX.RectangleF mirect = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF mirect = new DXRectF(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.CornflowerBlue));
 
                 if (scale.ItemType == clsMeterItem.MeterItemType.NEEDLE_SCALE_PWR && (scale.ReadingSource == Reading.PWR || scale.ReadingSource == Reading.REVERSE_PWR))
@@ -33720,11 +33944,11 @@ namespace Thetis
 
                                 Matrix3x2 currentTransform = _renderTarget.Transform;
 
-                                Matrix3x2 t = Matrix3x2.Rotation((ang + fChangeAngle) + (float)(degToRad(90f + rotation))/*(float)radToDeg(ang) + rotation*/, new Vector2(endX, endY));
-                                t.TranslationVector += _pixelShift;
+                                Matrix3x2 t = Matrix3x2.CreateRotation((ang + fChangeAngle) + (float)(degToRad(90f + rotation))/*(float)radToDeg(ang) + rotation*/, new Vector2(endX, endY));
+                                t.Translation += _pixelShift;
                                 _renderTarget.Transform = t;
 
-                                SharpDX.RectangleF txtrect = new SharpDX.RectangleF(fontEndX, fontEndY, szTextSize.Width, szTextSize.Height);
+                                DXRectF txtrect = new DXRectF(fontEndX, fontEndY, szTextSize.Width, szTextSize.Height);
                                 _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, getDXBrushForColour(scale.LowColour, 255));
 
                                 _renderTarget.Transform = currentTransform;
@@ -33744,7 +33968,7 @@ namespace Thetis
 
                 return fPower.ToString(sFormat);
             }
-            private void renderScale(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderScale(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsScaleItem scale = (clsScaleItem)mi;
 
@@ -33753,11 +33977,11 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                SharpDX.RectangleF mirect = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF mirect = new DXRectF(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.CornflowerBlue));
 
-                RawVector2 startPoint = new RawVector2();
-                RawVector2 endPoint = new RawVector2();
+                Vector2 startPoint = new Vector2();
+                Vector2 endPoint = new Vector2();
 
                 if (scale.ItemType == clsMeterItem.MeterItemType.H_SCALE)
                 {
@@ -33770,7 +33994,7 @@ namespace Thetis
                         //string sText = scale.ReadingName;//MeterManager.ReadingName(scale.ReadingSource);
                         string sText = scale.IsCustom ? scale.CustomTitle : scale.ReadingName;
                         szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                        SharpDX.RectangleF txtrect = new SharpDX.RectangleF(x + (w * 0.5f) - (szTextSize.Width / 2f), y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                        DXRectF txtrect = new DXRectF(x + (w * 0.5f) - (szTextSize.Width / 2f), y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                         _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, getDXBrushForColour(scale.FontColourType, 255));
                     }
 
@@ -33875,8 +34099,8 @@ namespace Thetis
                                 //        break;
                                 //}
 
-                                SharpDX.Direct2D1.Brush lowColour = getDXBrushForColour(scale.LowColour, 255);
-                                SharpDX.Direct2D1.Brush highColour = getDXBrushForColour(scale.HighColour, 255);
+                                ID2D1Brush lowColour = getDXBrushForColour(scale.LowColour, 255);
+                                ID2D1Brush highColour = getDXBrushForColour(scale.HighColour, 255);
 
                                 string[] powerList = new string[5];
                                 float fMaxPower = scale.MaxPower <= 1f ? scale.MaxPower * 1000f : scale.MaxPower;
@@ -33921,7 +34145,7 @@ namespace Thetis
                                     // text
                                     string sText = powerList[i - 1];
                                     szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                    SharpDX.RectangleF txtrect = new SharpDX.RectangleF(startPoint.X - (szTextSize.Width * 0.5f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                    DXRectF txtrect = new DXRectF(startPoint.X - (szTextSize.Width * 0.5f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, lowColour);
                                 }
 
@@ -33945,7 +34169,7 @@ namespace Thetis
                                 // text
                                 string sText2 = powerList[4];
                                 szTextSize = measureString(sText2, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                SharpDX.RectangleF txtrect2 = new SharpDX.RectangleF(startPoint.X - szTextSize.Width, endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                DXRectF txtrect2 = new DXRectF(startPoint.X - szTextSize.Width, endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                 _renderTarget.DrawText(sText2, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect2, highColour);
                             }
                             break;
@@ -33956,8 +34180,8 @@ namespace Thetis
                         //    break;
                         case Reading.SWR:
                             {
-                                SharpDX.Direct2D1.Brush lowColour = getDXBrushForColour(scale.LowColour, 255);
-                                SharpDX.Direct2D1.Brush highColour = getDXBrushForColour(scale.HighColour, 255);
+                                ID2D1Brush lowColour = getDXBrushForColour(scale.LowColour, 255);
+                                ID2D1Brush highColour = getDXBrushForColour(scale.HighColour, 255);
 
                                 float spacing = (w * 0.75f) / 15.0f;
                                 string[] swr_list = { "1.5", "2" };
@@ -34002,7 +34226,7 @@ namespace Thetis
                                     // text
                                     string sText = swr_list[i - 1];
                                     szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                    SharpDX.RectangleF txtrect = new SharpDX.RectangleF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                    DXRectF txtrect = new DXRectF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, lowColour);
                                 }
 
@@ -34031,7 +34255,7 @@ namespace Thetis
                                     // text
                                     string sText = swr_hi_list[i - 1];
                                     szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                    SharpDX.RectangleF txtrect = new SharpDX.RectangleF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                    DXRectF txtrect = new DXRectF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, highColour);
                                 }
                             }
@@ -34046,9 +34270,9 @@ namespace Thetis
                         case Reading.CUSTOM_AV:
                         case Reading.CUSTOM_PK:
                             {
-                                SharpDX.Direct2D1.Brush lowColour = getDXBrushForColour(scale.LowColour, 255);
-                                SharpDX.Direct2D1.Brush highColour = getDXBrushForColour(scale.HighColour, 255);
-                                SharpDX.Direct2D1.Brush col;
+                                ID2D1Brush lowColour = getDXBrushForColour(scale.LowColour, 255);
+                                ID2D1Brush highColour = getDXBrushForColour(scale.HighColour, 255);
+                                ID2D1Brush col;
 
                                 float range = scale.CustomMax - scale.CustomMin;
                                 float highperc = (scale.CustomHigh - scale.CustomMin) / range;
@@ -34071,7 +34295,7 @@ namespace Thetis
                                 float high_start = startPoint.X;
                                 float val;
                                 string sText;
-                                SharpDX.RectangleF txtrect;
+                                DXRectF txtrect;
                                 for (int i = 1; i < (int)markers; i++)
                                 {
                                     startPoint.X = x + (i * spacing);
@@ -34092,7 +34316,7 @@ namespace Thetis
 
                                         sText = val.ToString(val % 1 == 0 || val < -100 || val > 100 ? "F0" : "F1");
                                         szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                        txtrect = new SharpDX.RectangleF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                        txtrect = new DXRectF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                         _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, col);
                                     }
 
@@ -34108,7 +34332,7 @@ namespace Thetis
                                 val = scale.CustomMax;
                                 sText = val.ToString(val % 1 == 0 || val < -100 || val > 100 ? "F0" : "F1");
                                 szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                txtrect = new SharpDX.RectangleF(x + w - szTextSize.Width, endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                txtrect = new DXRectF(x + w - szTextSize.Width, endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                 _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, col);
                             }
                             break;
@@ -34127,7 +34351,7 @@ namespace Thetis
                     {
                         string sText = scale.ReadingName;//MeterManager.ReadingName(scale.ReadingSource);
                         adjustedFontSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                        SharpDX.RectangleF txtrect = new SharpDX.RectangleF(x, y - (adjustedFontSize.Height * 1.1f), adjustedFontSize.Width, adjustedFontSize.Height);
+                        DXRectF txtrect = new DXRectF(x, y - (adjustedFontSize.Height * 1.1f), adjustedFontSize.Width, adjustedFontSize.Height);
                         _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, getDXBrushForColour(scale.FontColourType, 255));
                     }
 
@@ -34184,7 +34408,7 @@ namespace Thetis
                                     // text
                                     string sText = (-1 + i * 2).ToString();
                                     adjustedFontSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                                    SharpDX.RectangleF txtrect = new SharpDX.RectangleF(endPoint.X + (w * 0.08f), endPoint.Y - (adjustedFontSize.Height / 2f), adjustedFontSize.Width, adjustedFontSize.Height);
+                                    DXRectF txtrect = new DXRectF(endPoint.X + (w * 0.08f), endPoint.Y - (adjustedFontSize.Height / 2f), adjustedFontSize.Width, adjustedFontSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, getDXBrushForColour(scale.FontColourLow, 255));
                                 }
 
@@ -34215,7 +34439,7 @@ namespace Thetis
                                     // text
                                     string sText = "+" + (i * 20).ToString();
                                     adjustedFontSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                                    SharpDX.RectangleF txtrect = new SharpDX.RectangleF(endPoint.X - (w * 0.2f), endPoint.Y - (adjustedFontSize.Height / 2f) + (h * 0.01f), adjustedFontSize.Width, adjustedFontSize.Height);
+                                    DXRectF txtrect = new DXRectF(endPoint.X - (w * 0.2f), endPoint.Y - (adjustedFontSize.Height / 2f) + (h * 0.01f), adjustedFontSize.Width, adjustedFontSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, getDXBrushForColour(scale.FontColourHigh, 255));
                                 }
                             }
@@ -34230,13 +34454,13 @@ namespace Thetis
                 if (centrePerc >= 0) lowToHighPoint = centrePerc;
 
                 float spacing = (w * lowToHighPoint) / (float)(lowLongTicks - 1);//(w * 0.6666f) / 5.0f;
-                RawVector2 startPoint = new RawVector2();
-                RawVector2 endPoint = new RawVector2();
+                Vector2 startPoint = new Vector2();
+                Vector2 endPoint = new Vector2();
 
-                SharpDX.Direct2D1.Brush lowColour = getDXBrushForColour(scale.LowColour, nFade);
-                SharpDX.Direct2D1.Brush fontLowColour = getDXBrushForColour(scale.FontColourLow, nFade);
-                SharpDX.Direct2D1.Brush highColour = getDXBrushForColour(scale.HighColour, nFade);
-                SharpDX.Direct2D1.Brush fontHighColour = getDXBrushForColour(scale.FontColourHigh, nFade);
+                ID2D1Brush lowColour = getDXBrushForColour(scale.LowColour, nFade);
+                ID2D1Brush fontLowColour = getDXBrushForColour(scale.FontColourLow, nFade);
+                ID2D1Brush highColour = getDXBrushForColour(scale.HighColour, nFade);
+                ID2D1Brush fontHighColour = getDXBrushForColour(scale.FontColourHigh, nFade);
 
                 if (scale.ShowMarkers)
                 {
@@ -34275,7 +34499,7 @@ namespace Thetis
                     // text
                     string sText = (lowStartNumber + i * lowIncrement).ToString();
                     SizeF szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                    SharpDX.RectangleF txtrect = new SharpDX.RectangleF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height, szTextSize.Width, szTextSize.Height);
+                    DXRectF txtrect = new DXRectF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height, szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, fontLowColour);
                 }
                 
@@ -34306,11 +34530,11 @@ namespace Thetis
                     string sText = ((highEndNumber - (highLongTicks * highIngrement)) + i * highIngrement).ToString();
                     if (addAllTrailingPlus || (i == highLongTicks && addTrailingPlus)) sText += "+";
                     SizeF szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                    SharpDX.RectangleF txtrect = new SharpDX.RectangleF(i == highLongTicks ? x + w - szTextSize.Width : startPoint.X - szTextSize.Width / 2f, endPoint.Y - szTextSize.Height, szTextSize.Width, szTextSize.Height);
+                    DXRectF txtrect = new DXRectF(i == highLongTicks ? x + w - szTextSize.Width : startPoint.X - szTextSize.Width / 2f, endPoint.Y - szTextSize.Height, szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, fontHighColour);
                 }
             }
-            private void renderGroup(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderGroup(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsItemGroup ig = (clsItemGroup)mi;
 
@@ -34319,49 +34543,49 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                SharpDX.RectangleF igrect = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF igrect = new DXRectF(x, y, w, h);
                 _renderTarget.DrawRectangle(igrect, getDXBrushForColour(System.Drawing.Color.Green));
 
                 float newSize = 16f;
                 string sText = ig.Order.ToString();
                 SizeF szTextSize = measureString(sText, "Trebuchet MS", FontStyle.Regular, newSize);
-                SharpDX.RectangleF txtrect = new SharpDX.RectangleF(x, y, szTextSize.Width, szTextSize.Height);
+                DXRectF txtrect = new DXRectF(x, y, szTextSize.Width, szTextSize.Height);
                 _renderTarget.DrawText(sText, getDXTextFormatForFont("Trebuchet MS", newSize, FontStyle.Regular), txtrect, getDXBrushForColour(System.Drawing.Color.White));
             }
-            private void slits(Vector2 centre, float radiusX, float radiusY, float w, float h, SharpDX.Direct2D1.Brush closedSectionBrush)
+            private void slits(Vector2 centre, float radiusX, float radiusY, float w, float h, ID2D1Brush closedSectionBrush)
             {
                 const double rads90 = Math.PI / 2f;
 
                 // do the slits slits either side
-                PathGeometry sharpGeometry = new PathGeometry(_renderTarget.Factory);
-                GeometrySink geo = sharpGeometry.Open();
+                ID2D1PathGeometry sharpGeometry = _renderTarget.Factory.CreatePathGeometry();
+                ID2D1GeometrySink geo = sharpGeometry.Open();
                 //start bottom
-                geo.BeginFigure(new SharpDX.Vector2(centre.X, centre.Y + (h * 0.03f)), FigureBegin.Filled);
+                geo.BeginFigure(new Vector2(centre.X, centre.Y + (h * 0.03f)), FigureBegin.Filled);
 
                 // calc radius point right side
                 float rX = centre.X + (float)Math.Sin(rads90) * radiusX;
                 float rY = centre.Y + (float)Math.Cos(rads90) * radiusY;
-                geo.AddLine(new SharpDX.Vector2(rX, rY));
+                geo.AddLine(new Vector2(rX, rY));
 
                 //to top
-                geo.AddLine(new SharpDX.Vector2(centre.X, centre.Y - (h * 0.03f)));
+                geo.AddLine(new Vector2(centre.X, centre.Y - (h * 0.03f)));
 
                 // calc radius point left side
                 rX = centre.X + (float)Math.Sin(-rads90) * radiusX;
                 rY = centre.Y + (float)Math.Cos(-rads90) * radiusY;
-                geo.AddLine(new SharpDX.Vector2(rX, rY));
+                geo.AddLine(new Vector2(rX, rY));
 
                 geo.EndFigure(FigureEnd.Closed); // adds the closing line
                 geo.Close();
 
                 _renderTarget.FillGeometry(sharpGeometry, closedSectionBrush);
 
-                Utilities.Dispose(ref geo);
+                geo?.Dispose();
                 geo = null;
-                Utilities.Dispose(ref sharpGeometry);
+                sharpGeometry?.Dispose();
                 sharpGeometry = null;
             }
-            private void renderLed(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m, bool draw_led)
+            private void renderLed(DXRectF rect, clsMeterItem mi, clsMeter m, bool draw_led)
             {
                 clsLed led = (clsLed)mi;
 
@@ -34395,7 +34619,7 @@ namespace Thetis
                 {
                     if (led.ShowBackPanel)
                     {
-                        SharpDX.RectangleF rectSC = new SharpDX.RectangleF(x, y, w, h);
+                        DXRectF rectSC = new DXRectF(x, y, w, h);
                         _renderTarget.FillRectangle(rectSC, getDXBrushForColour(m.MOX ? led.PanelBackColour2 : led.PanelBackColour1, mi.FadeValue));
                     }
                 }
@@ -34480,13 +34704,13 @@ namespace Thetis
                         float ySize = targetWidth * led.SizeY;
                         float posX = x + led.OffsetX * (targetWidth * m.XRatio);
                         float posY = y + led.OffsetY * (targetWidth * m.YRatio);
-                        SharpDX.RectangleF igrect = new SharpDX.RectangleF(posX - (xSize / 2f), posY - (ySize / 2f), xSize, ySize);
+                        DXRectF igrect = new DXRectF(posX - (xSize / 2f), posY - (ySize / 2f), xSize, ySize);
 
                         _renderTarget.FillRectangle(igrect, getDXBrushForColour(c, 255));
                     }
                 }
             }
-            private bool renderTextOverlay(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m, bool render_text)
+            private bool renderTextOverlay(DXRectF rect, clsMeterItem mi, clsMeter m, bool render_text)
             {
                 clsTextOverlay text_overlay = (clsTextOverlay)mi;
 
@@ -34522,7 +34746,7 @@ namespace Thetis
                 {
                     if (text_overlay.ShowBackPanel)
                     {
-                        SharpDX.RectangleF rectSC = new SharpDX.RectangleF(x, y, w, h);
+                        DXRectF rectSC = new DXRectF(x, y, w, h);
                         _renderTarget.FillRectangle(rectSC, getDXBrushForColour(m.MOX ? text_overlay.PanelBackColour2 : text_overlay.PanelBackColour1, mi.FadeValue));
                     }
                 }
@@ -35635,7 +35859,7 @@ namespace Thetis
 
                 return (row_rx, row_tx, true);
             }
-            private void renderDialDisplay(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderDialDisplay(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsDialDisplay dial = (clsDialDisplay)mi;
 
@@ -35644,21 +35868,21 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //SharpDX.RectangleF rectSC = new SharpDX.RectangleF(x, y, w, h);
+                //DXRectF rectSC = new DXRectF(x, y, w, h);
                 //_renderTarget.FillRectangle(rectSC, getDXBrushForColour(dial.Colour, mi.FadeValue));
 
                 bool enabled = (!dial.FadeOnRx && !m.MOX) | (!dial.FadeOnTx && m.MOX);
 
-                SharpDX.Direct2D1.Brush main_circle_brush = getDXBrushForColour(dial.CircleColour);//System.Drawing.Color.Black);
-                SharpDX.Direct2D1.Brush main_ring_brush = getDXBrushForColour(dial.RingColour);//System.Drawing.Color.Gray);
-                SharpDX.Direct2D1.Brush marker_brush = getDXBrushForColour(dial.PadColour);//System.Drawing.Color.Blue);
-                SharpDX.Direct2D1.Brush marker_pressed_brush = getDXBrushForColour(dial.PadPressedColour);//System.Drawing.Color.Orange);                
-                SharpDX.Direct2D1.Brush button_on = getDXBrushForColour(dial.ButtonOnColour);//System.Drawing.Color.CornflowerBlue);
-                SharpDX.Direct2D1.Brush button_off = getDXBrushForColour(dial.ButtonOffColour);//System.Drawing.Color.Black);
-                SharpDX.Direct2D1.Brush button_highlight = getDXBrushForColour(dial.ButtonHighlightColour);//System.Drawing.Color.Gray);
-                SharpDX.Direct2D1.Brush marker_speed_brush_down = getDXBrushForColour(dial.SlowColour);//System.Drawing.Color.Blue);
-                SharpDX.Direct2D1.Brush marker_speed_brush = getDXBrushForColour(dial.HoldColour);//System.Drawing.Color.Green);
-                SharpDX.Direct2D1.Brush marker_speed_brush_up = getDXBrushForColour(dial.FastColour);//System.Drawing.Color.Red);
+                ID2D1Brush main_circle_brush = getDXBrushForColour(dial.CircleColour);//System.Drawing.Color.Black);
+                ID2D1Brush main_ring_brush = getDXBrushForColour(dial.RingColour);//System.Drawing.Color.Gray);
+                ID2D1Brush marker_brush = getDXBrushForColour(dial.PadColour);//System.Drawing.Color.Blue);
+                ID2D1Brush marker_pressed_brush = getDXBrushForColour(dial.PadPressedColour);//System.Drawing.Color.Orange);                
+                ID2D1Brush button_on = getDXBrushForColour(dial.ButtonOnColour);//System.Drawing.Color.CornflowerBlue);
+                ID2D1Brush button_off = getDXBrushForColour(dial.ButtonOffColour);//System.Drawing.Color.Black);
+                ID2D1Brush button_highlight = getDXBrushForColour(dial.ButtonHighlightColour);//System.Drawing.Color.Gray);
+                ID2D1Brush marker_speed_brush_down = getDXBrushForColour(dial.SlowColour);//System.Drawing.Color.Blue);
+                ID2D1Brush marker_speed_brush = getDXBrushForColour(dial.HoldColour);//System.Drawing.Color.Green);
+                ID2D1Brush marker_speed_brush_up = getDXBrushForColour(dial.FastColour);//System.Drawing.Color.Red);
 
                 bool hightlight0 = false;
                 bool hightlight1 = false;
@@ -35672,7 +35896,7 @@ namespace Thetis
                 System.Drawing.RectangleF zone1 = new System.Drawing.RectangleF(x + (w / 2), y, w / 2, h / 2);
                 System.Drawing.RectangleF zone2 = new System.Drawing.RectangleF(x, y + (h / 2), w / 2, h / 2);
                 System.Drawing.RectangleF zone3 = new System.Drawing.RectangleF(x + (w / 2), y + (h / 2), w / 2, h / 2);
-                RawVector2 centre = new RawVector2(x + (w / 2f), y + (h / 2f));
+                Vector2 centre = new Vector2(x + (w / 2f), y + (h / 2f));
 
                 if (enabled && dial.MouseEntered)
                 {
@@ -35692,10 +35916,10 @@ namespace Thetis
                     hightlight3 = !dial.Pressed && outside_main_circle && zone3.Contains(mouse_raw_x, mouse_raw_y); // lock
                 }
 
-                _renderTarget.FillRectangle(new SharpDX.RectangleF(zone0.X, zone0.Y, zone0.Width, zone0.Height), dial.VFOA ? button_on : (hightlight0 ? button_highlight : button_off) );
-                _renderTarget.FillRectangle(new SharpDX.RectangleF(zone1.X, zone1.Y, zone1.Width, zone1.Height), !dial.VFOA ? button_on : (hightlight1 ? button_highlight : button_off));
-                _renderTarget.FillRectangle(new SharpDX.RectangleF(zone2.X, zone2.Y, zone2.Width, zone2.Height), dial.Accelerate ? button_on : (hightlight2 ? button_highlight : button_off));
-                _renderTarget.FillRectangle(new SharpDX.RectangleF(zone3.X, zone3.Y, zone3.Width, zone3.Height), dial.Lock ? button_on : (hightlight3 ? button_highlight : button_off));
+                _renderTarget.FillRectangle(new DXRectF(zone0.X, zone0.Y, zone0.Width, zone0.Height), dial.VFOA ? button_on : (hightlight0 ? button_highlight : button_off) );
+                _renderTarget.FillRectangle(new DXRectF(zone1.X, zone1.Y, zone1.Width, zone1.Height), !dial.VFOA ? button_on : (hightlight1 ? button_highlight : button_off));
+                _renderTarget.FillRectangle(new DXRectF(zone2.X, zone2.Y, zone2.Width, zone2.Height), dial.Accelerate ? button_on : (hightlight2 ? button_highlight : button_off));
+                _renderTarget.FillRectangle(new DXRectF(zone3.X, zone3.Y, zone3.Width, zone3.Height), dial.Lock ? button_on : (hightlight3 ? button_highlight : button_off));
 
                 dial.VFOAHighlighted = hightlight0 && !hightlight1;
                 dial.VFOBHighlighted = hightlight1 && !hightlight0;
@@ -35715,7 +35939,7 @@ namespace Thetis
                 {
                     if (dial.Pressed && Math.Abs(dial.SmoothedSpeed) >= 0.1f)
                     {
-                        SharpDX.Direct2D1.Brush speed_brush;
+                        ID2D1Brush speed_brush;
                         switch (dial.TuneStepDirection)
                         {
                             case -1:
@@ -35817,7 +36041,7 @@ namespace Thetis
                 //plotText(dial.DegreesTotal.ToString("f0"), 0, 0 + 60, rect.Width, 36f, System.Drawing.Color.White, 255, "Trebuchet MS", FontStyle.Regular);
                 //plotText($"{mouse_x.ToString("f2")},{mouse_y.ToString("f2")},{distance_from_centre.ToString("f2")}", 0, x + h / 2f, rect.Width, 36f, System.Drawing.Color.White, 255, "Trebuchet MS", FontStyle.Regular);
             }
-            private void renderFilterDisplay(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderFilterDisplay(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsFilterItem filter = (clsFilterItem)mi;
 
@@ -35843,7 +36067,7 @@ namespace Thetis
                         break;
                 }
 
-                SharpDX.RectangleF rectSC = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF rectSC = new DXRectF(x, y, w, h);
                 _renderTarget.FillRectangle(rectSC, getDXBrushForColour(filter.Colour, mi.FadeValue));
 
                 if (filter.DispMode == clsFilterItem.FIDisplayMode.WATERFALL || filter.DispMode == clsFilterItem.FIDisplayMode.PANAFALL)
@@ -35879,11 +36103,11 @@ namespace Thetis
                 grey_val = (int)(fill_base_colour.R * 0.3 + fill_base_colour.G * 0.59 + fill_base_colour.B * 0.11);
                 System.Drawing.Color grey_fill_colour = System.Drawing.Color.FromArgb(grey_val, grey_val, grey_val);
 
-                SharpDX.Direct2D1.Brush filter_line_colour_brush;
-                SharpDX.Direct2D1.Brush filter_line_colour_faded_brush = getDXBrushForColour(m.MOX ? filter_line_colour_tx : filter_line_colour_rx, 128);
-                SharpDX.Direct2D1.Brush filter_line_highlight_colour_brush = getDXBrushForColour(filter_line_colour_highlight);
-                SharpDX.Direct2D1.Brush line_base_colour_brush = getDXBrushForColour(line_base_colour);
-                SharpDX.Direct2D1.Brush fill_base_colour_brush = getDXBrushForColour(fill_base_colour);
+                ID2D1Brush filter_line_colour_brush;
+                ID2D1Brush filter_line_colour_faded_brush = getDXBrushForColour(m.MOX ? filter_line_colour_tx : filter_line_colour_rx, 128);
+                ID2D1Brush filter_line_highlight_colour_brush = getDXBrushForColour(filter_line_colour_highlight);
+                ID2D1Brush line_base_colour_brush = getDXBrushForColour(line_base_colour);
+                ID2D1Brush fill_base_colour_brush = getDXBrushForColour(fill_base_colour);
 
                 double min_notch_width;
                 bool mouse_entered = filter.MouseEntered;
@@ -35952,8 +36176,8 @@ namespace Thetis
                 //top/bottom lines
                 float top_line_y = y + line_width_half + tsl.Height;
                 float bot_line_y = y + h - line_width_half - tsl.Height;
-                _renderTarget.DrawLine(new RawVector2(x, top_line_y), new RawVector2(w, y + line_width_half + tsl.Height), getDXBrushForColour(extent_colour), line_width);
-                _renderTarget.DrawLine(new RawVector2(x, bot_line_y), new RawVector2(w, y + h - line_width_half - tsl.Height), getDXBrushForColour(extent_colour), line_width);
+                _renderTarget.DrawLine(new Vector2(x, top_line_y), new Vector2(w, y + line_width_half + tsl.Height), getDXBrushForColour(extent_colour), line_width);
+                _renderTarget.DrawLine(new Vector2(x, bot_line_y), new Vector2(w, y + h - line_width_half - tsl.Height), getDXBrushForColour(extent_colour), line_width);
 
                 //slope extents
                 float extent_l = x + max_w + slope_pixels - zoom_diff_pixels;
@@ -35983,11 +36207,11 @@ namespace Thetis
                             float dbmToPixel = spectrum_height / spec_range;
                             float py = (grid_max - filter.SpectrumData[0]) * dbmToPixel;
 
-                            RawVector2 new_pos = new RawVector2(0, 0);
-                            RawVector2 fill_bot_pos = new RawVector2(0, 0);
-                            RawVector2 old_pos = new RawVector2(extent_l, top_pos + py);                            
+                            Vector2 new_pos = new Vector2(0, 0);
+                            Vector2 fill_bot_pos = new Vector2(0, 0);
+                            Vector2 old_pos = new Vector2(extent_l, top_pos + py);                            
 
-                            SharpDX.RectangleF clip_rect = new SharpDX.RectangleF(extent_l, y + line_width_half + tsl.Height, width_between_slopes, spectrum_height);
+                            DXRectF clip_rect = new DXRectF(extent_l, y + line_width_half + tsl.Height, width_between_slopes, spectrum_height);
                             _renderTarget.PushAxisAlignedClip(clip_rect, AntialiasMode.Aliased);
                             _renderTarget.FillRectangle(clip_rect, getDXBrushForColour(meter_back_colour));
 
@@ -36001,7 +36225,7 @@ namespace Thetis
 
                                 if (filter.FillSpectrum)
                                 {
-                                    SharpDX.Direct2D1.Brush fill_brush;
+                                    ID2D1Brush fill_brush;
                                     if (filter.Greyscale)
                                     {
                                         System.Drawing.Color blended_fill_colour = System.Drawing.Color.FromArgb(
@@ -36022,7 +36246,7 @@ namespace Thetis
                                     _renderTarget.DrawLine(fill_bot_pos, new_pos, fill_brush, x_step);
                                 }
 
-                                SharpDX.Direct2D1.Brush line_brush;
+                                ID2D1Brush line_brush;
                                 if (filter.Greyscale)
                                 {
                                     System.Drawing.Color blended_line_colour = System.Drawing.Color.FromArgb(
@@ -36057,25 +36281,25 @@ namespace Thetis
 
                                     if (row_ok)
                                     {
-                                        SharpDX.Direct2D1.Bitmap top_section_rx = new SharpDX.Direct2D1.Bitmap(_renderTarget, new Size2(MiniSpec.PIXELS, MiniSpec.PIXELS - 1),
-                                            new BitmapProperties(new SharpDX.Direct2D1.PixelFormat(_filter_display_waterfall_bmp.PixelFormat.Format, _ALPHA_MODE)));
+                                        ID2D1Bitmap top_section_rx = _renderTarget.CreateBitmap(new Vortice.Mathematics.SizeI(MiniSpec.PIXELS, MiniSpec.PIXELS - 1),
+                                            new BitmapProperties(new D2DPixelFormat(_filter_display_waterfall_bmp.PixelFormat.Format, _ALPHA_MODE)));
 
-                                        SharpDX.Direct2D1.Bitmap top_section_tx = new SharpDX.Direct2D1.Bitmap(_renderTarget, new Size2(MiniSpec.PIXELS, MiniSpec.PIXELS - 1),
-                                            new BitmapProperties(new SharpDX.Direct2D1.PixelFormat(_filter_display_waterfall_bmp_tx.PixelFormat.Format, _ALPHA_MODE)));
+                                        ID2D1Bitmap top_section_tx = _renderTarget.CreateBitmap(new Vortice.Mathematics.SizeI(MiniSpec.PIXELS, MiniSpec.PIXELS - 1),
+                                            new BitmapProperties(new D2DPixelFormat(_filter_display_waterfall_bmp_tx.PixelFormat.Format, _ALPHA_MODE)));
 
-                                        top_section_rx.CopyFromBitmap(_filter_display_waterfall_bmp, new SharpDX.Point(0, 0), new SharpDX.Rectangle(0, 0, (int)top_section_rx.Size.Width, (int)top_section_rx.Size.Height));
-                                        top_section_tx.CopyFromBitmap(_filter_display_waterfall_bmp_tx, new SharpDX.Point(0, 0), new SharpDX.Rectangle(0, 0, (int)top_section_tx.Size.Width, (int)top_section_tx.Size.Height));
+                                        top_section_rx.CopyFromBitmap(new Point(0, 0), _filter_display_waterfall_bmp, new Rectangle(0, 0, (int)top_section_rx.Size.Width, (int)top_section_rx.Size.Height));
+                                        top_section_tx.CopyFromBitmap(new Point(0, 0), _filter_display_waterfall_bmp_tx, new Rectangle(0, 0, (int)top_section_tx.Size.Width, (int)top_section_tx.Size.Height));
 
-                                        _filter_display_waterfall_bmp.CopyFromMemory(waterfall_row_rx, waterfall_row_rx.Length, new SharpDX.Rectangle(0, 0, MiniSpec.PIXELS, 1));
-                                        _filter_display_waterfall_bmp.CopyFromBitmap(top_section_rx, new SharpDX.Point(0, 1));
+                                        _filter_display_waterfall_bmp.CopyFromMemory(new Rectangle(0, 0, MiniSpec.PIXELS, 1), waterfall_row_rx, (uint)waterfall_row_rx.Length);
+                                        _filter_display_waterfall_bmp.CopyFromBitmap(new Point(0, 1), top_section_rx);
 
-                                        _filter_display_waterfall_bmp_tx.CopyFromMemory(waterfall_row_tx, waterfall_row_tx.Length, new SharpDX.Rectangle(0, 0, MiniSpec.PIXELS, 1));
-                                        _filter_display_waterfall_bmp_tx.CopyFromBitmap(top_section_tx, new SharpDX.Point(0, 1));
+                                        _filter_display_waterfall_bmp_tx.CopyFromMemory(new Rectangle(0, 0, MiniSpec.PIXELS, 1), waterfall_row_tx, (uint)waterfall_row_tx.Length);
+                                        _filter_display_waterfall_bmp_tx.CopyFromBitmap(new Point(0, 1), top_section_tx);
 
-                                        Utilities.Dispose(ref top_section_rx);
+                                        top_section_rx?.Dispose();
                                         top_section_rx = null;
 
-                                        Utilities.Dispose(ref top_section_tx);
+                                        top_section_tx?.Dispose();
                                         top_section_tx = null;
 
                                         _waterfall_row_added = true; // prevent other filter items in the render from updating the waterfall bitmap, this gets set to false just above the draw loop
@@ -36086,11 +36310,11 @@ namespace Thetis
 
                             //render waterfall
                             float top_y = y + line_width_half + tsl.Height + (filter.DispMode == clsFilterItem.FIDisplayMode.PANAFALL ? spectrum_height : 0);
-                            SharpDX.RectangleF clip_rect = new SharpDX.RectangleF(extent_l, top_y, width_between_slopes, spectrum_height);
+                            DXRectF clip_rect = new DXRectF(extent_l, top_y, width_between_slopes, spectrum_height);
                             float bitmap_height = Math.Max(_filter_display_waterfall_bmp.Size.Height, spectrum_height);
 
-                            SharpDX.RectangleF dest_rect_rx = new SharpDX.RectangleF(clip_rect.Left, top_y, clip_rect.Width, bitmap_height);
-                            SharpDX.RectangleF dest_rect_tx = new SharpDX.RectangleF(clip_rect.Left, top_y, clip_rect.Width, bitmap_height);
+                            DXRectF dest_rect_rx = new DXRectF(clip_rect.Left, top_y, clip_rect.Width, bitmap_height);
+                            DXRectF dest_rect_tx = new DXRectF(clip_rect.Left, top_y, clip_rect.Width, bitmap_height);
                             
                             if (filter.MOX)
                             {
@@ -36124,7 +36348,7 @@ namespace Thetis
 
                 //centre line
                 float centre = x + (w / 2f);
-                _renderTarget.DrawLine(new RawVector2(centre, y + h), new RawVector2(centre, y + tsl.Height), getDXBrushForColour(extent_colour), line_width);
+                _renderTarget.DrawLine(new Vector2(centre, y + h), new Vector2(centre, y + tsl.Height), getDXBrushForColour(extent_colour), line_width);
 
                 //adjust pixel span between the two extents as that is the filter width, the slopes are extra
                 pixel_span = extent_h - extent_l;
@@ -36137,7 +36361,7 @@ namespace Thetis
                         if (filter.SidebandMode && (filter.SidebandMode && ((filter.SidebandModeSign == -1 && f > 0) || (filter.SidebandModeSign == 1 && f < 0)))) continue; // skip sideband not interested in
 
                         float xp = hzToPixels(Math.Abs(f), pixel_span, hz_span) * (f < 0 ? -1 : 1);
-                        _renderTarget.DrawLine(new RawVector2(centre + xp, y + h), new RawVector2(centre + xp, y + tsl.Height), getDXBrushForColour(snapline_colour), line_width, _dash_style);
+                        _renderTarget.DrawLine(new Vector2(centre + xp, y + h), new Vector2(centre + xp, y + tsl.Height), getDXBrushForColour(snapline_colour), line_width, _dash_style);
                     }
                 }
 
@@ -36146,7 +36370,7 @@ namespace Thetis
                 {
                     int cw_offset = filter.CWPichOffset;
                     float cw_shift = hzToPixels(Math.Abs(cw_offset), pixel_span, hz_span) * (cw_offset < 0 ? -1 : 1);
-                    _renderTarget.DrawLine(new RawVector2(centre - cw_shift, y + h), new RawVector2(centre - cw_shift, y + tsl.Height), getDXBrushForColour(extent_colour), line_width);
+                    _renderTarget.DrawLine(new Vector2(centre - cw_shift, y + h), new Vector2(centre - cw_shift, y + tsl.Height), getDXBrushForColour(extent_colour), line_width);
                 }
 
                 if (filter.ShowFilterLimits)
@@ -36155,8 +36379,8 @@ namespace Thetis
                     plotText(low_extent_text, x - zoom_diff_pixels, text_y, rect.Width, font_size_scaled, extent_text_colour, 255, "Trebuchet MS", FontStyle.Regular, false, false, 0, false, 0, 0, false, null);
                     plotText(high_extent_text, x + w + zoom_diff_pixels, text_y, rect.Width, font_size_scaled, extent_text_colour, 255, "Trebuchet MS", FontStyle.Regular, true, false, 0, false, 0, 0, false, null);
                     
-                    _renderTarget.DrawLine(new RawVector2(x + max_w - zoom_diff_pixels, y + h), new RawVector2(extent_l, y + tsl.Height), getDXBrushForColour(extent_colour), line_width);
-                    _renderTarget.DrawLine(new RawVector2(x + w - max_w + zoom_diff_pixels, y + h), new RawVector2(extent_h, y + tsl.Height), getDXBrushForColour(extent_colour), line_width);
+                    _renderTarget.DrawLine(new Vector2(x + max_w - zoom_diff_pixels, y + h), new Vector2(extent_l, y + tsl.Height), getDXBrushForColour(extent_colour), line_width);
+                    _renderTarget.DrawLine(new Vector2(x + w - max_w + zoom_diff_pixels, y + h), new Vector2(extent_h, y + tsl.Height), getDXBrushForColour(extent_colour), line_width);
                 }
 
                 //mode text
@@ -36230,12 +36454,12 @@ namespace Thetis
                 float filter_l = centre + hzToPixels(Math.Abs(local_low), pixel_span, hz_span) * (local_low < 0 ? -1 : 1);
                 float filter_h = centre + hzToPixels(Math.Abs(local_high), pixel_span, hz_span) * (local_high < 0 ? -1 : 1);
 
-                RawVector2 low_bot = new RawVector2(filter_l - slope_pixels, y + h);
-                RawVector2 low_top = new RawVector2(filter_l, y + tsl.Height);
-                RawVector2 high_bot = new RawVector2(filter_h + slope_pixels, y + h);
-                RawVector2 high_top = new RawVector2(filter_h, y + tsl.Height);
-                RawVector2 top_left = new RawVector2(filter_l, y + line_width_half + tsl.Height);
-                RawVector2 top_right = new RawVector2(filter_h, y + line_width_half + tsl.Height);
+                Vector2 low_bot = new Vector2(filter_l - slope_pixels, y + h);
+                Vector2 low_top = new Vector2(filter_l, y + tsl.Height);
+                Vector2 high_bot = new Vector2(filter_h + slope_pixels, y + h);
+                Vector2 high_top = new Vector2(filter_h, y + tsl.Height);
+                Vector2 top_left = new Vector2(filter_l, y + line_width_half + tsl.Height);
+                Vector2 top_right = new Vector2(filter_h, y + line_width_half + tsl.Height);
 
                 bool low_highlighted = false;
                 bool high_highlighted = false;
@@ -36300,7 +36524,7 @@ namespace Thetis
                     
                     //simulated plot
                     float cp_height = bot_line_y - top_line_y;
-                    SharpDX.RectangleF clip_rect = new SharpDX.RectangleF(extent_l, y + line_width_half + tsl.Height, width_between_slopes, cp_height);
+                    DXRectF clip_rect = new DXRectF(extent_l, y + line_width_half + tsl.Height, width_between_slopes, cp_height);
                     _renderTarget.PushAxisAlignedClip(clip_rect, AntialiasMode.Aliased);
                     lock (MiniSpec.FilterCharacteristicsLocker)
                     {
@@ -36357,16 +36581,16 @@ namespace Thetis
                                 max = float.MinValue;
                             }
                         }
-                        RawVector2 low_pos_left = new RawVector2();
-                        RawVector2 high_pos_left = new RawVector2();
-                        RawVector2 low_pos_right = new RawVector2();
-                        RawVector2 high_pos_right = new RawVector2();
+                        Vector2 low_pos_left = new Vector2();
+                        Vector2 high_pos_left = new Vector2();
+                        Vector2 low_pos_right = new Vector2();
+                        Vector2 high_pos_right = new Vector2();
 
-                        RawVector2 join_left = new RawVector2();
-                        RawVector2 join_right = new RawVector2();
+                        Vector2 join_left = new Vector2();
+                        Vector2 join_right = new Vector2();
 
-                        RawVector2 old_pos_left = new RawVector2();
-                        RawVector2 old_pos_right = new RawVector2();
+                        Vector2 old_pos_left = new Vector2();
+                        Vector2 old_pos_right = new Vector2();
                         if (lines.Count > 0)
                         {
                             float start_x = low_top.X + cp_six_db_shift;
@@ -36433,12 +36657,12 @@ namespace Thetis
                 {                    
                     lock (MiniSpec.NotchLocker)
                     {
-                        SharpDX.Direct2D1.Brush notch_brush = getDXBrushForColour(notch_colour);
-                        SharpDX.Direct2D1.Brush notch_brush_fill = getDXBrushForColour(notch_colour, 96);
-                        SharpDX.Direct2D1.Brush notch_brush_fill_highlight = getDXBrushForColour(notch_colour_highlight, 192);
-                        SharpDX.Direct2D1.Brush notch_brush_line_highlight = getDXBrushForColour(filter_line_colour_highlight);
-                        SharpDX.Direct2D1.Brush notch_brush_disabled = getDXBrushForColour(notch_colour, 128);
-                        SharpDX.Direct2D1.Brush notch_brush_fill_disabled = getDXBrushForColour(notch_colour, 48);
+                        ID2D1Brush notch_brush = getDXBrushForColour(notch_colour);
+                        ID2D1Brush notch_brush_fill = getDXBrushForColour(notch_colour, 96);
+                        ID2D1Brush notch_brush_fill_highlight = getDXBrushForColour(notch_colour_highlight, 192);
+                        ID2D1Brush notch_brush_line_highlight = getDXBrushForColour(filter_line_colour_highlight);
+                        ID2D1Brush notch_brush_disabled = getDXBrushForColour(notch_colour, 128);
+                        ID2D1Brush notch_brush_fill_disabled = getDXBrushForColour(notch_colour, 48);
 
                         double centre_freq = filter.CentreFrequencyHZ;
                         List<MiniSpec.Notch> notches = MiniSpec.GetNotches(centre_freq, filter.ExtentHZ + (filter.ExtentHZ / 2));
@@ -36449,16 +36673,16 @@ namespace Thetis
                             float notch_x = centre + hzToPixels(Math.Abs(shift_hz), pixel_span, hz_span) * (shift_hz < 0 ? -1 : 1);
                             float width_pix = hzToPixels(Math.Abs(notch.width_hz / 2f), pixel_span, hz_span);
 
-                            RawVector2 notch_bot = new RawVector2(notch_x, y + h);
-                            RawVector2 notch_top = new RawVector2(notch_x, y + tsl.Height);
+                            Vector2 notch_bot = new Vector2(notch_x, y + h);
+                            Vector2 notch_top = new Vector2(notch_x, y + tsl.Height);
 
-                            RawVector2 width_low_bot = new RawVector2(notch_x - width_pix, y + h);
-                            RawVector2 width_low_top = new RawVector2(notch_x - width_pix, y + tsl.Height);
-                            RawVector2 width_high_bot = new RawVector2(notch_x + width_pix, y + h);
-                            RawVector2 width_high_top = new RawVector2(notch_x + width_pix, y + tsl.Height);
+                            Vector2 width_low_bot = new Vector2(notch_x - width_pix, y + h);
+                            Vector2 width_low_top = new Vector2(notch_x - width_pix, y + tsl.Height);
+                            Vector2 width_high_bot = new Vector2(notch_x + width_pix, y + h);
+                            Vector2 width_high_top = new Vector2(notch_x + width_pix, y + tsl.Height);
 
                             bool highlight_notch = false;
-                            RawRectangleF notch_rect = new RawRectangleF(width_low_top.X, width_low_top.Y, width_high_bot.X, width_high_bot.Y);
+                            RawRectF notch_rect = new RawRectF(width_low_top.X, width_low_top.Y, width_high_bot.X, width_high_bot.Y);
                             if (mouse_entered && !selected)
                             {
                                 if (!highlight_button && !filter.NotchSelected && filter.MouseMovePoint.X >= width_low_top.X - 2 && filter.MouseMovePoint.X <= width_high_top.X + 2 &&
@@ -36566,9 +36790,9 @@ namespace Thetis
 
                 if (!notch_highlighted && !highlight_button && filter.CanAdjust && mouse_entered && !(filter.LowSelected || filter.HighSelected || filter.TopSelected))
                 {
-                    float low_dist = distanceBetweenPoints(new RawVector2(filter_l, text_y + (tsl.Height / 2f)), filter.MouseMovePoint);
-                    float high_dist = distanceBetweenPoints(new RawVector2(filter_h, text_y + (tsl.Height / 2f)), filter.MouseMovePoint);
-                    float shift_dist = distanceBetweenPoints(new RawVector2(centre_top_line, y), filter.MouseMovePoint);
+                    float low_dist = distanceBetweenPoints(new Vector2(filter_l, text_y + (tsl.Height / 2f)), filter.MouseMovePoint);
+                    float high_dist = distanceBetweenPoints(new Vector2(filter_h, text_y + (tsl.Height / 2f)), filter.MouseMovePoint);
+                    float shift_dist = distanceBetweenPoints(new Vector2(centre_top_line, y), filter.MouseMovePoint);
 
                     if (low_dist <= high_dist && low_dist <= shift_dist)
                     {
@@ -36633,13 +36857,13 @@ namespace Thetis
                 if (pixel_span <= 0 || hz_span <= 0) return 0;
                 return (pixels / pixel_span) * hz_span;
             }
-            public bool isMouseNearLine(RawVector2 point1, RawVector2 point2, PointF mousePosition, float proximityThreshold = 3.0f)
+            public bool isMouseNearLine(Vector2 point1, Vector2 point2, PointF mousePosition, float proximityThreshold = 3.0f)
             {
                 float distance = pointToSegmentDistance(point1, point2, mousePosition);
                 return distance <= proximityThreshold;
             }
 
-            private float pointToSegmentDistance(RawVector2 lineStart, RawVector2 lineEnd, PointF point)
+            private float pointToSegmentDistance(Vector2 lineStart, Vector2 lineEnd, PointF point)
             {
                 float lineLengthSquared = (lineEnd.X - lineStart.X) * (lineEnd.X - lineStart.X) +
                                           (lineEnd.Y - lineStart.Y) * (lineEnd.Y - lineStart.Y);
@@ -36653,7 +36877,7 @@ namespace Thetis
                            (point.Y - lineStart.Y) * (lineEnd.Y - lineStart.Y)) / lineLengthSquared;
                 t = Math.Max(0, Math.Min(1, t));
 
-                RawVector2 closestPoint = new RawVector2(
+                Vector2 closestPoint = new Vector2(
                     lineStart.X + t * (lineEnd.X - lineStart.X),
                     lineStart.Y + t * (lineEnd.Y - lineStart.Y)
                 );
@@ -36661,12 +36885,12 @@ namespace Thetis
                 return distanceBetweenPoints(closestPoint, point);
             }
 
-            private float distanceBetweenPoints(RawVector2 p1, PointF p2)
+            private float distanceBetweenPoints(Vector2 p1, PointF p2)
             {
                 return (float)Math.Sqrt((p1.X - p2.X) * (p1.X - p2.X) + (p1.Y - p2.Y) * (p1.Y - p2.Y));
             }
             //
-            private void renderHistory(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderHistory(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsHistoryItem his = (clsHistoryItem)mi;
 
@@ -36696,7 +36920,7 @@ namespace Thetis
                     }
                 }
 
-                SharpDX.RectangleF rectHis = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF rectHis = new DXRectF(x, y, w, h);
 
                 _renderTarget.FillRectangle(rectHis, getDXBrushForColour(his.BackColour));
 
@@ -36708,18 +36932,18 @@ namespace Thetis
 
                 //x axis
                 if(his.ShowScale1)
-                    _renderTarget.DrawLine(new RawVector2(x + half_spacer + quarter_spacer, y + h - spacer), new RawVector2(x + w - half_spacer - quarter_spacer, y + h - spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
+                    _renderTarget.DrawLine(new Vector2(x + half_spacer + quarter_spacer, y + h - spacer), new Vector2(x + w - half_spacer - quarter_spacer, y + h - spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
                 else
-                    _renderTarget.DrawLine(new RawVector2(x + half_spacer + quarter_spacer, y + h - spacer), new RawVector2(x + w - quarter_spacer, y + h - spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
+                    _renderTarget.DrawLine(new Vector2(x + half_spacer + quarter_spacer, y + h - spacer), new Vector2(x + w - quarter_spacer, y + h - spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
 
                 //left y axis
-                _renderTarget.DrawLine(new RawVector2(x + spacer, y + quarter_spacer), new RawVector2(x + spacer, y + h - half_spacer - quarter_spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
+                _renderTarget.DrawLine(new Vector2(x + spacer, y + quarter_spacer), new Vector2(x + spacer, y + h - half_spacer - quarter_spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
 
                 //right y axis
                 if(his.ShowScale1)
-                    _renderTarget.DrawLine(new RawVector2(x + w - spacer, y + quarter_spacer), new RawVector2(x + w - spacer, y + h - half_spacer - quarter_spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
+                    _renderTarget.DrawLine(new Vector2(x + w - spacer, y + quarter_spacer), new Vector2(x + w - spacer, y + h - half_spacer - quarter_spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
                 else
-                    _renderTarget.DrawLine(new RawVector2(x + w - half_spacer, y + quarter_spacer), new RawVector2(x + w - half_spacer, y + h - half_spacer - quarter_spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
+                    _renderTarget.DrawLine(new Vector2(x + w - half_spacer, y + quarter_spacer), new Vector2(x + w - half_spacer, y + h - half_spacer - quarter_spacer), getDXBrushForColour(his.LinesColour), axis_line_width);
 
                 int pixel_width;
                 if(his.ShowScale1)
@@ -36736,11 +36960,11 @@ namespace Thetis
                 float start_x = x + spacer;
                 float base_y = y + h - spacer;
                 float last_x;
-                SharpDX.RectangleF clip_rect;
+                DXRectF clip_rect;
                 if(his.ShowScale1)
-                    clip_rect = new SharpDX.RectangleF(x + spacer, y + quarter_spacer, w - spacer * 2f, h - quarter_spacer - spacer);
+                    clip_rect = new DXRectF(x + spacer, y + quarter_spacer, w - spacer * 2f, h - quarter_spacer - spacer);
                 else
-                    clip_rect = new SharpDX.RectangleF(x + spacer, y + quarter_spacer, w - spacer - quarter_spacer, h - quarter_spacer - spacer);
+                    clip_rect = new DXRectF(x + spacer, y + quarter_spacer, w - spacer - quarter_spacer, h - quarter_spacer - spacer);
 
                 lock (his.DataLock1)
                 {
@@ -36768,7 +36992,7 @@ namespace Thetis
                             {
                                 t_y += (text_height / 4f);
                                 // right tick
-                                _renderTarget.DrawLine(new RawVector2(x + w - spacer, t_y), new RawVector2(x + w - half_spacer - quarter_spacer, t_y), getDXBrushForColour(his.LinesColour, 96), data_line_width);
+                                _renderTarget.DrawLine(new Vector2(x + w - spacer, t_y), new Vector2(x + w - half_spacer - quarter_spacer, t_y), getDXBrushForColour(his.LinesColour, 96), data_line_width);
                             }
                         }
 
@@ -36785,8 +37009,8 @@ namespace Thetis
                             clsHistoryItem.HistoryData hd1 = his.History1[n];
                             float end_y1 = (hd1.value - min1) * y_scale1;
                             _renderTarget.DrawLine(
-                            new RawVector2(last_x, base_y - last_y1),
-                            new RawVector2(end_x, base_y - end_y1),
+                            new Vector2(last_x, base_y - last_y1),
+                            new Vector2(end_x, base_y - end_y1),
                             getDXBrushForColour(his.Axis1Colour), data_line_width);
                             last_y1 = end_y1;
                             last_x = end_x;
@@ -36819,7 +37043,7 @@ namespace Thetis
                             {
                                 t_y += (text_height / 4f);
                                 // full grid line
-                                _renderTarget.DrawLine(new RawVector2(x + spacer - quarter_spacer, t_y), new RawVector2(x + w - (his.ShowScale1 ? spacer : quarter_spacer), t_y), getDXBrushForColour(his.LinesColour, 96), data_line_width);
+                                _renderTarget.DrawLine(new Vector2(x + spacer - quarter_spacer, t_y), new Vector2(x + w - (his.ShowScale1 ? spacer : quarter_spacer), t_y), getDXBrushForColour(his.LinesColour, 96), data_line_width);
                             }
                         }
 
@@ -36837,8 +37061,8 @@ namespace Thetis
                             float end_y0 = (hd0.value - min0) * y_scale0;
 
                             _renderTarget.DrawLine(
-                                new RawVector2(last_x, base_y - last_y0),
-                                new RawVector2(end_x, base_y - end_y0),
+                                new Vector2(last_x, base_y - last_y0),
+                                new Vector2(end_x, base_y - end_y0),
                                 getDXBrushForColour(his.Axis0Colour), data_line_width);
                             last_y0 = end_y0;
 
@@ -36861,7 +37085,7 @@ namespace Thetis
                             else
                                 s_x = start_x + (hd.index / (float)(total0 - 1)) * (w - spacer - half_spacer);
                             float s_y = y + h - half_spacer;
-                            _renderTarget.DrawLine(new RawVector2(s_x, s_y - half_spacer), new RawVector2(s_x, s_y - half_spacer + quarter_spacer), getDXBrushForColour(his.LinesColour, 96), data_line_width);
+                            _renderTarget.DrawLine(new Vector2(s_x, s_y - half_spacer), new Vector2(s_x, s_y - half_spacer + quarter_spacer), getDXBrushForColour(his.LinesColour, 96), data_line_width);
                             plotText(hd.time.ToString("HH:mm:ss"), s_x, s_y, rect.Width, 10f, his.TimeColour, 255, "Trebuchet MS", FontStyle.Regular, false, false, 0, true, 0, 45);
                         }
 
@@ -36895,7 +37119,7 @@ namespace Thetis
                     }
                 }               
             }
-            private void renderSpacer(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderSpacer(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsSpacerItem spacer = (clsSpacerItem)mi;
 
@@ -36925,11 +37149,11 @@ namespace Thetis
                     }
                 }
 
-                SharpDX.RectangleF rectSC = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF rectSC = new DXRectF(x, y, w, h);
 
                 _renderTarget.FillRectangle(rectSC, getDXBrushForColour(m.MOX ? spacer.Colour2 : spacer.Colour1, mi.FadeValue));
             }
-            private void renderWebImage(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderWebImage(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsWebImage webimg = (clsWebImage)mi;
 
@@ -36959,7 +37183,7 @@ namespace Thetis
                     }
                 }
 
-                SharpDX.RectangleF rectSC = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF rectSC = new DXRectF(x, y, w, h);
 
                 if(webimg.Bitmap != null)
                 {
@@ -36968,7 +37192,7 @@ namespace Thetis
                     if (!_images.ContainsKey(key))
                     {
                         // convert + add
-                        SharpDX.Direct2D1.Bitmap img = bitmapFromSystemBitmap(_renderTarget, webimg.Bitmap, key);
+                        ID2D1Bitmap img = bitmapFromSystemBitmap(_renderTarget, webimg.Bitmap, key);
                         if (img != null)
                         {
                             img.Tag = webimg.BitmapGuid; // guid for web image, we also use this as a bool for skin image
@@ -36979,7 +37203,7 @@ namespace Thetis
                     if(_images.ContainsKey(key))
                     {
                         // has image changed from the one we put in _images
-                        SharpDX.Direct2D1.Bitmap b = _images[key];
+                        ID2D1Bitmap b = _images[key];
                         if((Guid)b.Tag != webimg.BitmapGuid) // the tag is used to ID the web image, if it is different to the one cached, regenerate the image
                         {
                             // new image, need to remove _image, and the stream cache, and re-add
@@ -36990,7 +37214,7 @@ namespace Thetis
                             RemoveStreamData(key);
 
                             // convert + add
-                            SharpDX.Direct2D1.Bitmap img = bitmapFromSystemBitmap(_renderTarget, webimg.Bitmap, key);
+                            ID2D1Bitmap img = bitmapFromSystemBitmap(_renderTarget, webimg.Bitmap, key);
                             if (img != null)
                             {
                                 img.Tag = webimg.BitmapGuid; // guid for web image, we also use this as a bool for skin image
@@ -37001,9 +37225,9 @@ namespace Thetis
 
                     if (_images.ContainsKey(key))
                     {
-                        SharpDX.RectangleF imgRect = new SharpDX.RectangleF(x, y, w, h);
+                        DXRectF imgRect = new DXRectF(x, y, w, h);
 
-                        SharpDX.Direct2D1.Bitmap b = _images[key];
+                        ID2D1Bitmap b = _images[key];
 
                         // maintain aspect ratio, the clip removes anything outside the rect
                         float im_w = b.Size.Width;
@@ -37055,7 +37279,7 @@ namespace Thetis
             private int _dragging_old_update_rate = -1;
             private float _rotator_az_angle_deg = -999;
             private float _rotator_ele_angle_deg = -999;
-            private void renderRotator(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderRotator(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsRotatorItem rotator = (clsRotatorItem)mi;
 
@@ -37064,13 +37288,13 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //SharpDX.RectangleF mirect = new SharpDX.RectangleF(x, y, w, h);
+                //DXRectF mirect = new DXRectF(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Green));
 
-                SharpDX.Direct2D1.Brush line_br = getDXBrushForColour(rotator.ArrowColour, 255);
-                SharpDX.Direct2D1.Brush big_dot_br = getDXBrushForColour(rotator.BigBlobColour, 255);
-                SharpDX.Direct2D1.Brush small_dot_br = getDXBrushForColour(rotator.SmallBlobColour, 255);
-                SharpDX.Direct2D1.Brush beam_widh_br = getDXBrushForColour(rotator.BeamWidthColour, (int)(255 * rotator.BeamWidthAlpha));
+                ID2D1Brush line_br = getDXBrushForColour(rotator.ArrowColour, 255);
+                ID2D1Brush big_dot_br = getDXBrushForColour(rotator.BigBlobColour, 255);
+                ID2D1Brush small_dot_br = getDXBrushForColour(rotator.SmallBlobColour, 255);
+                ID2D1Brush beam_widh_br = getDXBrushForColour(rotator.BeamWidthColour, (int)(255 * rotator.BeamWidthAlpha));
 
                 float xShift = rotator.ViewMode == clsRotatorItem.RotatorMode.BOTH ? 2f * (w * 0.0125f) : 0;
                 float radius_stop_circle = rotator.ViewMode == clsRotatorItem.RotatorMode.ELE ? (h * 0.09f) / 2f : (h * 0.15f) / 2f; // to include the numbers when clicking to move the rotator
@@ -37206,18 +37430,18 @@ namespace Thetis
                         cy = centre.Y + radius_tip_arrow * (float)Math.Sin(rad);
                         arc_edge_2.X = cx; arc_edge_2.Y = cy;
 
-                        PathGeometry sharpGeometry = new PathGeometry(_renderTarget.Factory);
+                        ID2D1PathGeometry sharpGeometry = _renderTarget.Factory.CreatePathGeometry();
 
-                        GeometrySink geo = sharpGeometry.Open();
-                        geo.BeginFigure(new SharpDX.Vector2(centre.X, centre.Y), FigureBegin.Filled);
+                        ID2D1GeometrySink geo = sharpGeometry.Open();
+                        geo.BeginFigure(new Vector2(centre.X, centre.Y), FigureBegin.Filled);
 
-                        geo.AddLine(new SharpDX.Vector2(arc_edge_1.X, arc_edge_1.Y));
+                        geo.AddLine(new Vector2(arc_edge_1.X, arc_edge_1.Y));
 
                         ArcSegment arcSegment = new ArcSegment();
-                        arcSegment.Point = new SharpDX.Vector2(arc_edge_2.X, arc_edge_2.Y);
+                        arcSegment.Point = new Vector2(arc_edge_2.X, arc_edge_2.Y);
                         arcSegment.SweepDirection = SweepDirection.Clockwise;
                         arcSegment.ArcSize = beam_width <= 90f ? ArcSize.Small : ArcSize.Large;
-                        arcSegment.Size = new Size2F(radius_tip_arrow, radius_tip_arrow);
+                        arcSegment.Size = new Vortice.Mathematics.Size(radius_tip_arrow, radius_tip_arrow);
                         geo.AddArc(arcSegment);
 
                         geo.EndFigure(FigureEnd.Closed); // adds the closing line
@@ -37255,7 +37479,7 @@ namespace Thetis
                         plotText(convertDegreesToCardinal(degrees_az), cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText(" cardinal", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                         cy = y + h * 0.7f;
-                        plotText(degrees_az.ToString("f1") + "°", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
+                        plotText(degrees_az.ToString("f1") + "?", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText("  azimuth", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                     }
                     else
@@ -37265,7 +37489,7 @@ namespace Thetis
                         plotText(convertDegreesToCardinal(degrees_az), cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText(" cardinal", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                         cy = y + h * 0.65f;
-                        plotText(degrees_az.ToString("f1") + "°", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
+                        plotText(degrees_az.ToString("f1") + "?", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText("  azimuth", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                     }
 
@@ -37294,7 +37518,7 @@ namespace Thetis
                             if (!mouse_over_stop && rotator.MouseButtonDown)
                             {
                                 float temp_degrees = 0;
-                                SharpDX.Direct2D1.Brush rotator_control_br = getDXBrushForColour(rotator.ControlColour, 255);
+                                ID2D1Brush rotator_control_br = getDXBrushForColour(rotator.ControlColour, 255);
 
                                 if (!_rotator_was_dragging && _dragging_old_update_rate == -1)
                                 {
@@ -37341,7 +37565,7 @@ namespace Thetis
 
                         if (_rotator_az_angle_deg != -999)
                         {
-                            SharpDX.Direct2D1.Brush rotator_control_br = getDXBrushForColour(rotator.ControlColour, 255);
+                            ID2D1Brush rotator_control_br = getDXBrushForColour(rotator.ControlColour, 255);
                             //draw to angle
                             //set to -999 when pointer gets close
 
@@ -37447,14 +37671,14 @@ namespace Thetis
                     {
                         cx = x + w * 0.4f;
                         cy = y + h * 0.75f;
-                        plotText(degrees_ele.ToString("f1") + "°", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
+                        plotText(degrees_ele.ToString("f1") + "?", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText("elevation", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                     }
                     else
                     {
                         cx = x + w * 0.75f;
                         cy = y + h * 0.825f;
-                        plotText(degrees_ele.ToString("f1") + "°", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
+                        plotText(degrees_ele.ToString("f1") + "?", cx, cy, rect.Width, rotator.FontSize * 2f * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, false, false, 0, true);
                         plotText("elevation", cx - (w * 0.01f), cy + (h * 0.035f), rect.Width, rotator.FontSize * text_scale, rotator.OuterTextColour, 255, rotator.FontFamily, rotator.Style, true, false, 0, true);
                     }
 
@@ -37483,7 +37707,7 @@ namespace Thetis
                             if (!mouse_over_stop && rotator.MouseButtonDown)
                             {
                                 float temp_degrees = 0;
-                                SharpDX.Direct2D1.Brush rotator_control_br = getDXBrushForColour(rotator.ControlColour, 255);
+                                ID2D1Brush rotator_control_br = getDXBrushForColour(rotator.ControlColour, 255);
                                 if (!_rotator_was_dragging && _dragging_old_update_rate == -1)
                                 {
                                     _dragging_old_update_rate = rotator.UpdateInterval;
@@ -37534,7 +37758,7 @@ namespace Thetis
 
                         if (_rotator_ele_angle_deg != -999)
                         {
-                            SharpDX.Direct2D1.Brush rotator_control_br = getDXBrushForColour(rotator.ControlColour, 255);
+                            ID2D1Brush rotator_control_br = getDXBrushForColour(rotator.ControlColour, 255);
                             //draw to angle
                             //set to -999 when pointer gets close
 
@@ -37584,7 +37808,7 @@ namespace Thetis
                 float deltaY = point2.Y - point1.Y;
                 return (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
             }
-            private void renderEye(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderEye(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsMagicEyeItem magicEye = (clsMagicEyeItem)mi;
 
@@ -37593,7 +37817,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //SharpDX.RectangleF mirect = new SharpDX.RectangleF(x, y, w, h);
+                //DXRectF mirect = new DXRectF(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Green));
 
                 Vector2 centre = new Vector2(x + w / 2f, y + h / 2f);
@@ -37601,7 +37825,7 @@ namespace Thetis
                 Ellipse eyeElipse = new Ellipse(centre, w / 2f, h / 2f);
 
                 System.Drawing.Color overlapColour = magicEye.Colour;
-                SharpDX.Direct2D1.Brush closedSectionBrush = getDXBrushForColour(System.Drawing.Color.FromArgb(255, (int)(overlapColour.R * 0.35f), (int)(overlapColour.G * 0.35f), (int)(overlapColour.B * 0.35f)), 255);
+                ID2D1Brush closedSectionBrush = getDXBrushForColour(System.Drawing.Color.FromArgb(255, (int)(overlapColour.R * 0.35f), (int)(overlapColour.G * 0.35f), (int)(overlapColour.B * 0.35f)), 255);
                 System.Drawing.Color dimmedEye = System.Drawing.Color.FromArgb((int)(overlapColour.R * 0.75f), (int)(overlapColour.G * 0.75f), (int)(overlapColour.B * 0.75f));
 
                 getPerc(magicEye, magicEye.Value, out float percX, out float percY, out PointF min, out PointF max);
@@ -37635,18 +37859,18 @@ namespace Thetis
                         float endMinX = centre.X + (float)Math.Sin(fRad) * radiusX;
                         float endMinY = centre.Y + (float)Math.Cos(fRad) * radiusY;
 
-                        PathGeometry sharpGeometry = new PathGeometry(_renderTarget.Factory);
+                        ID2D1PathGeometry sharpGeometry = _renderTarget.Factory.CreatePathGeometry();
 
-                        GeometrySink geo = sharpGeometry.Open();
-                        geo.BeginFigure(new SharpDX.Vector2(centre.X, centre.Y), FigureBegin.Filled);
+                        ID2D1GeometrySink geo = sharpGeometry.Open();
+                        geo.BeginFigure(new Vector2(centre.X, centre.Y), FigureBegin.Filled);
 
-                        geo.AddLine(new SharpDX.Vector2(endMinX, endMinY));
+                        geo.AddLine(new Vector2(endMinX, endMinY));
 
                         ArcSegment arcSegment = new ArcSegment();
-                        arcSegment.Point = new SharpDX.Vector2(endMaxX, endMaxY);
+                        arcSegment.Point = new Vector2(endMaxX, endMaxY);
                         arcSegment.SweepDirection = SweepDirection.Clockwise;
                         arcSegment.ArcSize = fDeg <= 90f ? ArcSize.Small : ArcSize.Large;
-                        arcSegment.Size = new Size2F(radiusX, radiusY);
+                        arcSegment.Size = new Vortice.Mathematics.Size(radiusX, radiusY);
                         geo.AddArc(arcSegment);
 
                         geo.EndFigure(FigureEnd.Closed); // adds the closing line
@@ -37654,9 +37878,9 @@ namespace Thetis
 
                         _renderTarget.FillGeometry(sharpGeometry, getDXBrushForColour(overlapColour, 255)); // c being brightest
 
-                        Utilities.Dispose(ref geo);
+                        geo?.Dispose();
                         geo = null;
-                        Utilities.Dispose(ref sharpGeometry);
+                        sharpGeometry?.Dispose();
                         sharpGeometry = null;
                     }
 
@@ -37676,18 +37900,18 @@ namespace Thetis
                     float endMinX = centre.X + (float)Math.Sin(fRad) * radiusX;
                     float endMinY = centre.Y + (float)Math.Cos(fRad) * radiusY;
 
-                    PathGeometry sharpGeometry = new PathGeometry(_renderTarget.Factory);
+                    ID2D1PathGeometry sharpGeometry = _renderTarget.Factory.CreatePathGeometry();
 
-                    GeometrySink geo = sharpGeometry.Open();
-                    geo.BeginFigure(new SharpDX.Vector2(centre.X, centre.Y), FigureBegin.Filled);
+                    ID2D1GeometrySink geo = sharpGeometry.Open();
+                    geo.BeginFigure(new Vector2(centre.X, centre.Y), FigureBegin.Filled);
 
-                    geo.AddLine(new SharpDX.Vector2(endMinX, endMinY));
+                    geo.AddLine(new Vector2(endMinX, endMinY));
 
                     ArcSegment arcSegment = new ArcSegment();
-                    arcSegment.Point = new SharpDX.Vector2(endMaxX, endMaxY);
+                    arcSegment.Point = new Vector2(endMaxX, endMaxY);
                     arcSegment.SweepDirection = SweepDirection.Clockwise;
                     arcSegment.ArcSize = fDeg <= 90f ? ArcSize.Small : ArcSize.Large;
-                    arcSegment.Size = new Size2F(radiusX, radiusY);
+                    arcSegment.Size = new Vortice.Mathematics.Size(radiusX, radiusY);
                     geo.AddArc(arcSegment);
 
                     geo.EndFigure(FigureEnd.Closed); // adds the closing line
@@ -37695,9 +37919,9 @@ namespace Thetis
 
                     _renderTarget.FillGeometry(sharpGeometry, closedSectionBrush);
 
-                    Utilities.Dispose(ref geo);
+                    geo?.Dispose();
                     geo = null;
-                    Utilities.Dispose(ref sharpGeometry);
+                    sharpGeometry?.Dispose();
                     sharpGeometry = null;
 
                     slits(centre, radiusX - (w * 0.1f), radiusY - (h * 0.1f), w, h, closedSectionBrush);
@@ -37708,7 +37932,7 @@ namespace Thetis
                 eyeElipse.RadiusY = w / 6f;
                 _renderTarget.FillEllipse(eyeElipse, getDXBrushForColour(System.Drawing.Color.FromArgb(32, 32, 32)));
             }
-            private void renderText(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderText(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsText txt = (clsText)mi;
 
@@ -37717,7 +37941,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //SharpDX.RectangleF mirect = new SharpDX.RectangleF(x, y, w, h);
+                //DXRectF mirect = new DXRectF(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Red));
 
                 string sText;
@@ -37739,7 +37963,7 @@ namespace Thetis
 
                 plotText(sText, xx, yy, rect.Width, txt.FontSize, txt.Colour, 255, txt.FontFamily, txt.Style, false, txt.Centre, w, false, 0, 0, false, null, true);
             }
-            private void renderHBarMarkersOnly(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderHBarMarkersOnly(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 // similar to renderHBar, but only renders the marker
                 clsBarItem cbi = (clsBarItem)mi;
@@ -37756,8 +37980,8 @@ namespace Thetis
 
                 float xPos = x + (min.X * w) + (percX * ((max.X - min.X) * w));
 
-                SharpDX.Direct2D1.Brush markerColour = getDXBrushForColour(cbi.MarkerColour, 255);
-                SharpDX.Direct2D1.Brush peakHoldMarkerColour = getDXBrushForColour(cbi.PeakHoldMarkerColour, 255);
+                ID2D1Brush markerColour = getDXBrushForColour(cbi.MarkerColour, 255);
+                ID2D1Brush peakHoldMarkerColour = getDXBrushForColour(cbi.PeakHoldMarkerColour, 255);
 
                 float maxHistory_x = x;
 
@@ -37769,13 +37993,13 @@ namespace Thetis
 
                 //peak hold marker
                 if (cbi.PeakHold)
-                    _renderTarget.DrawLine(new SharpDX.Vector2(maxHistory_x, y), new SharpDX.Vector2(maxHistory_x, y + h), peakHoldMarkerColour, cbi.StrokeWidth);
+                    _renderTarget.DrawLine(new Vector2(maxHistory_x, y), new Vector2(maxHistory_x, y + h), peakHoldMarkerColour, cbi.StrokeWidth);
 
                 //value marker
                 if (cbi.ShowMarker)
-                    _renderTarget.DrawLine(new SharpDX.Vector2(xPos, y), new SharpDX.Vector2(xPos, y + h), markerColour, cbi.StrokeWidth);
+                    _renderTarget.DrawLine(new Vector2(xPos, y), new Vector2(xPos, y + h), markerColour, cbi.StrokeWidth);
             }
-            private clsMeterItem renderHBar(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private clsMeterItem renderHBar(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsBarItem cbi = (clsBarItem)mi;
                 
@@ -37784,7 +38008,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //SharpDX.RectangleF mirect = new SharpDX.RectangleF(x, y, w, h);
+                //DXRectF mirect = new DXRectF(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Red));
 
                 PointF min, max;
@@ -37837,12 +38061,12 @@ namespace Thetis
                         }
                     }
                 }
-                SharpDX.Direct2D1.Brush markerColour = getDXBrushForColour(cbi.MarkerColour, 255);
-                SharpDX.Direct2D1.Brush peakValueColour = getDXBrushForColour(cbi.PeakValueColour, 255);
-                SharpDX.Direct2D1.Brush historyColour = getDXBrushForColour(cbi.HistoryColour, cbi.HistoryColour.A);
-                SharpDX.Direct2D1.Brush colour = getDXBrushForColour(cbi.Colour, 255);
-                SharpDX.Direct2D1.Brush colourHigh = getDXBrushForColour(cbi.ColourHigh, 255);
-                SharpDX.Direct2D1.Brush peakHoldMarkerColour = getDXBrushForColour(cbi.PeakHoldMarkerColour, 255);
+                ID2D1Brush markerColour = getDXBrushForColour(cbi.MarkerColour, 255);
+                ID2D1Brush peakValueColour = getDXBrushForColour(cbi.PeakValueColour, 255);
+                ID2D1Brush historyColour = getDXBrushForColour(cbi.HistoryColour, cbi.HistoryColour.A);
+                ID2D1Brush colour = getDXBrushForColour(cbi.Colour, 255);
+                ID2D1Brush colourHigh = getDXBrushForColour(cbi.ColourHigh, 255);
+                ID2D1Brush peakHoldMarkerColour = getDXBrushForColour(cbi.PeakHoldMarkerColour, 255);
 
                 if (cbi.ShowHistory)
                 {
@@ -37852,7 +38076,7 @@ namespace Thetis
                         case clsBarItem.BarStyle.SolidFilled:
                         case clsBarItem.BarStyle.Line:
                             {
-                                SharpDX.RectangleF history = new SharpDX.RectangleF(minHistory_x, y, maxHistory_x - minHistory_x, fBarHeight);
+                                DXRectF history = new DXRectF(minHistory_x, y, maxHistory_x - minHistory_x, fBarHeight);
                                 _renderTarget.FillRectangle(history, historyColour);
                             }
                             break;
@@ -37862,18 +38086,18 @@ namespace Thetis
 
                                 float i;
                                 float startX = (numValueBlocks * segmentStep) + x;
-                                SharpDX.RectangleF barRect;
+                                DXRectF barRect;
 
                                 for (i = startX; i < maxHistory_x - segmentStep; i += segmentStep)
                                 {
-                                    barRect = new SharpDX.RectangleF(i, y, segmentBlockSize, fBarHeight);
+                                    barRect = new DXRectF(i, y, segmentBlockSize, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, historyColour);
                                 }
 
                                 // complete the end sliver
                                 if (i < maxHistory_x)
                                 {
-                                    barRect = new SharpDX.RectangleF(i, y, maxHistory_x - i, fBarHeight);
+                                    barRect = new DXRectF(i, y, maxHistory_x - i, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, historyColour);
                                 }
                             }
@@ -37887,14 +38111,14 @@ namespace Thetis
                         {
                             float fEnd = xPos < fHighXPosTransition ? xPos : fHighXPosTransition;
 
-                            SharpDX.RectangleF barRect = new SharpDX.RectangleF(x, y, fEnd - x, fBarHeight);
+                            DXRectF barRect = new DXRectF(x, y, fEnd - x, fBarHeight);
 
                             _renderTarget.FillRectangle(barRect, colour);
 
                             if (fEnd < xPos) // the area in the high range
                             {
                                 // complete the bar
-                                barRect = new SharpDX.RectangleF(fEnd, y, xPos - fEnd, fBarHeight);
+                                barRect = new DXRectF(fEnd, y, xPos - fEnd, fBarHeight);
                                 _renderTarget.FillRectangle(barRect, colourHigh);
                             }
                         }
@@ -37907,20 +38131,20 @@ namespace Thetis
                     case clsBarItem.BarStyle.Segments:
                         {
                             float i;
-                            SharpDX.RectangleF barRect;
+                            DXRectF barRect;
 
                             float fEnd = xPos < fHighXPosTransition ? xPos : fHighXPosTransition;
 
                             for (i = x; i < fEnd - segmentStep; i += segmentStep)
                             {
-                                barRect = new SharpDX.RectangleF(i, y, segmentBlockSize, fBarHeight);
+                                barRect = new DXRectF(i, y, segmentBlockSize, fBarHeight);
                                 _renderTarget.FillRectangle(barRect, colour);
                             }
 
                             // complete the end sliver up to the high transition
                             if (i < fEnd)
                             {
-                                barRect = new SharpDX.RectangleF(i, y, fEnd - i, fBarHeight);
+                                barRect = new DXRectF(i, y, fEnd - i, fBarHeight);
                                 _renderTarget.FillRectangle(barRect, colour);
                             }
 
@@ -37929,21 +38153,21 @@ namespace Thetis
                                 // sliver to complete block at high transition
                                 if (i < fEnd)
                                 {
-                                    barRect = new SharpDX.RectangleF(fEnd, y, i + segmentBlockSize - fEnd, fBarHeight);
+                                    barRect = new DXRectF(fEnd, y, i + segmentBlockSize - fEnd, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, colourHigh);
                                 }
 
                                 float j;
                                 for (j = i + segmentStep; j < xPos - segmentStep; j += segmentStep)
                                 {
-                                    barRect = new SharpDX.RectangleF(j, y, segmentBlockSize, fBarHeight);
+                                    barRect = new DXRectF(j, y, segmentBlockSize, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, colourHigh);
                                 }
 
                                 // complete the end sliver
                                 if (j < xPos)
                                 {
-                                    barRect = new SharpDX.RectangleF(j, y, xPos - j, fBarHeight);
+                                    barRect = new DXRectF(j, y, xPos - j, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, colourHigh);
                                 }
                             }
@@ -37953,11 +38177,11 @@ namespace Thetis
 
                 //peak hold marker
                 if (cbi.PeakHold)
-                    _renderTarget.DrawLine(new SharpDX.Vector2(maxHistory_x, y), new SharpDX.Vector2(maxHistory_x, y + h), peakHoldMarkerColour, cbi.StrokeWidth);
+                    _renderTarget.DrawLine(new Vector2(maxHistory_x, y), new Vector2(maxHistory_x, y + h), peakHoldMarkerColour, cbi.StrokeWidth);
 
                 //value marker
                 if (cbi.ShowMarker)
-                    _renderTarget.DrawLine(new SharpDX.Vector2(xPos, y), new SharpDX.Vector2(xPos, y + h), markerColour, cbi.StrokeWidth);
+                    _renderTarget.DrawLine(new Vector2(xPos, y), new Vector2(xPos, y + h), markerColour, cbi.StrokeWidth);
 
                 //value text
                 if (cbi.ShowValue)
@@ -37989,7 +38213,7 @@ namespace Thetis
                     }
 
                     SizeF szTextSize = measureString(sText, cbi.FontFamily, cbi.FntStyle, fontSizeEmScaled);
-                    SharpDX.RectangleF txtrect = new SharpDX.RectangleF(x, y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                    DXRectF txtrect = new DXRectF(x, y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(cbi.FontFamily, fontSizeEmScaled, cbi.FntStyle), txtrect, markerColour);
                 }
                 if (cbi.ShowPeakValue)
@@ -38020,13 +38244,13 @@ namespace Thetis
                             break;
                     }
                     SizeF szTextSize = measureString(sText, cbi.FontFamily, cbi.FntStyle, fontSizeEmScaled);
-                    SharpDX.RectangleF txtrect = new SharpDX.RectangleF(x + w - szTextSize.Width, y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                    DXRectF txtrect = new DXRectF(x + w - szTextSize.Width, y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(cbi.FontFamily, fontSizeEmScaled, cbi.FntStyle, true), txtrect, peakValueColour);
                 }
 
                 return cbi.PostDrawItem;
             }
-            //private void renderVBar(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            //private void renderVBar(DXRectF rect, clsMeterItem mi, clsMeter m)
             //{
             //    clsBarItem cbi = (clsBarItem)mi;
 
@@ -38035,7 +38259,7 @@ namespace Thetis
             //    float w = rect.Width * (mi.Size.Width / m.XRatio);
             //    float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-            //    //SharpDX.RectangleF mirect = new SharpDX.RectangleF(x, y, w, h);
+            //    //DXRectF mirect = new DXRectF(x, y, w, h);
             //    //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Green));
 
             //    PointF min, max;
@@ -38077,7 +38301,7 @@ namespace Thetis
             //            case clsBarItem.BarStyle.SolidFilled:
             //            case clsBarItem.BarStyle.Line:
             //                {
-            //                    SharpDX.RectangleF history = new SharpDX.RectangleF(x, maxHistory_y, w, minHistory_y - maxHistory_y); // drawn TL to BR
+            //                    DXRectF history = new DXRectF(x, maxHistory_y, w, minHistory_y - maxHistory_y); // drawn TL to BR
             //                    _renderTarget.FillRectangle(history, getDXBrushForColour(cbi.HistoryColour));
             //                }
             //                break;
@@ -38087,17 +38311,17 @@ namespace Thetis
 
             //            //        float i;
             //            //        float startX = (numValueBlocks * segmentStep) + x;
-            //            //        SharpDX.RectangleF barrect;
+            //            //        DXRectF barrect;
             //            //        for (i = startX; i < maxHistory_x - segmentStep; i += segmentStep)
             //            //        {
-            //            //            barrect = new SharpDX.RectangleF(i, y, segmentBlockSize, h);
+            //            //            barrect = new DXRectF(i, y, segmentBlockSize, h);
             //            //            _renderTarget.FillRectangle(barrect, getDXBrushForColour(cbi.HistoryColour));
             //            //        }
 
             //            //        // complete the sliver
             //            //        if (i < maxHistory_x)
             //            //        {
-            //            //            barrect = new SharpDX.RectangleF(i, y, maxHistory_x - i, h);
+            //            //            barrect = new DXRectF(i, y, maxHistory_x - i, h);
             //            //            _renderTarget.FillRectangle(barrect, getDXBrushForColour(cbi.HistoryColour));
             //            //        }
             //            //    }
@@ -38109,10 +38333,10 @@ namespace Thetis
             //    {
             //        case clsBarItem.BarStyle.SolidFilled:
             //            {
-            //                SharpDX.RectangleF barrect = new SharpDX.RectangleF(x, yPos, w, yBottom - yPos);
+            //                DXRectF barrect = new DXRectF(x, yPos, w, yBottom - yPos);
 
             //                if (cbi.PeakHold)
-            //                    _renderTarget.DrawLine(new SharpDX.Vector2(x, maxHistory_y), new SharpDX.Vector2(x + w, maxHistory_y), getDXBrushForColour(cbi.PeakHoldMarkerColour), cbi.StrokeWidth);
+            //                    _renderTarget.DrawLine(new Vector2(x, maxHistory_y), new Vector2(x + w, maxHistory_y), getDXBrushForColour(cbi.PeakHoldMarkerColour), cbi.StrokeWidth);
 
             //                _renderTarget.FillRectangle(barrect, getDXBrushForColour(cbi.Colour));
             //            }
@@ -38120,33 +38344,33 @@ namespace Thetis
             //        case clsBarItem.BarStyle.Line:
             //            {
             //                if (cbi.PeakHold)
-            //                    _renderTarget.DrawLine(new SharpDX.Vector2(x, maxHistory_y), new SharpDX.Vector2(x + w, maxHistory_y), getDXBrushForColour(cbi.PeakHoldMarkerColour), cbi.StrokeWidth);
+            //                    _renderTarget.DrawLine(new Vector2(x, maxHistory_y), new Vector2(x + w, maxHistory_y), getDXBrushForColour(cbi.PeakHoldMarkerColour), cbi.StrokeWidth);
 
-            //                _renderTarget.DrawLine(new SharpDX.Vector2(x, yPos), new SharpDX.Vector2(x + w, yPos), getDXBrushForColour(cbi.MarkerColour), cbi.StrokeWidth);
+            //                _renderTarget.DrawLine(new Vector2(x, yPos), new Vector2(x + w, yPos), getDXBrushForColour(cbi.MarkerColour), cbi.StrokeWidth);
             //            }
             //            break;
             //        //case clsBarItem.BarStyle.Segments:
             //        //    {
             //        //        float i;
-            //        //        SharpDX.RectangleF barrect;
+            //        //        DXRectF barrect;
             //        //        for (i = x; i < xPos - segmentStep; i += segmentStep)
             //        //        {
-            //        //            barrect = new SharpDX.RectangleF(i, y, segmentBlockSize, h);
+            //        //            barrect = new DXRectF(i, y, segmentBlockSize, h);
             //        //            _renderTarget.FillRectangle(barrect, getDXBrushForColour(cbi.Colour));
             //        //        }
 
             //        //        // complete the sliver
             //        //        if (i < xPos)
             //        //        {
-            //        //            barrect = new SharpDX.RectangleF(i, y, xPos - i, h);
+            //        //            barrect = new DXRectF(i, y, xPos - i, h);
             //        //            _renderTarget.FillRectangle(barrect, getDXBrushForColour(cbi.Colour));
             //        //        }
 
             //        //        if (cbi.PeakHold)
-            //        //            _renderTarget.DrawLine(new SharpDX.Vector2(maxHistory_x, y), new SharpDX.Vector2(maxHistory_x, y + h), getDXBrushForColour(cbi.PeakHoldMarkerColour), cbi.StrokeWidth);
+            //        //            _renderTarget.DrawLine(new Vector2(maxHistory_x, y), new Vector2(maxHistory_x, y + h), getDXBrushForColour(cbi.PeakHoldMarkerColour), cbi.StrokeWidth);
 
             //        //        if (cbi.ShowMarker)
-            //        //            _renderTarget.DrawLine(new SharpDX.Vector2(xPos, y), new SharpDX.Vector2(xPos, y + h), getDXBrushForColour(cbi.MarkerColour), cbi.StrokeWidth);
+            //        //            _renderTarget.DrawLine(new Vector2(xPos, y), new Vector2(xPos, y + h), getDXBrushForColour(cbi.MarkerColour), cbi.StrokeWidth);
             //        //    }
             //        //    break;
             //    }
@@ -38160,11 +38384,11 @@ namespace Thetis
             //        float ratio = h / adjustedFontSize.Height;
             //        float newSize = (float)Math.Round((fontSize * ratio) * (fontSize / _dpiScale_width), 1);
 
-            //        SharpDX.RectangleF txtrect = new SharpDX.RectangleF(x, y + (h * 0.2f), w, h);
+            //        DXRectF txtrect = new DXRectF(x, y + (h * 0.2f), w, h);
             //        _renderTarget.DrawText(sText, getDXTextFormatForFont(cbi.FontFamily, newSize, cbi.FntStyle), txtrect, getDXBrushForColour(cbi.FontColour));
             //    }
             //}
-            private void renderSolidColour(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderSolidColour(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsSolidColour sc = (clsSolidColour)mi;
                 if (!sc.Visible) return;
@@ -38174,10 +38398,10 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                SharpDX.RectangleF rectSC = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF rectSC = new DXRectF(x, y, w, h);
                 _renderTarget.FillRectangle(rectSC, getDXBrushForColour(sc.Colour, sc.Colour.A));
             }
-            private void renderFadeCover(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderFadeCover(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 //clsFadeCover fc = (clsFadeCover)mi;
 
@@ -38193,7 +38417,7 @@ namespace Thetis
                 wi = Math.Max(2f, wi);
                 hi = Math.Max(2f, hi);
 
-                SharpDX.RectangleF rectFC = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF rectFC = new DXRectF(x, y, w, h);
                 rectFC.Inflate(wi, hi); // increase size slightly as indictator lines stroke width of 3 will be outside bounds
                 _renderTarget.FillRectangle(rectFC, getDXBrushForColour(this.BackgroundColour, nFade));
                 //_renderTarget.DrawRectangle(rectFC, getDXBrushForColour(System.Drawing.Color.YellowGreen, nFade));
@@ -38250,14 +38474,14 @@ namespace Thetis
 
                 if (fontSizeEm <= 0f || sz.Width <= 0f || sz.Height <= 0f) return (0f, 0f);
 
-                SharpDX.RectangleF rect = new SharpDX.RectangleF(left, top, sz.Width, sz.Height);
+                DXRectF rect = new DXRectF(left, top, sz.Width, sz.Height);
 
                 if (rotateDeg != 0f)
                 {
-                    SharpDX.Matrix3x2 oldTransform = _renderTarget.Transform;
+                    Matrix3x2 oldTransform = _renderTarget.Transform;
                     float rad = rotateDeg * 0.017453292519943295f;
-                    SharpDX.Vector2 center = new Vector2(rect.Left + rect.Width * 0.5f, rect.Top + rect.Height * 0.5f);
-                    _renderTarget.Transform = oldTransform * Matrix3x2.Rotation(rad, center);
+                    Vector2 center = new Vector2(rect.Left + rect.Width * 0.5f, rect.Top + rect.Height * 0.5f);
+                    _renderTarget.Transform = oldTransform * Matrix3x2.CreateRotation(rad, center);
 
                     if (fillBackground) _renderTarget.FillRectangle(rect, getDXBrushForColour((System.Drawing.Color)backColour, nFade));
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(sFontFamily, fontSizeEm, style), rect, getDXBrushForColour(c, nFade));
@@ -38298,7 +38522,7 @@ namespace Thetis
 
             //    float left = bAlignRight ? x - sz.Width : bAlignCentre ? x - sz.Width * 0.5f : x;
             //    float top = bAlignCentre ? y - sz.Height * 0.5f : y;
-            //    SharpDX.RectangleF rect = new SharpDX.RectangleF(left, top, sz.Width, sz.Height);
+            //    DXRectF rect = new DXRectF(left, top, sz.Width, sz.Height);
 
             //    if (fontSizeEm <= 0 || rect.Width <= 0 || rect.Height <= 0) return (0f, 0f);
 
@@ -38306,10 +38530,10 @@ namespace Thetis
 
             //    if (rotateDeg != 0f)
             //    {
-            //        const float DEG2RAD = SharpDX.MathUtil.Pi / 180f;
+            //        const float DEG2RAD = MathF.PI / 180f;
             //        float rad = rotateDeg * DEG2RAD;
             //        Vector2 center = new Vector2(rect.Left + rect.Width * 0.5f, rect.Top + rect.Height * 0.5f);
-            //        _renderTarget.Transform = oldTransform * Matrix3x2.Rotation(rad, center);
+            //        _renderTarget.Transform = oldTransform * Matrix3x2.CreateRotation(rad, center);
             //    }
 
             //    if (fillBackground) _renderTarget.FillRectangle(rect, getDXBrushForColour((System.Drawing.Color)backColour, nFade));
@@ -38366,22 +38590,22 @@ namespace Thetis
             //    }
 
 
-            //    SharpDX.RectangleF txtrect;
+            //    DXRectF txtrect;
             //    if (!bAlignRight)
             //    {
             //        if (bAlignCentre)
             //        {
-            //            txtrect = new SharpDX.RectangleF(x - szTextSize.Width / 2f, y - szTextSize.Height / 2f, szTextSize.Width, szTextSize.Height);
+            //            txtrect = new DXRectF(x - szTextSize.Width / 2f, y - szTextSize.Height / 2f, szTextSize.Width, szTextSize.Height);
             //        }
             //        else
             //        {
-            //            txtrect = new SharpDX.RectangleF(x, y, szTextSize.Width, szTextSize.Height);
+            //            txtrect = new DXRectF(x, y, szTextSize.Width, szTextSize.Height);
             //        }
             //    }
             //    else
             //    {
             //        // use x is now right edge
-            //        txtrect = new SharpDX.RectangleF(x - szTextSize.Width, y, szTextSize.Width, szTextSize.Height);
+            //        txtrect = new DXRectF(x - szTextSize.Width, y, szTextSize.Width, szTextSize.Height);
             //    }
 
             //    Matrix3x2 originalTransform = Matrix3x2.Identity;
@@ -38389,7 +38613,7 @@ namespace Thetis
             //    {
             //        Vector2 textCenter = new Vector2(txtrect.Width / 2, txtrect.Height / 2);
             //        originalTransform = _renderTarget.Transform;
-            //        _renderTarget.Transform = originalTransform * Matrix3x2.Rotation(MathUtil.DegreesToRadians(rotate_deg), new Vector2(txtrect.Left, txtrect.Top) + textCenter);
+            //        _renderTarget.Transform = originalTransform * Matrix3x2.CreateRotation(MathUtil.DegreesToRadians(rotate_deg), new Vector2(txtrect.Left, txtrect.Top) + textCenter);
             //    }
             //    if (fill_background)
             //        _renderTarget.FillRectangle(txtrect, getDXBrushForColour((System.Drawing.Color)back_colour, nFade));
@@ -38403,24 +38627,24 @@ namespace Thetis
 
             //    return (szTextSize.Width, szTextSize.Height);
             //}
-            private void highlightBox(float x, float y, float w, float h, SharpDX.RectangleF rect, clsVfoDisplay vfo, int bx, int by, float gap, clsMeter m, float shift)
+            private void highlightBox(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, int bx, int by, float gap, clsMeter m, float shift)
             {
-                SharpDX.RectangleF rct;
+                DXRectF rct;
                 float wB = gap;
                 float hB = h / 2f;
                 float xB = x + (w * shift) + (bx * gap);
                 float yB = y + (by * hB);
 
-                rct = new SharpDX.RectangleF(xB, yB, wB, hB);
+                rct = new DXRectF(xB, yB, wB, hB);
                 _renderTarget.FillRectangle(rct, getDXBrushForColour(vfo.DigitHighlightColour));
             }
-            private clsVfoDisplay.buttonState drawTuneStep(float x, float y, float w, float h, SharpDX.RectangleF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
+            private clsVfoDisplay.buttonState drawTuneStep(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
             {
                 bool vfoB = shift != 0 || vfo.VFODispMode == clsVfoDisplay.VFODisplayMode.VFO_B;
 
                 // draw grid
-                SharpDX.Direct2D1.Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
-                SharpDX.RectangleF rct;
+                ID2D1Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
+                DXRectF rct;
                 float xB = 0;
                 float yB = y;
 
@@ -38455,12 +38679,12 @@ namespace Thetis
                 }
 
                 xB = x + (w * shift);
-                rct = new SharpDX.RectangleF(xB, yB, wB, hB);
+                rct = new DXRectF(xB, yB, wB, hB);
                 _renderTarget.DrawRectangle(rct, lineBrush);
-                _renderTarget.DrawLine(new RawVector2(xB, yB + hB / 2f), new RawVector2(xB + wB, yB + hB / 2f), lineBrush);
+                _renderTarget.DrawLine(new Vector2(xB, yB + hB / 2f), new Vector2(xB + wB, yB + hB / 2f), lineBrush);
                 for (int i = 1; i < 8; i++)
                 {
-                    _renderTarget.DrawLine(new RawVector2(xB + (gap * i), y), new RawVector2(xB + (gap * i), y + h), lineBrush);
+                    _renderTarget.DrawLine(new Vector2(xB + (gap * i), y), new Vector2(xB + (gap * i), y + h), lineBrush);
                 }
 
                 nx = 0;
@@ -38521,13 +38745,13 @@ namespace Thetis
 
                 return button_state;
             }
-            private clsVfoDisplay.buttonState drawBand(float x, float y, float w, float h, SharpDX.RectangleF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
+            private clsVfoDisplay.buttonState drawBand(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
             {
                 bool vfoB = shift != 0 || vfo.VFODispMode == clsVfoDisplay.VFODisplayMode.VFO_B;
 
                 // draw grid
-                SharpDX.Direct2D1.Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
-                SharpDX.RectangleF rct;
+                ID2D1Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
+                DXRectF rct;
                 float xB = 0;
                 float yB = y;
 
@@ -38562,12 +38786,12 @@ namespace Thetis
                 }
 
                 xB = x + (w * shift);
-                rct = new SharpDX.RectangleF(xB, yB, wB, hB);
+                rct = new DXRectF(xB, yB, wB, hB);
                 _renderTarget.DrawRectangle(rct, lineBrush);
-                _renderTarget.DrawLine(new RawVector2(xB, yB + hB / 2f), new RawVector2(xB + wB, yB + hB / 2f), lineBrush);
+                _renderTarget.DrawLine(new Vector2(xB, yB + hB / 2f), new Vector2(xB + wB, yB + hB / 2f), lineBrush);
                 for (int i = 1; i < 8; i++)
                 {
-                    _renderTarget.DrawLine(new RawVector2(xB + (gap * i), y), new RawVector2(xB + (gap * i), y + h), lineBrush);
+                    _renderTarget.DrawLine(new Vector2(xB + (gap * i), y), new Vector2(xB + (gap * i), y + h), lineBrush);
                 }
 
                 nx = 0;
@@ -38694,13 +38918,13 @@ namespace Thetis
 
                 return button_state;
             }
-            private clsVfoDisplay.buttonState drawMode(float x, float y, float w, float h, SharpDX.RectangleF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
+            private clsVfoDisplay.buttonState drawMode(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
             {
                 bool vfoB = shift != 0 || vfo.VFODispMode == clsVfoDisplay.VFODisplayMode.VFO_B;
 
                 // draw grid
-                SharpDX.Direct2D1.Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
-                SharpDX.RectangleF rct;
+                ID2D1Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
+                DXRectF rct;
                 float xB = 0;
                 float yB = y;
 
@@ -38736,12 +38960,12 @@ namespace Thetis
                 }
 
                 xB = x + (w * shift);
-                rct = new SharpDX.RectangleF(xB, yB, wB, hB);
+                rct = new DXRectF(xB, yB, wB, hB);
                 _renderTarget.DrawRectangle(rct, lineBrush);
-                _renderTarget.DrawLine(new RawVector2(xB, yB + hB / 2f), new RawVector2(xB + wB, yB + hB / 2f), lineBrush);
+                _renderTarget.DrawLine(new Vector2(xB, yB + hB / 2f), new Vector2(xB + wB, yB + hB / 2f), lineBrush);
                 for (int i = 1; i < 6; i++)
                 {
-                    _renderTarget.DrawLine(new RawVector2(xB + (gap * i), y), new RawVector2(xB + (gap * i), y + h), lineBrush);
+                    _renderTarget.DrawLine(new Vector2(xB + (gap * i), y), new Vector2(xB + (gap * i), y + h), lineBrush);
                 }
 
                 nx = 0;
@@ -38789,13 +39013,13 @@ namespace Thetis
 
                 return button_state;
             }
-            private clsVfoDisplay.buttonState drawFilter(float x, float y, float w, float h, SharpDX.RectangleF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
+            private clsVfoDisplay.buttonState drawFilter(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
             {
                 bool vfoB = shift != 0 || vfo.VFODispMode == clsVfoDisplay.VFODisplayMode.VFO_B;
 
                 // draw grid
-                SharpDX.Direct2D1.Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
-                SharpDX.RectangleF rct;
+                ID2D1Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
+                DXRectF rct;
                 float xB = 0;
                 float yB = y;
 
@@ -38831,12 +39055,12 @@ namespace Thetis
                 }
 
                 xB = x + (w * shift);
-                rct = new SharpDX.RectangleF(xB, yB, wB, hB);
+                rct = new DXRectF(xB, yB, wB, hB);
                 _renderTarget.DrawRectangle(rct, lineBrush);
-                _renderTarget.DrawLine(new RawVector2(xB, yB + hB / 2f), new RawVector2(xB + wB, yB + hB / 2f), lineBrush);
+                _renderTarget.DrawLine(new Vector2(xB, yB + hB / 2f), new Vector2(xB + wB, yB + hB / 2f), lineBrush);
                 for (int i = 1; i < 6; i++)
                 {
-                    _renderTarget.DrawLine(new RawVector2(xB + (gap * i), y), new RawVector2(xB + (gap * i), y + h), lineBrush);
+                    _renderTarget.DrawLine(new Vector2(xB + (gap * i), y), new Vector2(xB + (gap * i), y + h), lineBrush);
                 }
 
                 nx = 0;
@@ -38903,7 +39127,7 @@ namespace Thetis
 
                 return button_state;
             }
-            private void shrinkRectangle(SharpDX.RectangleF original, float ratio, ref SharpDX.RectangleF shrunk, float absolute = 0f)
+            private void shrinkRectangle(DXRectF original, float ratio, ref DXRectF shrunk, float absolute = 0f)
             {
                 float newWidth = original.Width * ratio;
                 float newHeight = original.Height * ratio;
@@ -38922,7 +39146,7 @@ namespace Thetis
                 shrunk.Height = newHeight;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private void drawRoundedRectangle(RoundedRectangle rr, SharpDX.Direct2D1.Brush b, float stroke, bool centred = false)
+            private void drawRoundedRectangle(RoundedRectangle rr, ID2D1Brush b, float stroke, bool centred = false)
             {
                 if (stroke <= 0) return;
                 if(rr.RadiusX > 0 || rr.RadiusY > 0)
@@ -38931,7 +39155,7 @@ namespace Thetis
                     _renderTarget.DrawRectangle(rr.Rect, b, stroke);
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private void fillRoundedRectangle(RoundedRectangle rr, SharpDX.Direct2D1.Brush b, bool centred = false)
+            private void fillRoundedRectangle(RoundedRectangle rr, ID2D1Brush b, bool centred = false)
             {
                 if (rr.RadiusX > 0 || rr.RadiusY > 0)
                     _renderTarget.FillRoundedRectangle(rr, b);
@@ -38939,7 +39163,7 @@ namespace Thetis
                     _renderTarget.FillRectangle(rr.Rect, b);
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private void drawSafeLine(RawVector2 start, RawVector2 end, SharpDX.Direct2D1.Brush b, float width)
+            private void drawSafeLine(Vector2 start, Vector2 end, ID2D1Brush b, float width)
             {
                 float start_x = start.X;
                 float start_y = start.Y;
@@ -38949,7 +39173,7 @@ namespace Thetis
                 if (end.X < start_x) end.X = start.X;
                 if (end.Y < start_y) end.Y = start.Y;
 
-                _renderTarget.DrawLine(new RawVector2(start_x, start_y), new RawVector2(end_x, end_y), b, width);
+                _renderTarget.DrawLine(new Vector2(start_x, start_y), new Vector2(end_x, end_y), b, width);
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private System.Drawing.Color dimColour(System.Drawing.Color colour, bool dim, float amount = 0.35f)
@@ -38962,7 +39186,7 @@ namespace Thetis
 
                 return System.Drawing.Color.FromArgb(R, G, B);
             }
-            private void renderWaveRecord(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderWaveRecord(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsWaveRecord wave = mi as clsWaveRecord;
                 if (wave == null) return;
@@ -38976,7 +39200,7 @@ namespace Thetis
 
                 if (w <= 4f || h <= 4f)
                 {
-                    wave.SetRenderLayout(new SharpDX.RectangleF(), new SharpDX.RectangleF(), new SharpDX.RectangleF(), 0f, 0f, false, null);
+                    wave.SetRenderLayout(new DXRectF(), new DXRectF(), new DXRectF(), 0f, 0f, false, null);
                     return;
                 }
 
@@ -39004,15 +39228,15 @@ namespace Thetis
 
                 RoundedRectangle dragging_rr = new RoundedRectangle();
                 RoundedRectangle rr = new RoundedRectangle();
-                rr.Rect = new SharpDX.RectangleF(x, y, w, h);
+                rr.Rect = new DXRectF(x, y, w, h);
                 rr.RadiusX = 0f;
                 rr.RadiusY = 0f;
                 fillRoundedRectangle(rr, getDXBrushForColour(panelColour, nFade));
 
-                SharpDX.RectangleF contentRect = new SharpDX.RectangleF(x + panelPadding, y + panelPadding, w - panelPadding * 2f, h - panelPadding * 2f);
+                DXRectF contentRect = new DXRectF(x + panelPadding, y + panelPadding, w - panelPadding * 2f, h - panelPadding * 2f);
                 if (contentRect.Width <= 6f || contentRect.Height <= 6f)
                 {
-                    wave.SetRenderLayout(new SharpDX.RectangleF(), new SharpDX.RectangleF(), new SharpDX.RectangleF(), rowPitch, 0f, false, null);
+                    wave.SetRenderLayout(new DXRectF(), new DXRectF(), new DXRectF(), rowPitch, 0f, false, null);
                     return;
                 }
 
@@ -39023,7 +39247,7 @@ namespace Thetis
                     plotText("This list can not be used whilst Thetis", contentRect.Left + (contentRect.Width / 2f), contentRect.Top + (contentRect.Height * 0.42f), rect.Width, wave.FontSize * 0.80f, textColour, nFade, wave.FontFamily, wave.FontStyle, false, true, contentRect.Width * 0.80f, false, emptyHeight);
                     plotText("   is being run in Administrator mode  ", contentRect.Left + (contentRect.Width / 2f), contentRect.Top + (contentRect.Height * 0.52f), rect.Width, wave.FontSize * 0.80f, textColour, nFade, wave.FontFamily, wave.FontStyle, false, true, contentRect.Width * 0.80f, false, emptyHeight);
                     _renderTarget.PopAxisAlignedClip();
-                    wave.SetRenderLayout(contentRect, new SharpDX.RectangleF(), new SharpDX.RectangleF(), rowPitch, 0f, false, new List<clsWaveRecord.WaveRecordHitRegion>());
+                    wave.SetRenderLayout(contentRect, new DXRectF(), new DXRectF(), rowPitch, 0f, false, new List<clsWaveRecord.WaveRecordHitRegion>());
                     return;
                 }
 
@@ -39039,14 +39263,14 @@ namespace Thetis
                 float totalContentHeight = entries.Length > 0 ? (entries.Length * rowPitch) - rowGap : rowHeight;
                 bool showScrollbar = totalContentHeight > contentRect.Height + 0.5f;
 
-                SharpDX.RectangleF scrollTrackRect = new SharpDX.RectangleF();
-                SharpDX.RectangleF scrollThumbRect = new SharpDX.RectangleF();
+                DXRectF scrollTrackRect = new DXRectF();
+                DXRectF scrollThumbRect = new DXRectF();
                 float scrollbarWidth = 0f;
                 if (showScrollbar)
                 {
                     scrollbarWidth = w * 0.03f;
                     contentRect.Width -= scrollbarWidth + (panelPadding * 0.35f);
-                    scrollTrackRect = new SharpDX.RectangleF(contentRect.Right + (panelPadding * 0.35f), contentRect.Top, scrollbarWidth, contentRect.Height);
+                    scrollTrackRect = new DXRectF(contentRect.Right + (panelPadding * 0.35f), contentRect.Top, scrollbarWidth, contentRect.Height);
                 }
 
                 if (contentRect.Width <= 6f || contentRect.Height <= 6f)
@@ -39086,7 +39310,7 @@ namespace Thetis
                         float rowBorderStroke = Math.Max(1f, rowHeight * 0.035f);
                         float rowInsetX = Math.Max(contentRect.Width * 0.0005f, rowBorderStroke * 0.70f);
                         float rowInsetY = Math.Max(rowHeight * 0.020f, rowBorderStroke * 0.70f);
-                        SharpDX.RectangleF rowRect = new SharpDX.RectangleF(contentRect.Left + rowInsetX, rowTop + rowInsetY, Math.Max(0f, contentRect.Width - rowInsetX * 2f), Math.Max(0f, rowHeight - rowInsetY * 2f));
+                        DXRectF rowRect = new DXRectF(contentRect.Left + rowInsetX, rowTop + rowInsetY, Math.Max(0f, contentRect.Width - rowInsetX * 2f), Math.Max(0f, rowHeight - rowInsetY * 2f));
                         if (rowRect.Width <= 0f || rowRect.Height <= 0f) continue;
 
                         bool isPlaying = samePath(activePlayFilename, entry.FilePath) && globalPlaying;
@@ -39102,7 +39326,7 @@ namespace Thetis
 
                         if (i == draggingIndex)
                         {
-                            dragging_rr.Rect = new RawRectangleF(rr.Rect.Left, rr.Rect.Top, rr.Rect.Right, rr.Rect.Bottom);
+                            dragging_rr.Rect = new RawRectF(rr.Rect.Left, rr.Rect.Top, rr.Rect.Right, rr.Rect.Bottom);
                             dragging_rr.RadiusX = rr.RadiusX;
                             dragging_rr.RadiusY = rr.RadiusY;
                         }
@@ -39114,8 +39338,8 @@ namespace Thetis
                         float actionX = deleteX - buttonGap - buttonSize;
                         float buttonY = rowRect.Top + (rowRect.Height * 0.17f);
 
-                        SharpDX.RectangleF deleteRect = new SharpDX.RectangleF(deleteX, buttonY, buttonSize, buttonSize);
-                        SharpDX.RectangleF actionRect = new SharpDX.RectangleF(actionX, buttonY, buttonSize, buttonSize);
+                        DXRectF deleteRect = new DXRectF(deleteX, buttonY, buttonSize, buttonSize);
+                        DXRectF actionRect = new DXRectF(actionX, buttonY, buttonSize, buttonSize);
 
                         float textLeft = rowRect.Left + innerPadX;
                         float textWidth = Math.Max(0f, actionRect.Left - buttonGap - textLeft);
@@ -39222,7 +39446,7 @@ namespace Thetis
 
                         if (canPlay || canStop)
                         {
-                            SharpDX.RectangleF clippedActionRect = clipRect(actionRect, contentRect);
+                            DXRectF clippedActionRect = clipRect(actionRect, contentRect);
                             if (!rectEmpty(clippedActionRect))
                             {
                                 hitRegions.Add(new clsWaveRecord.WaveRecordHitRegion()
@@ -39236,7 +39460,7 @@ namespace Thetis
 
                         if (canDelete)
                         {
-                            SharpDX.RectangleF clippedDeleteRect = clipRect(deleteRect, contentRect);
+                            DXRectF clippedDeleteRect = clipRect(deleteRect, contentRect);
                             if (!rectEmpty(clippedDeleteRect))
                             {
                                 hitRegions.Add(new clsWaveRecord.WaveRecordHitRegion()
@@ -39256,7 +39480,7 @@ namespace Thetis
                     float thumbHeight = Math.Max(24f, (contentRect.Height / Math.Max(totalContentHeight, 1f)) * scrollTrackRect.Height);
                     float trackTravel = Math.Max(0f, scrollTrackRect.Height - thumbHeight);
                     float thumbTop = scrollTrackRect.Top + (maxScroll <= 0f ? 0f : (scrollOffset / maxScroll) * trackTravel);
-                    scrollThumbRect = new SharpDX.RectangleF(scrollTrackRect.Left, thumbTop, scrollTrackRect.Width, thumbHeight);
+                    scrollThumbRect = new DXRectF(scrollTrackRect.Left, thumbTop, scrollTrackRect.Width, thumbHeight);
 
                     rr.Rect = scrollTrackRect;
                     rr.RadiusX = Math.Max(3f, scrollTrackRect.Width * 0.45f);
@@ -39288,10 +39512,9 @@ namespace Thetis
                     float rw = dragging_rr.Rect.Right - dragging_rr.Rect.Left;
                     float rh = dragging_rr.Rect.Bottom - dragging_rr.Rect.Top;
                     float draggingBorderStroke = Math.Max(1f, rowHeight * 0.035f);
-                    dragging_rr.Rect.Left = wave.MouseMovePoint.X - (rw / 2f);
-                    dragging_rr.Rect.Top = wave.MouseMovePoint.Y - (rh / 2f);
-                    dragging_rr.Rect.Right = dragging_rr.Rect.Left + rw;
-                    dragging_rr.Rect.Bottom = dragging_rr.Rect.Top + rh;
+                    float nLeft = wave.MouseMovePoint.X - (rw / 2f);
+                    float nTop = wave.MouseMovePoint.Y - (rh / 2f);
+                    dragging_rr.Rect = new RawRectF(nLeft, nTop, nLeft + rw, nTop + rh);
 
                     System.Drawing.Color c = (dragTargetIndex != -1 && dragTargetIndex != draggingIndex) ? System.Drawing.Color.LimeGreen : System.Drawing.Color.DarkRed;
                     drawRoundedRectangle(dragging_rr, getDXBrushForColour(c, 255), draggingBorderStroke);
@@ -39299,7 +39522,7 @@ namespace Thetis
 
                 wave.SetRenderLayout(contentRect, scrollTrackRect, scrollThumbRect, rowPitch, maxScroll, showScrollbar, hitRegions);
             }
-            private void drawWaveRecordButton(SharpDX.RectangleF buttonRect, bool hovered, System.Drawing.Color fillColour, System.Drawing.Color borderColour, System.Drawing.Color hoverColour, int fade, float cornerRadius)
+            private void drawWaveRecordButton(DXRectF buttonRect, bool hovered, System.Drawing.Color fillColour, System.Drawing.Color borderColour, System.Drawing.Color hoverColour, int fade, float cornerRadius)
             {
                 RoundedRectangle rr = new RoundedRectangle();
                 rr.Rect = buttonRect;
@@ -39313,14 +39536,14 @@ namespace Thetis
                 }
                 drawRoundedRectangle(rr, getDXBrushForColour(borderColour, fade), Math.Max(1f, buttonRect.Width * 0.08f));
             }
-            private void drawWaveRecordIcon(string icon, SharpDX.RectangleF buttonRect, System.Drawing.Color iconColour, int fade)
+            private void drawWaveRecordIcon(string icon, DXRectF buttonRect, System.Drawing.Color iconColour, int fade)
             {
                 convertImageToDX(icon);
                 if (!_images.ContainsKey(icon)) return;
 
-                SharpDX.Direct2D1.Bitmap b = _images[icon];
+                ID2D1Bitmap b = _images[icon];
                 float iconSize = Math.Min(buttonRect.Width, buttonRect.Height) * 0.58f;
-                SharpDX.RectangleF iconRect = new SharpDX.RectangleF(
+                DXRectF iconRect = new DXRectF(
                     buttonRect.Left + ((buttonRect.Width - iconSize) / 2f),
                     buttonRect.Top + ((buttonRect.Height - iconSize) / 2f),
                     iconSize,
@@ -39333,7 +39556,7 @@ namespace Thetis
                 {
                     _renderTarget.AntialiasMode = AntialiasMode.Aliased;
                     _renderTarget.Transform = Matrix3x2.Identity;
-                    _renderTarget.FillOpacityMask(b, getDXBrushForColour(iconColour, fade), OpacityMaskContent.Graphics, iconRect, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                    _renderTarget.FillOpacityMask(b, getDXBrushForColour(iconColour, fade), OpacityMaskContent.Graphics, iconRect, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                 }
                 finally
                 {
@@ -39341,17 +39564,17 @@ namespace Thetis
                     _renderTarget.Transform = originalTransform;
                 }
             }
-            private SharpDX.RectangleF clipRect(SharpDX.RectangleF value, SharpDX.RectangleF clip)
+            private DXRectF clipRect(DXRectF value, DXRectF clip)
             {
                 float left = Math.Max(value.Left, clip.Left);
                 float top = Math.Max(value.Top, clip.Top);
                 float right = Math.Min(value.Right, clip.Right);
                 float bottom = Math.Min(value.Bottom, clip.Bottom);
 
-                if (right <= left || bottom <= top) return new SharpDX.RectangleF();
-                return new SharpDX.RectangleF(left, top, right - left, bottom - top);
+                if (right <= left || bottom <= top) return new DXRectF();
+                return new DXRectF(left, top, right - left, bottom - top);
             }
-            private bool rectEmpty(SharpDX.RectangleF value)
+            private bool rectEmpty(DXRectF value)
             {
                 return value.Width <= 0f || value.Height <= 0f;
             }
@@ -39360,7 +39583,7 @@ namespace Thetis
                 if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
                 return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
             }
-            private void renderButtonBox(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderButtonBox(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsButtonBox bb = mi as clsButtonBox;
                 if (bb.Columns <= 0) return;
@@ -39376,7 +39599,7 @@ namespace Thetis
                 float y = ((mi.DisplayTopLeft.Y / m.YRatio) * rect.Height) + ((offset / m.YRatio) * rect.Height);
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio) - (rect.Height * (offset / m.YRatio));
-                //SharpDX.RectangleF rectSC = new SharpDX.RectangleF(x, y, w, h);
+                //DXRectF rectSC = new DXRectF(x, y, w, h);
                 //_renderTarget.FillRectangle(rectSC, getDXBrushForColour(System.Drawing.Color.Green));
 
                 int total_buttons = bb.TotalButtonsVisible;
@@ -39403,7 +39626,7 @@ namespace Thetis
                 {
                     // header row above the plugin buttons
                     vst_header_height = rect.Height * 0.075f;
-                    SharpDX.RectangleF header_rect = new SharpDX.RectangleF(x, y, w, vst_header_height);
+                    DXRectF header_rect = new DXRectF(x, y, w, vst_header_height);
                     RoundedRectangle header_rr = new RoundedRectangle();
                     header_rr.Rect = header_rect;
                     header_rr.RadiusX = vst_header_height * 0.25f;
@@ -39430,11 +39653,11 @@ namespace Thetis
 
                 RoundedRectangle dragging_rr = new RoundedRectangle();
                 RoundedRectangle rr = new RoundedRectangle();
-                SharpDX.RectangleF indicator_adjust = new SharpDX.RectangleF();
-                SharpDX.RectangleF rectBB = new SharpDX.RectangleF();
-                SharpDX.RectangleF shrunk_rect = new SharpDX.RectangleF();
-                SharpDX.Vector2 start = new Vector2();
-                SharpDX.Vector2 end = new Vector2();
+                DXRectF indicator_adjust = new DXRectF();
+                DXRectF rectBB = new DXRectF();
+                DXRectF shrunk_rect = new DXRectF();
+                Vector2 start = new Vector2();
+                Vector2 end = new Vector2();
 
                 clsVoiceRecordPlay vrp = null;
                 if (is_vrp)
@@ -39557,7 +39780,7 @@ namespace Thetis
                         //copy rect for dragging
                         if(is_dragable && button_index == bb.DraggingIndex)
                         {
-                            dragging_rr.Rect = new RawRectangleF(rr.Rect.Left, rr.Rect.Top, rr.Rect.Right, rr.Rect.Bottom);
+                            dragging_rr.Rect = new RawRectF(rr.Rect.Left, rr.Rect.Top, rr.Rect.Right, rr.Rect.Bottom);
                             dragging_rr.RadiusX = rr.RadiusX;
                             dragging_rr.RadiusY = rr.RadiusY;
                         }
@@ -39661,26 +39884,26 @@ namespace Thetis
                                     case clsButtonBox.IndicatorType.BAR_LEFT:
                                         text_size_modifier = 0.9f;
                                         indicator_shrink = (0.015f * wh);
-                                        drawSafeLine(new RawVector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Top + indicator_shrink + (radius * 0.45f)), new RawVector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Bottom - indicator_shrink - (radius * 0.45f)), getDXBrushForColour(indicator_colour), indicator_width);
+                                        drawSafeLine(new Vector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Top + indicator_shrink + (radius * 0.45f)), new Vector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Bottom - indicator_shrink - (radius * 0.45f)), getDXBrushForColour(indicator_colour), indicator_width);
                                         drawSafeLine(start, end, getDXBrushForColour(indicator_colour), indicator_width);
                                         indicator_adjust.Left = indicator_width;
                                         break;
                                     case clsButtonBox.IndicatorType.BAR_RIGHT:
                                         text_size_modifier = 0.9f;
                                         indicator_shrink = (0.015f * wh);
-                                        drawSafeLine(new RawVector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Top + indicator_shrink + (radius * 0.45f)), new RawVector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Bottom - indicator_shrink - (radius * 0.45f)), getDXBrushForColour(indicator_colour), indicator_width);
+                                        drawSafeLine(new Vector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Top + indicator_shrink + (radius * 0.45f)), new Vector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Bottom - indicator_shrink - (radius * 0.45f)), getDXBrushForColour(indicator_colour), indicator_width);
                                         indicator_adjust.Right = indicator_width;
                                         break;
                                     case clsButtonBox.IndicatorType.BAR_TOP:
                                         text_size_modifier = 0.9f;
                                         indicator_shrink = (0.01f * wh);
-                                        drawSafeLine(new RawVector2(rectBB.Left + (indicator_shrink * 2f) + (radius * 0.45f), rectBB.Top + indicator_shrink + (indicator_width / 2f)), new RawVector2(rectBB.Right - (indicator_shrink * 2f) - (radius * 0.45f), rectBB.Top + indicator_shrink + (indicator_width / 2f)), getDXBrushForColour(indicator_colour), indicator_width);
+                                        drawSafeLine(new Vector2(rectBB.Left + (indicator_shrink * 2f) + (radius * 0.45f), rectBB.Top + indicator_shrink + (indicator_width / 2f)), new Vector2(rectBB.Right - (indicator_shrink * 2f) - (radius * 0.45f), rectBB.Top + indicator_shrink + (indicator_width / 2f)), getDXBrushForColour(indicator_colour), indicator_width);
                                         indicator_adjust.Top = indicator_width;
                                         break;
                                     case clsButtonBox.IndicatorType.BAR_BOTTOM:
                                         text_size_modifier = 0.9f;
                                         indicator_shrink = (0.01f * wh);
-                                        drawSafeLine(new RawVector2(rectBB.Left + (indicator_shrink * 2f) + (radius * 0.45f), rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), new RawVector2(rectBB.Right - (indicator_shrink * 2f) - (radius * 0.45f), rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), getDXBrushForColour(indicator_colour), indicator_width);
+                                        drawSafeLine(new Vector2(rectBB.Left + (indicator_shrink * 2f) + (radius * 0.45f), rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), new Vector2(rectBB.Right - (indicator_shrink * 2f) - (radius * 0.45f), rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), getDXBrushForColour(indicator_colour), indicator_width);
                                         indicator_adjust.Bottom = indicator_width;
                                         break;
                                     case clsButtonBox.IndicatorType.DOT_LEFT:
@@ -39689,7 +39912,7 @@ namespace Thetis
                                             rad = Math.Max(0f, rad);
                                             text_size_modifier = 1f;
                                             indicator_shrink = (0.01f * wh);
-                                            Ellipse dot = new Ellipse(new RawVector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Top + ((rectBB.Bottom - rectBB.Top) / 2f)), rad, rad);
+                                            Ellipse dot = new Ellipse(new Vector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Top + ((rectBB.Bottom - rectBB.Top) / 2f)), rad, rad);
                                             _renderTarget.FillEllipse(dot, getDXBrushForColour(indicator_colour));
                                             indicator_adjust.Left = (indicator_width * 1.1f) + (indicator_shrink * 1.5f);
                                             indicator_adjust.Right = indicator_shrink + radius * 0.45f;
@@ -39701,7 +39924,7 @@ namespace Thetis
                                             rad = Math.Max(0f, rad);
                                             text_size_modifier = 1f;
                                             indicator_shrink = (0.01f * wh);
-                                            Ellipse dot = new Ellipse(new RawVector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Top + ((rectBB.Bottom - rectBB.Top) / 2f)), rad, rad);
+                                            Ellipse dot = new Ellipse(new Vector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Top + ((rectBB.Bottom - rectBB.Top) / 2f)), rad, rad);
                                             _renderTarget.FillEllipse(dot, getDXBrushForColour(indicator_colour));
                                             indicator_adjust.Left = indicator_shrink + radius * 0.45f;
                                             indicator_adjust.Right = (indicator_width * 1.1f) + (indicator_shrink * 1.5f);                                            
@@ -39713,7 +39936,7 @@ namespace Thetis
                                             rad = Math.Max(0f, rad);
                                             text_size_modifier = 1f;
                                             indicator_shrink = (0.01f * wh);
-                                            Ellipse dot = new Ellipse(new RawVector2(rectBB.Left + (rectBB.Right - rectBB.Left) / 2f, rectBB.Top + indicator_shrink + (indicator_width / 2f)), rad, rad);
+                                            Ellipse dot = new Ellipse(new Vector2(rectBB.Left + (rectBB.Right - rectBB.Left) / 2f, rectBB.Top + indicator_shrink + (indicator_width / 2f)), rad, rad);
                                             _renderTarget.FillEllipse(dot, getDXBrushForColour(indicator_colour));
                                             indicator_adjust.Top = (indicator_width * 0.8f) + (indicator_shrink * 1.5f);
                                         }
@@ -39724,7 +39947,7 @@ namespace Thetis
                                             rad = Math.Max(0f, rad);
                                             text_size_modifier = 1f;
                                             indicator_shrink = (0.01f * wh);
-                                            Ellipse dot = new Ellipse(new RawVector2(rectBB.Left + (rectBB.Right - rectBB.Left) / 2f, rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), rad, rad);
+                                            Ellipse dot = new Ellipse(new Vector2(rectBB.Left + (rectBB.Right - rectBB.Left) / 2f, rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), rad, rad);
                                             _renderTarget.FillEllipse(dot, getDXBrushForColour(indicator_colour));
                                             indicator_adjust.Bottom = (indicator_width * 0.8f) + (indicator_shrink * 1.5f);
                                         }
@@ -39735,7 +39958,7 @@ namespace Thetis
                                             rad = Math.Max(0f, rad);
                                             text_size_modifier = 1f;
                                             indicator_shrink = (0.01f * wh);
-                                            Ellipse dot = new Ellipse(new RawVector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Top + indicator_shrink + (indicator_width / 2f)), rad, rad);
+                                            Ellipse dot = new Ellipse(new Vector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Top + indicator_shrink + (indicator_width / 2f)), rad, rad);
                                             _renderTarget.FillEllipse(dot, getDXBrushForColour(indicator_colour));
                                             indicator_adjust.Left = indicator_width + (indicator_shrink * 1.25f);
                                             indicator_adjust.Right = indicator_shrink + radius * 0.45f;
@@ -39747,7 +39970,7 @@ namespace Thetis
                                             rad = Math.Max(0f, rad);
                                             text_size_modifier = 1f;
                                             indicator_shrink = (0.01f * wh);
-                                            Ellipse dot = new Ellipse(new RawVector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), rad, rad);
+                                            Ellipse dot = new Ellipse(new Vector2(rectBB.Left + indicator_shrink + (indicator_width / 2f), rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), rad, rad);
                                             _renderTarget.FillEllipse(dot, getDXBrushForColour(indicator_colour));
                                             indicator_adjust.Left = indicator_width + (indicator_shrink * 1.25f);
                                             indicator_adjust.Right = indicator_shrink + radius * 0.45f;
@@ -39759,7 +39982,7 @@ namespace Thetis
                                             rad = Math.Max(0f, rad);
                                             text_size_modifier = 1f;
                                             indicator_shrink = (0.01f * wh);
-                                            Ellipse dot = new Ellipse(new RawVector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Top + indicator_shrink + (indicator_width / 2f)), rad, rad);
+                                            Ellipse dot = new Ellipse(new Vector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Top + indicator_shrink + (indicator_width / 2f)), rad, rad);
                                             _renderTarget.FillEllipse(dot, getDXBrushForColour(indicator_colour));
                                             indicator_adjust.Left = indicator_shrink + radius * 0.45f;
                                             indicator_adjust.Right = indicator_width + (indicator_shrink * 1.25f);
@@ -39771,7 +39994,7 @@ namespace Thetis
                                             rad = Math.Max(0f, rad);
                                             text_size_modifier = 1f;
                                             indicator_shrink = (0.01f * wh);
-                                            Ellipse dot = new Ellipse(new RawVector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), rad, rad);
+                                            Ellipse dot = new Ellipse(new Vector2(rectBB.Right - indicator_shrink - (indicator_width / 2f), rectBB.Bottom - indicator_shrink - (indicator_width / 2f)), rad, rad);
                                             _renderTarget.FillEllipse(dot, getDXBrushForColour(indicator_colour));
                                             indicator_adjust.Left = indicator_shrink + radius * 0.45f;
                                             indicator_adjust.Right = indicator_width + (indicator_shrink * 1.25f);
@@ -39837,15 +40060,15 @@ namespace Thetis
                                         _renderTarget.AntialiasMode = AntialiasMode.Aliased;
                                         _renderTarget.Transform = Matrix3x2.Identity;
 
-                                        SharpDX.Direct2D1.Bitmap b = _images[icon];
+                                        ID2D1Bitmap b = _images[icon];
 
                                         float smallest_dim = rectBB.Size.Width <= rectBB.Height ? rectBB.Size.Width : rectBB.Size.Height;
                                         float icon_size = smallest_dim * bb.FontScale * 0.7f;
 
-                                        SharpDX.RectangleF rct = new SharpDX.RectangleF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
+                                        DXRectF rct = new DXRectF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
 
                                         _renderTarget.FillOpacityMask(b, getDXBrushForColour(text_icon_is_indicator ? text_icon_indicator_colour : text_colour, 255), 
-                                            OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                                            OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
 
                                         _renderTarget.AntialiasMode = originalAM;
                                         _renderTarget.Transform = originalTransform;
@@ -39937,7 +40160,7 @@ namespace Thetis
                                 if (plot)
                                 {
                                     text = (duration > 9.9f ? duration.ToString("F0") : duration.ToString("F1")) + "s";
-                                    SharpDX.RectangleF tmpRect = new SharpDX.RectangleF(rectBB.X, rectBB.Y, rectBB.Width, rectBB.Height);
+                                    DXRectF tmpRect = new DXRectF(rectBB.X, rectBB.Y, rectBB.Width, rectBB.Height);
                                     tmpRect.X += half_border - (radius * 0.75f);
                                     tmpRect.Y += half_border;
                                     tmpRect.Width -= border;
@@ -39978,8 +40201,8 @@ namespace Thetis
                                     _renderTarget.Transform = Matrix3x2.Identity;
                                     transform_modified = true;
 
-                                    SharpDX.Direct2D1.Bitmap b = _images[icon];
-                                    SharpDX.RectangleF rct = new SharpDX.RectangleF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
+                                    ID2D1Bitmap b = _images[icon];
+                                    DXRectF rct = new DXRectF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
                                     System.Drawing.Color icon_c = text_icon_is_indicator ? text_icon_indicator_colour : text_colour;
 
                                     //dim?
@@ -39989,7 +40212,7 @@ namespace Thetis
                                     }
 
                                     _renderTarget.FillOpacityMask(b, getDXBrushForColour(icon_c, 255),
-                                        OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                                        OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                                 }
                                 //draw repeat icon + green time delay
                                 if (vrp.GetCanRepeat(button) && !vrp.IsRecordMode)
@@ -40013,8 +40236,8 @@ namespace Thetis
                                             transform_modified = true;
                                         }
 
-                                        SharpDX.Direct2D1.Bitmap b = _images[icon];
-                                        SharpDX.RectangleF rct = new SharpDX.RectangleF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
+                                        ID2D1Bitmap b = _images[icon];
+                                        DXRectF rct = new DXRectF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
                                         System.Drawing.Color icon_c = text_icon_is_indicator ? text_icon_indicator_colour : text_colour;
 
                                         //dim?
@@ -40025,7 +40248,7 @@ namespace Thetis
                                         //}
 
                                         _renderTarget.FillOpacityMask(b, getDXBrushForColour(icon_c, 255),
-                                            OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                                            OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
 
                                         float repeat_fill = vrp.GetDelayElapsed(button);
                                         if (!in_use) repeat_fill = 0f;
@@ -40035,59 +40258,59 @@ namespace Thetis
                                         if (repeat_fill >= 0.9995f)
                                         {
                                             _renderTarget.FillOpacityMask(b, getDXBrushForColour(System.Drawing.Color.LimeGreen, 255),
-                                                OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                                                OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                                         }
                                         else if (repeat_fill > 0f)
                                         {
-                                            SharpDX.Direct2D1.PathGeometry wedge = null;
-                                            SharpDX.Direct2D1.GeometrySink sink = null;
-                                            SharpDX.Direct2D1.Layer layer = null;
+                                            ID2D1PathGeometry wedge = null;
+                                            ID2D1GeometrySink sink = null;
+                                            ID2D1Layer layer = null;
 
                                             try
                                             {
-                                                float pi_start = 0;// -SharpDX.MathUtil.PiOverTwo;
-                                                float pi_sweep = repeat_fill * SharpDX.MathUtil.TwoPi;
+                                                float pi_start = 0;// -(MathF.PI / 2f);
+                                                float pi_sweep = repeat_fill * MathF.Tau;
                                                 float pi_end = pi_start + pi_sweep;
 
                                                 float r = icon_size;// * 0.6f;
 
-                                                RawVector2 c = new RawVector2(cx, cy);
-                                                RawVector2 p0 = new RawVector2(cx + (float)System.Math.Cos(pi_start) * r, cy + (float)System.Math.Sin(pi_start) * r);
-                                                RawVector2 p1 = new RawVector2(cx + (float)System.Math.Cos(pi_end) * r, cy + (float)System.Math.Sin(pi_end) * r);
+                                                Vector2 c = new Vector2(cx, cy);
+                                                Vector2 p0 = new Vector2(cx + (float)System.Math.Cos(pi_start) * r, cy + (float)System.Math.Sin(pi_start) * r);
+                                                Vector2 p1 = new Vector2(cx + (float)System.Math.Cos(pi_end) * r, cy + (float)System.Math.Sin(pi_end) * r);
 
-                                                wedge = new SharpDX.Direct2D1.PathGeometry(_factory);
+                                                wedge = _factory.CreatePathGeometry();
                                                 sink = wedge.Open();
-                                                sink.BeginFigure(c, SharpDX.Direct2D1.FigureBegin.Filled);
+                                                sink.BeginFigure(c, FigureBegin.Filled);
                                                 sink.AddLine(p0);
-                                                sink.AddArc(new SharpDX.Direct2D1.ArcSegment
+                                                sink.AddArc(new ArcSegment
                                                 {
                                                     Point = p1,
-                                                    Size = new Size2F(r, r),
+                                                    Size = new Vortice.Mathematics.Size(r, r),
                                                     RotationAngle = 0f,
-                                                    SweepDirection = SharpDX.Direct2D1.SweepDirection.Clockwise,
-                                                    ArcSize = pi_sweep <= SharpDX.MathUtil.Pi ? SharpDX.Direct2D1.ArcSize.Small : SharpDX.Direct2D1.ArcSize.Large
+                                                    SweepDirection = SweepDirection.Clockwise,
+                                                    ArcSize = pi_sweep <= MathF.PI ? ArcSize.Small : ArcSize.Large
                                                 });
-                                                sink.EndFigure(SharpDX.Direct2D1.FigureEnd.Closed);
+                                                sink.EndFigure(FigureEnd.Closed);
                                                 sink.Close();
 
-                                                RawRectangleF content_bounds = new RawRectangleF(rct.Left, rct.Top, rct.Right, rct.Bottom);
+                                                RawRectF content_bounds = new RawRectF(rct.Left, rct.Top, rct.Right, rct.Bottom);
 
-                                                SharpDX.Direct2D1.LayerParameters lp = new SharpDX.Direct2D1.LayerParameters
+                                                LayerParameters lp = new LayerParameters
                                                 {
                                                     ContentBounds = content_bounds,
                                                     GeometricMask = wedge,
-                                                    MaskAntialiasMode = SharpDX.Direct2D1.AntialiasMode.PerPrimitive,
+                                                    MaskAntialiasMode = AntialiasMode.PerPrimitive,
                                                     MaskTransform = Matrix3x2.Identity,
                                                     Opacity = 1f,
                                                     OpacityBrush = null,
-                                                    LayerOptions = SharpDX.Direct2D1.LayerOptions.None
+                                                    LayerOptions = LayerOptions.None
                                                 };
 
-                                                layer = new SharpDX.Direct2D1.Layer(_renderTarget);
-                                                _renderTarget.PushLayer(ref lp, layer);
+                                                layer = _renderTarget.CreateLayer();
+                                                _renderTarget.PushLayer(lp, layer);
 
                                                 _renderTarget.FillOpacityMask(b, getDXBrushForColour(System.Drawing.Color.LimeGreen, 255),
-                                                    OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                                                    OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
 
                                                 _renderTarget.PopLayer();
                                             }
@@ -40130,8 +40353,8 @@ namespace Thetis
                                 //            transform_modified = true;
                                 //        }
 
-                                //        SharpDX.Direct2D1.Bitmap b = _images[icon];
-                                //        SharpDX.RectangleF rct = new SharpDX.RectangleF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
+                                //        ID2D1Bitmap b = _images[icon];
+                                //        DXRectF rct = new DXRectF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
                                 //        System.Drawing.Color icon_c = text_icon_is_indicator ? text_icon_indicator_colour : text_colour;
 
                                 //        //dim?
@@ -40141,7 +40364,7 @@ namespace Thetis
                                 //        }
 
                                 //        _renderTarget.FillOpacityMask(b, getDXBrushForColour(icon_c, 255),
-                                //            OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                                //            OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
 
                                 //        //_renderTarget.DrawRectangle(rct, getDXBrushForColour(System.Drawing.Color.LimeGreen));
                                 //    }
@@ -40176,10 +40399,9 @@ namespace Thetis
                 {
                     float rw = dragging_rr.Rect.Right - dragging_rr.Rect.Left;
                     float rh = dragging_rr.Rect.Bottom - dragging_rr.Rect.Top;
-                    dragging_rr.Rect.Left = bb.MouseMovePoint.X - (rw / 2f);
-                    dragging_rr.Rect.Top = bb.MouseMovePoint.Y - (rh / 2f);
-                    dragging_rr.Rect.Right = dragging_rr.Rect.Left + rw;
-                    dragging_rr.Rect.Bottom = dragging_rr.Rect.Top + rh;
+                    float nLeft = bb.MouseMovePoint.X - (rw / 2f);
+                    float nTop = bb.MouseMovePoint.Y - (rh / 2f);
+                    dragging_rr.Rect = new RawRectF(nLeft, nTop, nLeft + rw, nTop + rh);
 
                     System.Drawing.Color c;
                     if (highlighted_index != -1)
@@ -40232,7 +40454,7 @@ namespace Thetis
                 return (lighter + 0.05) / (darker + 0.05);
             }
 
-            private void renderVfoDisplay(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderVfoDisplay(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsVfoDisplay vfo = (clsVfoDisplay)mi;
 
@@ -40281,7 +40503,7 @@ namespace Thetis
                 float hB = 0;
                 float mx = 0;
                 float my = 0;
-                SharpDX.RectangleF rct;
+                DXRectF rct;
                 bool mouse_over_good = false;
 
                 clsVfoDisplay.buttonState button_state_vfoA = clsVfoDisplay.buttonState.NONE;
@@ -40597,7 +40819,7 @@ namespace Thetis
 
                 if (draw_box || button_back_box)
                 {
-                    SharpDX.RectangleF rctB = new SharpDX.RectangleF(x + (w * xB) * x_multy, y + (h * yB), w * wB * x_multy, h * hB);
+                    DXRectF rctB = new DXRectF(x + (w * xB) * x_multy, y + (h * yB), w * wB * x_multy, h * hB);
                     _renderTarget.FillRectangle(rctB, getDXBrushForColour(vfo.DigitHighlightColour));
                 }
 
@@ -40707,7 +40929,7 @@ namespace Thetis
                 if (disp_a)
                 {
                     //split only on VFOA
-                    SharpDX.RectangleF rectSplit = new SharpDX.RectangleF(x + (w * 0.1f) * x_multy, y + (h * 0.03f), w * 0.1f * x_multy, h * 0.4f);
+                    DXRectF rectSplit = new DXRectF(x + (w * 0.1f) * x_multy, y + (h * 0.03f), w * 0.1f * x_multy, h * 0.4f);
                     if(!(button_back_box && button_state_vfoA == clsVfoDisplay.buttonState.SPLIT)) _renderTarget.FillRectangle(rectSplit, getDXBrushForColour(vfo.SplitBackColour, nVfoAFade));
                     System.Drawing.Color splitColor = m.Split ? vfo.SplitColour : System.Drawing.Color.Black;
                     plotText(m.QuickSplitEnabled ? "QSPLT" : "SPLIT", rectSplit.X + (w * (m.QuickSplitEnabled ? 0.01f : 0.015f)) * x_multy, rectSplit.Y, rect.Width, vfo.FontSize * 1f, splitColor, nVfoAFade, vfo.FontFamily, vfo.Style);
@@ -40736,14 +40958,14 @@ namespace Thetis
                 if (disp_a)
                 {
                     //rx box VFOA
-                    rct = new SharpDX.RectangleF(x + (w * 0.1f) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new DXRectF(x + (w * 0.1f) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
                     boxColour = bRxVFOA ? cDimRx : cDimerRx;
                     _renderTarget.FillRectangle(rct, getDXBrushForColour(boxColour, nVfoAFade));
                     txtColour = bRxVFOA ? cRx : System.Drawing.Color.Black;
                     plotText("RX", rct.X + (w * 0.005f) * x_multy, rct.Y, rect.Width, vfo.FontSize * 1f, txtColour, nVfoAFade, vfo.FontFamily, vfo.Style);
 
                     //tx box VFOA
-                    rct = new SharpDX.RectangleF(x + (w * 0.152f) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new DXRectF(x + (w * 0.152f) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
                     boxColour = bCanVfoATx ? cDimTx : cDimerTx;
                     if (!(button_back_box && button_state_vfoA == clsVfoDisplay.buttonState.TX)) _renderTarget.FillRectangle(rct, getDXBrushForColour(boxColour, nVfoAFade));
                     txtColour = bTxVFOA ? cTx : System.Drawing.Color.Black;
@@ -40752,14 +40974,14 @@ namespace Thetis
                 if (disp_b)
                 {
                     //rx box VFOB
-                    rct = new SharpDX.RectangleF(x + (w * 0.1f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new DXRectF(x + (w * 0.1f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
                     boxColour = bRxVFOB ? cDimRx : cDimerRx;
                     _renderTarget.FillRectangle(rct, getDXBrushForColour(boxColour, nVfoBFade));
                     txtColour = bRxVFOB ? cRx : System.Drawing.Color.Black;
                     plotText("RX", rct.X + (w * 0.005f) * x_multy, rct.Y, rect.Width, vfo.FontSize * 1f, txtColour, nVfoBFade, vfo.FontFamily, vfo.Style);
 
                     //tx box VFOB
-                    rct = new SharpDX.RectangleF(x + (w * 0.152f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new DXRectF(x + (w * 0.152f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
                     boxColour = bCanVfoBTx ? cDimTx : cDimerTx;
                     if(!(button_back_box && button_state_vfoB == clsVfoDisplay.buttonState.TX)) _renderTarget.FillRectangle(rct, getDXBrushForColour(boxColour, nVfoBFade));
                     txtColour = bTxVFOB ? cTx : System.Drawing.Color.Black;
@@ -40769,13 +40991,13 @@ namespace Thetis
                 if (disp_a)
                 {
                     //filter VFOA
-                    rct = new SharpDX.RectangleF(x + (w * 0.25f) * x_multy, y + (h * 0.54f), w * 0.048f, h * 0.4f);
+                    rct = new DXRectF(x + (w * 0.25f) * x_multy, y + (h * 0.54f), w * 0.048f, h * 0.4f);
                     plotText(m.FilterVfoAName, rct.X + (w * 0.005f) * x_multy, rct.Y, rect.Width, vfo.FontSize * 1f, vfo.FilterColour, nVfoAFade, vfo.FontFamily, vfo.Style);
                 }
                 if (disp_b)
                 {
                     //filter VFOB
-                    rct = new SharpDX.RectangleF(x + (w * 0.25f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.54f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new DXRectF(x + (w * 0.25f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.54f), w * 0.048f * x_multy, h * 0.4f);
                     plotText(tmpVfoBFilterName, rct.X + (w * 0.005f) * x_multy, rct.Y, rect.Width, vfo.FontSize * 1f, vfo.FilterColour, nVfoBFade, vfo.FontFamily, vfo.Style);
                 }
 
@@ -40786,12 +41008,12 @@ namespace Thetis
 
                     if (disp_a)
                     {
-                        rct = new SharpDX.RectangleF(x + (w * 0.250f) * x_multy, y + (bt_h * 0.85f), w * 0.08f, bt_h * 0.03f);
+                        rct = new DXRectF(x + (w * 0.250f) * x_multy, y + (bt_h * 0.85f), w * 0.08f, bt_h * 0.03f);
                         plotText(m.VFOABandText, rct.X, rct.Y, rect.Width, vfo.FontSize * 1f, vfo.BandTextColour, nVfoAFade, vfo.FontFamily, vfo.Style, false, true);
                     }
                     if (disp_b && !m.IsVfoASub) // no band text for vfo_sub
                     {
-                        rct = new SharpDX.RectangleF(x + (w * 0.250f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (bt_h * 0.85f), w * 0.08f, bt_h * 0.03f);
+                        rct = new DXRectF(x + (w * 0.250f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (bt_h * 0.85f), w * 0.08f, bt_h * 0.03f);
                         plotText(m.VFOBBandText, rct.X, rct.Y, rect.Width, vfo.FontSize * 1f, vfo.BandTextColour, nVfoBFade, vfo.FontFamily, vfo.Style, false, true);
                     }
                 }
@@ -40809,30 +41031,30 @@ namespace Thetis
                 {                    
                     if (_images.ContainsKey("lock")/* && _bitmap_brushes.ContainsKey("lock")*/)
                     {
-                        rct = new SharpDX.RectangleF(x + (w * 0.199f) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
-                        SharpDX.Direct2D1.Bitmap b = _images["lock"];
-                        _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.LockColour, m.VFOALock ? nVfoAFade : Math.Min(64, nVfoAFade)), OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                        rct = new DXRectF(x + (w * 0.199f) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
+                        ID2D1Bitmap b = _images["lock"];
+                        _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.LockColour, m.VFOALock ? nVfoAFade : Math.Min(64, nVfoAFade)), OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                     }
                     if (_images.ContainsKey("vfo_sync")/* && _bitmap_brushes.ContainsKey("vfo_sync")*/)
                     {
-                        rct = new SharpDX.RectangleF(x + (w * 0.224f) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
-                        SharpDX.Direct2D1.Bitmap b = _images["vfo_sync"];
-                        _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.SyncColour, m.VFOSync ? nVfoAFade : Math.Min(64, nVfoAFade)), OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                        rct = new DXRectF(x + (w * 0.224f) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
+                        ID2D1Bitmap b = _images["vfo_sync"];
+                        _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.SyncColour, m.VFOSync ? nVfoAFade : Math.Min(64, nVfoAFade)), OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                     }
                 }
                 if (disp_b)
                 {
                     if (_images.ContainsKey("lock")/* && _bitmap_brushes.ContainsKey("lock")*/)
                     {
-                        rct = new SharpDX.RectangleF(x + (w * 0.199f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
-                        SharpDX.Direct2D1.Bitmap b = _images["lock"];
-                        _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.LockColour, m.VFOBLock ? nVfoBFade : Math.Min(64, nVfoBFade)), OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                        rct = new DXRectF(x + (w * 0.199f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
+                        ID2D1Bitmap b = _images["lock"];
+                        _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.LockColour, m.VFOBLock ? nVfoBFade : Math.Min(64, nVfoBFade)), OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                     }
                     if (_images.ContainsKey("vfo_sync")/* && _bitmap_brushes.ContainsKey("vfo_sync")*/)
                     {
-                        rct = new SharpDX.RectangleF(x + (w * 0.224f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
-                        SharpDX.Direct2D1.Bitmap b = _images["vfo_sync"];
-                        _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.SyncColour, m.VFOSync ? nVfoBFade : Math.Min(64, nVfoBFade)), OpacityMaskContent.Graphics, rct, new RawRectangleF(0, 0, b.Size.Width, b.Size.Height));
+                        rct = new DXRectF(x + (w * 0.224f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
+                        ID2D1Bitmap b = _images["vfo_sync"];
+                        _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.SyncColour, m.VFOSync ? nVfoBFade : Math.Min(64, nVfoBFade)), OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                     }
                 }
                 _renderTarget.AntialiasMode = originalAM;
@@ -40849,7 +41071,7 @@ namespace Thetis
                 //plotText($"a button state = {vfo.VFOAButtonState}", x, y + 40, rect.Width, 12, System.Drawing.Color.White, 255, vfo.FontFamily, vfo.Style);
                 //plotText($"b button state = {vfo.VFOBButtonState}", x, y + 60, rect.Width, 12, System.Drawing.Color.White, 255, vfo.FontFamily, vfo.Style);
             }
-            private void renderClock(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderClock(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsClock clk = (clsClock)mi;
 
@@ -40894,26 +41116,26 @@ namespace Thetis
                     plotText("utc", x + (w * 0.52f), y + (h * 0.03f), rect.Width, clk.FontSize, clk.TypeTitleColour, 255, clk.FontFamily, clk.Style);
                 }
 
-                SharpDX.RectangleF rct;
+                DXRectF rct;
 
                 //time
-                rct = new SharpDX.RectangleF(x + (w * 0.12f), y + (h * 0.02f), w, h);
+                rct = new DXRectF(x + (w * 0.12f), y + (h * 0.02f), w, h);
                 plotText(sLoc, rct.X + fPadLoc, rct.Y, rect.Width, clk.FontSize * 1.9f, clk.TimeColour, 255, clk.FontFamily, clk.Style);
                 if (!clk.Show24HourCLock)
                     plotText(sLocAmPm, rct.X + (w * 0.228f), rct.Y + (h * 0.285f), rect.Width, clk.FontSize * 0.8f, clk.TimeColour, 255, clk.FontFamily, clk.Style);
 
-                rct = new SharpDX.RectangleF(x + (w * 0.12f) + (w * 0.52f), y + (h * 0.02f), w, h);
+                rct = new DXRectF(x + (w * 0.12f) + (w * 0.52f), y + (h * 0.02f), w, h);
                 plotText(sUtc, rct.X + fPadUtc, rct.Y, rect.Width, clk.FontSize * 1.9f, clk.TimeColour, 255, clk.FontFamily, clk.Style);
                 if (!clk.Show24HourCLock)
                     plotText(sUtcAmPm, rct.X + (w * 0.228f), rct.Y + (h * 0.285f), rect.Width, clk.FontSize * 0.8f, clk.TimeColour, 255, clk.FontFamily, clk.Style);
 
                 //date
-                rct = new SharpDX.RectangleF(x + (w * 0.132f), y + (h * 0.6f), w, h);
+                rct = new DXRectF(x + (w * 0.132f), y + (h * 0.6f), w, h);
                 plotText(sLocDate, rct.X, rct.Y, rect.Width, clk.FontSize * 0.9f, clk.DateColour, 255, clk.FontFamily, clk.Style);
-                rct = new SharpDX.RectangleF(x + (w * 0.132f) + (w * 0.52f), y + (h * 0.6f), w, h);
+                rct = new DXRectF(x + (w * 0.132f) + (w * 0.52f), y + (h * 0.6f), w, h);
                 plotText(sUtcDate, rct.X, rct.Y, rect.Width, clk.FontSize * 0.9f, clk.DateColour, 255, clk.FontFamily, clk.Style);
             }
-            private void renderSignalTextDisplay(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderSignalTextDisplay(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsSignalText st = (clsSignalText)mi;
 
@@ -40960,7 +41182,7 @@ namespace Thetis
                 Common.SMeterFromDBM2(st.Value, MeterManager.IsAboveS9Frequency(_rx), out int S, out int dBmOver);
                 string sText = "S " + S.ToString();
                 szTextSize = measureString(sText, st.FontFamily, st.FntStyle, fontSizeEmScaled);
-                SharpDX.RectangleF txtrect = new SharpDX.RectangleF(x + (w * 0.5f) - (szTextSize.Width * 0.5f), y, szTextSize.Width, szTextSize.Height);
+                DXRectF txtrect = new DXRectF(x + (w * 0.5f) - (szTextSize.Width * 0.5f), y, szTextSize.Width, szTextSize.Height);
                 _renderTarget.DrawText(sText, getDXTextFormatForFont(st.FontFamily, fontSizeEmScaled, st.FntStyle), txtrect, getDXBrushForColour(st.FontColour, 255));
                 if (dBmOver > 0)
                 {
@@ -40985,7 +41207,7 @@ namespace Thetis
                     Common.SMeterFromDBM2(st.MaxHistory, MeterManager.IsAboveS9Frequency(_rx), out S, out dBmOver);
                     sText = "S " + S.ToString();
                     szTextSize = measureString(sText, st.FontFamily, st.FntStyle, fontSizeEmScaled);
-                    txtrect = new SharpDX.RectangleF(x + (w * 0.5f) - (szTextSize.Width * 0.5f), y + (h * 0.62f), szTextSize.Width, szTextSize.Height);
+                    txtrect = new DXRectF(x + (w * 0.5f) - (szTextSize.Width * 0.5f), y + (h * 0.62f), szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(st.FontFamily, fontSizeEmScaled, st.FntStyle), txtrect, getDXBrushForColour(st.PeakValueColour, 255));
                     if (dBmOver > 0)
                     {
@@ -41004,7 +41226,7 @@ namespace Thetis
                     }
                 }
             }
-            private void renderImage(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderImage(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsImage img = (clsImage)mi;
 
@@ -41029,7 +41251,7 @@ namespace Thetis
 
                 if (MeterManager.ContainsBitmap(sImage))
                 {
-                    SharpDX.RectangleF imgRect = new SharpDX.RectangleF(x, y, w, h);
+                    DXRectF imgRect = new DXRectF(x, y, w, h);
 
                     if (!img.Clipped)
                     {
@@ -41042,7 +41264,7 @@ namespace Thetis
                         float cw = rect.Width * (img.ClipSize.Width / m.XRatio);
                         float ch = rect.Height * (img.ClipSize.Height / m.YRatio);
 
-                        SharpDX.RectangleF clipRect = new SharpDX.RectangleF(cx, cy, cw, ch);
+                        DXRectF clipRect = new DXRectF(cx, cy, cw, ch);
                         _renderTarget.PushAxisAlignedClip(clipRect, AntialiasMode.Aliased); // prevent anything drawing from outside the rectangle, no nee to cut the image
                     }
 
@@ -41052,20 +41274,19 @@ namespace Thetis
                     if (_images.ContainsKey(sImage))
                     {
                         Ellipse ellipse;
-                        Layer layer = null;
-                        EllipseGeometry ellipseGeometry = null;
+                        ID2D1Layer layer = null;
+                        ID2D1EllipseGeometry ellipseGeometry = null;
 
                         if (img.ClippedEllipse)
                         {
                             try
                             {
-                                ellipse = new Ellipse(new RawVector2(x + (img.ClipEllipseCentre.X * w), y + (img.ClipEllipseCentre.Y * h)), img.ClipEllipseRadius.Width * w, img.ClipEllipseRadius.Height * h);
-                                ellipseGeometry = new EllipseGeometry(_renderTarget.Factory, ellipse);
-                                Geometry[] geometries = new Geometry[] { ellipseGeometry };
-                                layer = new Layer(_renderTarget);
+                                ellipse = new Ellipse(new Vector2(x + (img.ClipEllipseCentre.X * w), y + (img.ClipEllipseCentre.Y * h)), img.ClipEllipseRadius.Width * w, img.ClipEllipseRadius.Height * h);
+                                ellipseGeometry = _renderTarget.Factory.CreateEllipseGeometry(ellipse);
+                                                                layer = _renderTarget.CreateLayer();
                                 LayerParameters layerParameters = new LayerParameters
                                 {
-                                    //ContentBounds = new RawRectangleF(float.NegativeInfinity, float.NegativeInfinity, float.PositiveInfinity, float.PositiveInfinity),
+                                    //ContentBounds = new RawRectF(float.NegativeInfinity, float.NegativeInfinity, float.PositiveInfinity, float.PositiveInfinity),
                                     ContentBounds = imgRect,
                                     GeometricMask = ellipseGeometry,
                                     MaskAntialiasMode = AntialiasMode.PerPrimitive,
@@ -41074,12 +41295,12 @@ namespace Thetis
                                     LayerOptions = LayerOptions.None,
                                     MaskTransform = _renderTarget.Transform
                                 };
-                                _renderTarget.PushLayer(ref layerParameters, layer);
+                                _renderTarget.PushLayer(layerParameters, layer);
                             }
                             catch { }
                         }
 
-                        SharpDX.Direct2D1.Bitmap b = _images[sImage];
+                        ID2D1Bitmap b = _images[sImage];
 
                         // maintain aspect ratio, the clip removes anything outside the rect
                         float im_w = b.Size.Width;
@@ -41101,12 +41322,12 @@ namespace Thetis
                             catch { }
                             try
                             {
-                                Utilities.Dispose(ref ellipseGeometry);
+                                ellipseGeometry?.Dispose();
                             }
                             catch { }
                             try
                             {
-                                Utilities.Dispose(ref layer);
+                                layer?.Dispose();
                             }
                             catch { }
                         }
@@ -41115,7 +41336,7 @@ namespace Thetis
                     _renderTarget.PopAxisAlignedClip();
                 }
             }
-            private void renderNeedle(SharpDX.RectangleF rect, clsMeterItem mi, clsMeter m)
+            private void renderNeedle(DXRectF rect, clsMeterItem mi, clsMeter m)
             {
                 clsNeedleItem ni = (clsNeedleItem)mi;
 
@@ -41124,7 +41345,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                SharpDX.RectangleF nirect = new SharpDX.RectangleF(x, y, w, h);
+                DXRectF nirect = new DXRectF(x, y, w, h);
                 //_renderTarget.DrawRectangle(nirect, getDXBrushForColour(System.Drawing.Color.Red));
 
                 _renderTarget.PushAxisAlignedClip(nirect, AntialiasMode.Aliased); // prevent anything drawing from outside the rectangle
@@ -41209,18 +41430,18 @@ namespace Thetis
 
                     if (ni.ShowHistory || ni.Setup)
                     {
-                        PathGeometry sharpGeometry = new PathGeometry(_renderTarget.Factory);
+                        ID2D1PathGeometry sharpGeometry = _renderTarget.Factory.CreatePathGeometry();
 
-                        GeometrySink geo = sharpGeometry.Open();
-                        geo.BeginFigure(new SharpDX.Vector2(startX, startY), FigureBegin.Filled);
+                        ID2D1GeometrySink geo = sharpGeometry.Open();
+                        geo.BeginFigure(new Vector2(startX, startY), FigureBegin.Filled);
 
-                        geo.AddLine(new SharpDX.Vector2(endMinX, endMinY));
+                        geo.AddLine(new Vector2(endMinX, endMinY));
 
                         ArcSegment arcSegment = new ArcSegment();
-                        arcSegment.Point = new SharpDX.Vector2(endMaxX, endMaxY);
+                        arcSegment.Point = new Vector2(endMaxX, endMaxY);
                         arcSegment.SweepDirection = ni.Direction == clsNeedleItem.NeedleDirection.Clockwise ? SweepDirection.Clockwise : SweepDirection.CounterClockwise;
                         arcSegment.ArcSize = Math.Abs(radToDeg(angMax) - radToDeg(angMin)) <= 180f ? ArcSize.Small : ArcSize.Large;
-                        arcSegment.Size = new Size2F(radiusX, radiusY);
+                        arcSegment.Size = new Vortice.Mathematics.Size(radiusX, radiusY);
                         geo.AddArc(arcSegment);
 
                         geo.EndFigure(FigureEnd.Closed); // adds the closing line
@@ -41228,9 +41449,9 @@ namespace Thetis
 
                         _renderTarget.FillGeometry(sharpGeometry, getDXBrushForColour(ni.HistoryColour, ni.HistoryColour.A));
 
-                        Utilities.Dispose(ref geo);
+                        geo?.Dispose();
                         geo = null;
-                        Utilities.Dispose(ref sharpGeometry);
+                        sharpGeometry?.Dispose();
                         sharpGeometry = null;
                     }
                 }
@@ -41276,7 +41497,7 @@ namespace Thetis
                         for (int n = 0; n < 8; n++)
                         {
                             float fReduce = (n / 7f) * fTotalWidth;
-                            _renderTarget.DrawLine(new SharpDX.Vector2(tmpStartX, tmpStartY), new SharpDX.Vector2(tmpEndX, tmpEndY), getDXBrushForColour(System.Drawing.Color.Black, (int)ni.PeakNeedleShadowFade), fTotalWidth - fReduce);
+                            _renderTarget.DrawLine(new Vector2(tmpStartX, tmpStartY), new Vector2(tmpEndX, tmpEndY), getDXBrushForColour(System.Drawing.Color.Black, (int)ni.PeakNeedleShadowFade), fTotalWidth - fReduce);
                         }
 
                         if (Math.Abs(endX - endMaxX) > fStrokeWidth) 
@@ -41284,7 +41505,7 @@ namespace Thetis
                         else
                             ni.PeakNeedleShadowFade -= 1;
                     }
-                    _renderTarget.DrawLine(new SharpDX.Vector2(startX, startY), new SharpDX.Vector2(endMaxX, endMaxY), getDXBrushForColour(ni.PeakHoldMarkerColour, 255), fStrokeWidth);
+                    _renderTarget.DrawLine(new Vector2(startX, startY), new Vector2(endMaxX, endMaxY), getDXBrushForColour(ni.PeakHoldMarkerColour, 255), fStrokeWidth);
                 }
 
                 //shadow?
@@ -41302,12 +41523,12 @@ namespace Thetis
                     for (int n = 0; n<8; n++) 
                     {
                         float fReduce = (n / 7f) * fTotalWidth;
-                        _renderTarget.DrawLine(new SharpDX.Vector2(tmpStartX, tmpStartY), new SharpDX.Vector2(tmpEndX, tmpEndY), getDXBrushForColour(System.Drawing.Color.Black, 12), fTotalWidth - fReduce);
+                        _renderTarget.DrawLine(new Vector2(tmpStartX, tmpStartY), new Vector2(tmpEndX, tmpEndY), getDXBrushForColour(System.Drawing.Color.Black, 12), fTotalWidth - fReduce);
                     }
                 }
 
                 //needle
-                _renderTarget.DrawLine(new SharpDX.Vector2(startX, startY), new SharpDX.Vector2(endX, endY), getDXBrushForColour(ni.Colour, 255), fStrokeWidth);
+                _renderTarget.DrawLine(new Vector2(startX, startY), new Vector2(endX, endY), getDXBrushForColour(ni.Colour, 255), fStrokeWidth);
 
                 //marker
                 switch(ni.ReadingSource)
@@ -41402,7 +41623,7 @@ namespace Thetis
                     foreach (KeyValuePair<float, PointF> kvp in ni.ScaleCalibration)
                     {
                         PointF p = kvp.Value;
-                        _renderTarget.FillEllipse(new Ellipse(new SharpDX.Vector2(x + (p.X * w), y + (p.Y * h)), 2f, 2f), getDXBrushForColour(System.Drawing.Color.Red, 255));
+                        _renderTarget.FillEllipse(new Ellipse(new Vector2(x + (p.X * w), y + (p.Y * h)), 2f, 2f), getDXBrushForColour(System.Drawing.Color.Red, 255));
                     }
                 }
 
@@ -41624,38 +41845,21 @@ namespace Thetis
             //        mi.AddPerc(pc);
             //    }
             //}            
-            private SharpDX.Direct2D1.Bitmap bitmapFromSystemBitmap(RenderTarget rt, System.Drawing.Bitmap bitmap, string sId)
+            private ID2D1Bitmap bitmapFromSystemBitmap(ID2D1RenderTarget rt, System.Drawing.Bitmap bitmap, string sId)
             {
-                //[2.10.3.6]MW0LGE refactored to use Windows Imaging Component (WIC)
+                //[2.10.3.6]MW0LGE ported to Vortice, WIC replaced with GDI+ LockBits direct copy
                 try
                 {
-                    SharpDX.Direct2D1.Bitmap dxBitmap;
-                    SharpDX.WIC.ImagingFactory factory = null;
-                    SharpDX.WIC.BitmapDecoder decoder = null;
-                    SharpDX.WIC.BitmapFrameDecode frame = null;
-                    SharpDX.WIC.FormatConverter converter = null;
+                    ID2D1Bitmap dxBitmap;
 
                     if (MeterManager.ContainsStreamData(sId))
                     {
                         MemoryStream tempStream = MeterManager.GetStreamData(sId);
                         tempStream.Position = 0;
 
-                        try
+                        using (System.Drawing.Bitmap cached = new System.Drawing.Bitmap(tempStream))
                         {
-                            factory = new SharpDX.WIC.ImagingFactory();
-                            decoder = new SharpDX.WIC.BitmapDecoder(factory, tempStream, SharpDX.WIC.DecodeOptions.CacheOnDemand);
-                            frame = decoder.GetFrame(0);
-                            converter = new SharpDX.WIC.FormatConverter(factory);
-
-                            converter.Initialize(frame, SharpDX.WIC.PixelFormat.Format32bppPBGRA);
-                            dxBitmap = SharpDX.Direct2D1.Bitmap.FromWicBitmap(rt, converter);
-                        }
-                        finally
-                        {
-                            Utilities.Dispose(ref converter);
-                            Utilities.Dispose(ref frame);
-                            Utilities.Dispose(ref decoder);
-                            Utilities.Dispose(ref factory);
+                            dxBitmap = createDXBitmapFromGdiBitmap(rt, cached);
                         }
                     }
                     else
@@ -41664,22 +41868,9 @@ namespace Thetis
                         bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
                         ms.Position = 0;
 
-                        try
+                        using (System.Drawing.Bitmap decoded = new System.Drawing.Bitmap(ms))
                         {
-                            factory = new SharpDX.WIC.ImagingFactory();
-                            decoder = new SharpDX.WIC.BitmapDecoder(factory, ms, SharpDX.WIC.DecodeOptions.CacheOnDemand);
-                            frame = decoder.GetFrame(0);
-                            converter = new SharpDX.WIC.FormatConverter(factory);
-
-                            converter.Initialize(frame, SharpDX.WIC.PixelFormat.Format32bppPBGRA);
-                            dxBitmap = SharpDX.Direct2D1.Bitmap.FromWicBitmap(rt, converter);
-                        }
-                        finally
-                        {
-                            Utilities.Dispose(ref converter);
-                            Utilities.Dispose(ref frame);
-                            Utilities.Dispose(ref decoder);
-                            Utilities.Dispose(ref factory);
+                            dxBitmap = createDXBitmapFromGdiBitmap(rt, decoded);
                         }
 
                         MeterManager.AddStreamData(sId, ms);
@@ -41691,7 +41882,28 @@ namespace Thetis
                 {
                     return null;
                 }
-            }            
+            }
+            private ID2D1Bitmap createDXBitmapFromGdiBitmap(ID2D1RenderTarget rt, System.Drawing.Bitmap bmp)
+            {
+                // copies the pixels as 32bpp premultiplied ARGB (BGRA byte order), matching B8G8R8A8_UNorm / Premultiplied.
+                // CreateBitmap copies the source data synchronously, so it is safe to unlock straight after
+                System.Drawing.Imaging.BitmapData bd = null;
+                try
+                {
+                    Rectangle bounds = new Rectangle(0, 0, bmp.Width, bmp.Height);
+                    bd = bmp.LockBits(bounds, System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+
+                    uint pitch = (uint)Math.Abs(bd.Stride);
+
+                    return rt.CreateBitmap(new Vortice.Mathematics.SizeI(bmp.Width, bmp.Height),
+                        bd.Scan0, pitch,
+                        new BitmapProperties(new D2DPixelFormat(Format.B8G8R8A8_UNorm, _ALPHA_MODE)));
+                }
+                finally
+                {
+                    if (bd != null) bmp.UnlockBits(bd);
+                }
+            }
         }        
     }
 #endregion DX
@@ -42247,7 +42459,7 @@ namespace Thetis
                     _tcpClient.Close();
                 }
                 _tcpListener.Stop();
-                _listenerThread.Join();
+                _listenerThread.Join(2000);
                 ConnectorRunning?.Invoke(_guid, _type, false);
             }
             private bool clientConnected
@@ -42507,7 +42719,7 @@ namespace Thetis
                 {
                     _tcpClient.Close();
                 }
-                _clientThread.Join();
+                _clientThread.Join(2000);
                 ConnectorRunning?.Invoke(_guid, _type, false);
             }
             private bool clientConnected
@@ -42746,7 +42958,7 @@ namespace Thetis
             {
                 _isRunning = false;
                 _udpClient.Close();
-                _listenerThread.Join();
+                _listenerThread.Join(2000);
                 ConnectorRunning?.Invoke(_guid, _type, false);
             }
 
@@ -42943,7 +43155,7 @@ namespace Thetis
                 {
                     _serialPort.Close();
                 }
-                _serialThread.Join();
+                _serialThread.Join(2000);
                 ConnectorRunning?.Invoke(_guid, _type, false);
             }
 

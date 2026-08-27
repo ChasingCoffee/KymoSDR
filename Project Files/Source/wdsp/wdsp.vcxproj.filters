@@ -222,6 +222,27 @@
     <ClInclude Include="matchedCW.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="extrapolate.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nurbs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nurbs_fit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="nurbs_spline.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="phrot.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="reshb.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="wbfm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="channel.c">
@@ -426,6 +447,30 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="matchedCW.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="extrapolate.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nurbs.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nurbs_fit.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="nurbs_spline.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="phrot.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="reshb.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="snoop.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="wbfm.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

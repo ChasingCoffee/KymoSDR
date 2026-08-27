@@ -353,6 +353,28 @@ namespace Thetis
             }
         }
 
+        private static bool tci_apply_rx_vst = false;
+        public static bool TCIApplyRxVst
+        {
+            get { return tci_apply_rx_vst; }
+            set
+            {
+                tci_apply_rx_vst = value;
+                cmaster.SetTCIApplyRxVst(Convert.ToInt32(value));
+            }
+        }
+
+        private static bool tci_apply_tx_vst = false;
+        public static bool TCIApplyTxVst
+        {
+            get { return tci_apply_tx_vst; }
+            set
+            {
+                tci_apply_tx_vst = value;
+                cmaster.SetTCIApplyTxVst(Convert.ToInt32(value));
+            }
+        }
+
         private static bool vac2_apply_rx_vst = false;
         public static bool VAC2ApplyRxVst
         {
@@ -364,25 +386,25 @@ namespace Thetis
             }
         }
 
-        private static bool vac1_bypass_tx_vst = false;
-        public static bool VAC1BypassTxVst
+        private static bool vac1_apply_tx_vst = false;
+        public static bool VAC1ApplyTxVst
         {
-            get { return vac1_bypass_tx_vst; }
+            get { return vac1_apply_tx_vst; }
             set
             {
-                vac1_bypass_tx_vst = value;
-                ivac.SetIVACBypassTxVst(0, Convert.ToInt32(value));
+                vac1_apply_tx_vst = value;
+                ivac.SetIVACApplyTxVst(0, Convert.ToInt32(value));
             }
         }
 
-        private static bool vac2_bypass_tx_vst = false;
-        public static bool VAC2BypassTxVst
+        private static bool vac2_apply_tx_vst = false;
+        public static bool VAC2ApplyTxVst
         {
-            get { return vac2_bypass_tx_vst; }
+            get { return vac2_apply_tx_vst; }
             set
             {
-                vac2_bypass_tx_vst = value;
-                ivac.SetIVACBypassTxVst(1, Convert.ToInt32(value));
+                vac2_apply_tx_vst = value;
+                ivac.SetIVACApplyTxVst(1, Convert.ToInt32(value));
             }
         }
 

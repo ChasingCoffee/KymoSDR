@@ -240,7 +240,50 @@ namespace Thetis
             if (!ds.Tables.Contains("TXProfileDef"))
                 AddTXProfileTable("TXProfileDef", true);
 
+            VerifyTXProfileColumns();
+
             WriteDB();
+        }
+
+        // Yurij-eu2av - 2026-07-08: ensure any newly-added TXProfile columns exist
+        // (migration helper for databases created before new features were added).
+        private static void VerifyTXProfileColumns()
+        {
+            foreach (string tableName in new[] { "TXProfile", "TXProfileDef" })
+            {
+                if (!ds.Tables.Contains(tableName)) continue;
+                DataTable t = ds.Tables[tableName];
+                if (!t.Columns.Contains("CFCPhaseRotatorAuto"))
+                    t.Columns.Add("CFCPhaseRotatorAuto", typeof(bool));
+                // backfill DBNull so existing profile rows don't throw on a direct cast
+                foreach (DataRow row in t.Rows)
+                    if (row.IsNull("CFCPhaseRotatorAuto"))
+                        row["CFCPhaseRotatorAuto"] = false;
+
+                // Ordinal column for profile ordering
+                if (!t.Columns.Contains("Ordinal"))
+                    t.Columns.Add("Ordinal", typeof(int));
+                // backfill sequential ordinals for existing rows that lack one
+                bool needsBackfill = false;
+                foreach (DataRow row in t.Rows)
+                {
+                    if (row.IsNull("Ordinal"))
+                    {
+                        needsBackfill = true;
+                        break;
+                    }
+                }
+                if (needsBackfill)
+                {
+                    int seq = 0;
+                    foreach (DataRow row in t.Rows)
+                    {
+                        if (row.IsNull("Ordinal"))
+                            row["Ordinal"] = seq;
+                        seq++;
+                    }
+                }
+            }
         }
 
         #region BandStack2
@@ -4302,6 +4345,7 @@ namespace Thetis
             DataTable t = ds.Tables[sTableName];
 
             t.Columns.Add("Name", typeof(string));
+            t.Columns.Add("Ordinal", typeof(int));
             t.Columns.Add("FilterLow", typeof(int));
             t.Columns.Add("FilterHigh", typeof(int));
 
@@ -4507,6 +4551,7 @@ namespace Thetis
             
             t.Columns.Add("CFCPhaseRotatorFreq", typeof(int));
             t.Columns.Add("CFCPhaseRotatorStages", typeof(int));
+            t.Columns.Add("CFCPhaseRotatorAuto", typeof(bool));
 
             t.Columns.Add("CFCPreComp", typeof(int));
             t.Columns.Add("CFCPostEqGain", typeof(int));
@@ -4548,8 +4593,10 @@ namespace Thetis
 
             #region Default
 
+            int ordinal = 0;
             DataRow dr = t.NewRow();
             dr["Name"] = "Default";
+            dr["Ordinal"] = ordinal++;
             dr["FilterLow"] = 100;
             dr["FilterHigh"] = 3000;
             //
@@ -4727,9 +4774,9 @@ namespace Thetis
             dr["VAC2_Exclusive_In"] = false;
             dr["VAC2_Exclusive_Out"] = false;
             dr["VAC1_Apply_RX_VST"] = false;
-            dr["VAC1_Bypass_TX_VST"] = true;
+            dr["VAC1_Bypass_TX_VST"] = false;
             dr["VAC2_Apply_RX_VST"] = false;
-            dr["VAC2_Bypass_TX_VST"] = true;
+            dr["VAC2_Bypass_TX_VST"] = false;
             //
 
             // CFC
@@ -4742,6 +4789,7 @@ namespace Thetis
 
             dr["CFCPhaseRotatorFreq"] = 338;
             dr["CFCPhaseRotatorStages"] = 8;
+            dr["CFCPhaseRotatorAuto"] = false;
 
             dr["CFCPreComp"] = 0;
             dr["CFCPostEqGain"] = 0;
@@ -4789,6 +4837,7 @@ namespace Thetis
 
             dr = t.NewRow();
             dr["Name"] = "Default DX";
+            dr["Ordinal"] = ordinal++;
             dr["FilterLow"] = 200;
             dr["FilterHigh"] = 3100;
             //
@@ -4964,9 +5013,9 @@ namespace Thetis
             dr["VAC2_Exclusive_In"] = false;
             dr["VAC2_Exclusive_Out"] = false;
             dr["VAC1_Apply_RX_VST"] = false;
-            dr["VAC1_Bypass_TX_VST"] = true;
+            dr["VAC1_Bypass_TX_VST"] = false;
             dr["VAC2_Apply_RX_VST"] = false;
-            dr["VAC2_Bypass_TX_VST"] = true;
+            dr["VAC2_Bypass_TX_VST"] = false;
             //
 
             // CFC
@@ -4979,6 +5028,7 @@ namespace Thetis
 
             dr["CFCPhaseRotatorFreq"] = 338;
             dr["CFCPhaseRotatorStages"] = 8;
+            dr["CFCPhaseRotatorAuto"] = false;
 
             dr["CFCPreComp"] = 0;
             dr["CFCPostEqGain"] = 0;
@@ -5028,6 +5078,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "Digi 1K@1500";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 1000;
                 dr["FilterHigh"] = 2000;
                 //
@@ -5202,9 +5253,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -5217,6 +5268,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -5265,6 +5317,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "Digi 1K@2210";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 1710;
                 dr["FilterHigh"] = 2710;
                 //
@@ -5439,9 +5492,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -5454,6 +5507,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -5501,6 +5555,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "AM";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 0;
                 dr["FilterHigh"] = 4000;
                 //
@@ -5675,9 +5730,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -5690,6 +5745,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -5737,6 +5793,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "Conventional";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3100;
                 //
@@ -5911,9 +5968,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -5926,6 +5983,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -5973,6 +6031,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "D-104";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3500;
                 //
@@ -6147,9 +6206,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -6162,6 +6221,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -6209,6 +6269,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "D-104+CPDR";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3500;
                 //
@@ -6383,9 +6444,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -6398,6 +6459,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -6445,6 +6507,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "D-104+EQ";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3500;
                 //
@@ -6619,9 +6682,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -6634,6 +6697,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -6681,6 +6745,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "DX / Contest";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 250;
                 dr["FilterHigh"] = 3250;
                 //
@@ -6855,9 +6920,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -6870,6 +6935,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -6917,6 +6983,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "ESSB";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 50;
                 dr["FilterHigh"] = 3650;
                 //
@@ -7091,9 +7158,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -7106,6 +7173,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -7153,6 +7221,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "HC4-5";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3100;
                 //
@@ -7327,9 +7396,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -7342,6 +7411,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -7389,6 +7459,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "HC4-5+CPDR";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3100;
                 //
@@ -7563,9 +7634,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -7578,6 +7649,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -7625,6 +7697,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "PR40+W2IHY";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 50;
                 dr["FilterHigh"] = 3650;
                 //
@@ -7799,9 +7872,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -7814,6 +7887,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -7861,6 +7935,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "PR40+W2IHY+CPDR";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 50;
                 dr["FilterHigh"] = 3650;
                 //
@@ -8035,9 +8110,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -8050,6 +8125,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -8097,6 +8173,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "PR781+EQ";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3200;
                 //
@@ -8271,9 +8348,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -8286,6 +8363,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -8333,6 +8411,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "PR781+EQ+CPDR";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3200;
                 //
@@ -8507,9 +8586,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -8522,6 +8601,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 0;
                 dr["CFCPostEqGain"] = 0;
@@ -8569,6 +8649,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "SSB 2.8k CFC";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 2900;
                 //
@@ -8743,9 +8824,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -8758,6 +8839,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 6;
                 dr["CFCPostEqGain"] = -6;
@@ -8805,6 +8887,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "SSB 3.0k CFC";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 100;
                 dr["FilterHigh"] = 3100;
                 //
@@ -8979,9 +9062,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -8994,6 +9077,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 6;
                 dr["CFCPostEqGain"] = -7;
@@ -9041,6 +9125,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "SSB 3.3k CFC";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 50;
                 dr["FilterHigh"] = 3350;
                 //
@@ -9215,9 +9300,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -9230,6 +9315,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 8;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 7;
                 dr["CFCPostEqGain"] = -6;
@@ -9277,6 +9363,7 @@ namespace Thetis
 
                 dr = t.NewRow();
                 dr["Name"] = "AM 10k CFC";
+                dr["Ordinal"] = ordinal++;
                 dr["FilterLow"] = 0;
                 dr["FilterHigh"] = 5000;
                 //
@@ -9451,9 +9538,9 @@ namespace Thetis
                 dr["VAC2_Exclusive_In"] = false;
                 dr["VAC2_Exclusive_Out"] = false;
                 dr["VAC1_Apply_RX_VST"] = false;
-                dr["VAC1_Bypass_TX_VST"] = true;
+                dr["VAC1_Bypass_TX_VST"] = false;
                 dr["VAC2_Apply_RX_VST"] = false;
-                dr["VAC2_Bypass_TX_VST"] = true;
+                dr["VAC2_Bypass_TX_VST"] = false;
                 //
 
                 // CFC
@@ -9466,6 +9553,7 @@ namespace Thetis
 
                 dr["CFCPhaseRotatorFreq"] = 338;
                 dr["CFCPhaseRotatorStages"] = 9;
+                dr["CFCPhaseRotatorAuto"] = false;
 
                 dr["CFCPreComp"] = 6;
                 dr["CFCPostEqGain"] = -8;
@@ -11296,7 +11384,7 @@ namespace Thetis
         // this is a string generated by console StateListToBase64 to get default settings to apply to state table
         // it is a complete hack, but the console object is not available in merge as it is happening in the cosntructor
         // this should be updated from time to time
-        private static string _default_settings = "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";
+        private static string _default_settings = "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";
 
         //--MW0LGE
         private static bool getRadioSelectedFromOldRadButton(ref DataTable tempTable, string sRadButtonName)

@@ -535,7 +535,7 @@ namespace Thetis
         private static bool _vstEnabled;
         public static bool VstEnabled { get { return _vstEnabled; } }
 
-        private bool m_bLogShutdown = false; // bool that is set via command line args to log the shutdown stages
+        private bool m_bLogShutdown = true; // bool that is set via command line args to log the shutdown stages
 
         private frmReleaseNotes _frmReleaseNotes;
 
@@ -635,17 +635,14 @@ namespace Thetis
             Thread.CurrentThread.CurrentUICulture = ci;
             //
 
-            m_bLogShutdown = Common.HasArg(args, "-logshutdown");
+            m_bLogShutdown = true; //Common.HasArg(args, "-logshutdown");
 
             // check versions of DLL/etc
             if (!checkVersions())
             {
                 // version incorrect
-                DialogResult dr = MessageBox.Show("An incorrect version of a required dll has been found.\n" +
-                    "Please resolve the issue otherwise unexpected behaviour may occur.",
-                    "Version error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Stop, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                Common.ReportError("Version error", "An incorrect version of a required dll has been found.\n" +
+                    "Please resolve the issue otherwise unexpected behaviour may occur.");
 
                 _exitConsoleInDispose = false;
                 Environment.Exit(1);
@@ -713,8 +710,7 @@ namespace Thetis
 
             _use_additional_sas = !Common.HasArg(args, "-nospec"); // prevent the use of additional spec analysers           
             _touch_support = Common.HasArg(args, "-touch"); // configure touch support for mouse down/up/move, used primarily by containers, and ucMeter
-            _vstEnabled = Common.HasArg(args, "-vst") ||
-                !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("THETIS_VST_ENABLE"));
+            _vstEnabled = true;
 
             string splash_screen_folder = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "\\OpenHPSDR\\SplashScreens";
             if (!Directory.Exists(splash_screen_folder))
@@ -753,6 +749,24 @@ namespace Thetis
 
             InitializeComponent();								// Windows Forms Generated Code
             Common.DoubleBufferAll(this, true);
+
+            // '3D Pan' toggle button in the display toolbar — sits below Peak,
+            // to the right of CTUN (free slot at 52,51 in panelDisplay2)
+            btnDisplay3DPan = new CheckBoxTS();
+            btnDisplay3DPan.Name = "chkDisplay3DPan";
+            btnDisplay3DPan.Text = "3D";
+            btnDisplay3DPan.Location = new System.Drawing.Point(52, 51);
+            btnDisplay3DPan.Size = new System.Drawing.Size(50, 23);
+            btnDisplay3DPan.FlatAppearance.BorderSize = 0;
+            btnDisplay3DPan.Appearance = Appearance.Button;
+            btnDisplay3DPan.FlatStyle = FlatStyle.Flat;
+            btnDisplay3DPan.UseVisualStyleBackColor = false;
+            btnDisplay3DPan.TextAlign = ContentAlignment.MiddleCenter;
+            btnDisplay3DPan.TabIndex = 10;
+            toolTip1.SetToolTip(btnDisplay3DPan, "3D Panadapter on/off");
+            btnDisplay3DPan.CheckedChanged += new EventHandler(chkDisplay3DPan_CheckedChanged);
+            btnDisplay3DPan.MouseUp += new MouseEventHandler(btnDisplay3DPan_MouseUp);
+            panelDisplay2.Controls.Add(btnDisplay3DPan);
 
             InitialiseAndromedaMenus();
 
@@ -820,9 +834,9 @@ namespace Thetis
             if (!ok)
             {
                 if (string.IsNullOrEmpty(broken_folder))
-                    MessageBox.Show($"There was an issue loading the database.", "Database Issue", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Database Issue", $"There was an issue loading the database.");
                 else
-                    MessageBox.Show($"There was an issue loading the database. The database has been moved to [{AppDataPath}DB\\broken\\{broken_folder}].", "Database Issue", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Database Issue", $"There was an issue loading the database. The database has been moved to [{AppDataPath}DB\\broken\\{broken_folder}].");
 
                 _exitConsoleInDispose = false;
                 Environment.Exit(1);
@@ -902,8 +916,7 @@ namespace Thetis
                         "Try holding either CTRL key BEFORE Thetis is re-launched,\n" +
                         "and KEEP IT HELD until you see a message at which point you may release it.";
 
-                    MessageBox.Show(msg, "Database Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Database Error", msg, ex);
 
                     _exitConsoleInDispose = false;
                     Environment.Exit(1);
@@ -953,10 +966,10 @@ namespace Thetis
             {
                 Splash.SetStatus("Waiting for PortAudio");
                 bool bOk = portAudioThread.Join(5000);
-                if (!bOk) MessageBox.Show("There was an issue initialising PortAudio", "PortAudio", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                if (!bOk) Common.ReportError("PortAudio", "There was an issue initialising PortAudio");
             }
             if (_portAudioIssue)
-                MessageBox.Show("There was an issue initialising PortAudio", "PortAudio", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                Common.ReportError("PortAudio", "There was an issue initialising PortAudio");
 
             //            
             if (!IsSetupFormNull) SetupForm.SetupCMAsio(_portAudioIssue, Common.HasArg(args, "-cmasioconfig"));
@@ -1088,7 +1101,7 @@ namespace Thetis
                 {
                     Name = "Run Display Thread",
                     Priority = m_tpDisplayThreadPriority, //MW0LGE now defaulted with m_tpDisplayThreadPriority, and updated by setupform
-                    IsBackground = false//true MW0LGE_21b rundisplay now stops nicely, ensuring dx gpu resources are released                    
+                    IsBackground = true // allow process exit even if thread is stuck
                 };
                 //draw_display_thread.SetApartmentState(ApartmentState.STA);
                 draw_display_thread.Start();
@@ -1143,9 +1156,6 @@ namespace Thetis
             //_rx1SpectrumTestForm = _spectrumProcessor.ShowReceiverTestForm(0, -130, -40);
             ////_rx2SpectrumTestForm = _spectrumProcessor.ShowReceiverTestForm(1, -130, -40);
         }
-        private clsSpectrumProcessor _spectrumProcessor;
-        private Form _rx1SpectrumTestForm;
-        private Form _rx2SpectrumTestForm;
 
         private void initialisePortAudio()
         {
@@ -1349,7 +1359,7 @@ namespace Thetis
                 s += "  -nospec            do not use additional spectrum analysers from WDSP for filter item display\n";
                 s += "  -touch             provide touch support for containers to simulate mouse down/move/up\n";
                 s += "  -logshutdown       generate shutdown_log.txt when closing down\n";
-                s += "  -vst               enable VST plugin hosting (also enabled by THETIS_VST_ENABLE env var)\n\n";
+                s += "\n";
 
                 s += "  -datapath:c:\\thetisdatafolder\\                  use this data folder for everything\n";
                 s += "  -datapath:c:\\thetisdatafolder\\ -autostart       as above, with autostart\n";
@@ -1387,11 +1397,29 @@ namespace Thetis
         {
             Debug.WriteLine(e.Exception.Message);
             Common.LogException(e.Exception);
+            string path = Common.SaveCrashReport(e.Exception);
+            ShowCrashDialog(path);
         }
         static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
-            Debug.WriteLine((e.ExceptionObject as Exception).Message);
-            Common.LogException(e.ExceptionObject as Exception);
+            Exception ex = e.ExceptionObject as Exception;
+            Debug.WriteLine(ex?.Message);
+            if (ex != null) Common.LogException(ex);
+            string path = Common.SaveCrashReport(ex);
+            ShowCrashDialog(path);
+        }
+        static void ShowCrashDialog(string crashPath)
+        {
+            string text = crashPath != null
+                ? "SDR-VST3 has crashed. A crash report has been saved to:\n\n" + crashPath + "\n\nWould you like to open the folder?"
+                : "SDR-VST3 has crashed. Could not save crash report.";
+            DialogResult dr = MessageBox.Show(text, "SDR-VST3 Crash",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Error,
+                MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+            if (dr == DialogResult.Yes && crashPath != null)
+            {
+                try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + crashPath + "\""); } catch { }
+            }
         }
         public bool Restart
         {
@@ -1552,15 +1580,12 @@ namespace Thetis
                         "Try holding either CTRL key BEFORE Thetis is re-launched,\n" +
                         "and KEEP IT HELD until you see a message at which point you may release it.";
 
-                    MessageBox.Show(msg, "Database Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Database Error", msg, ex);
                 }
                 else
                 {
                     string msg = build_exception_text(ex);
-                    MessageBox.Show(msg, "Fatal Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error,
-                        MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Fatal Error", msg, ex);
                 }
 
                 Application.Exit();
@@ -2028,6 +2053,11 @@ namespace Thetis
 
             Common.RestoreForm(EQForm, "EQForm", false);
 
+            // apply persisted 3D panadapter settings to the engine at startup —
+            // the 3D settings popup is lazy-created, so its saved values would
+            // otherwise only reach the display on first open (waterfall-sync bug)
+            Display.RestorePan3DPersisted();
+
             XVTRForm = new XVTRForm(this);
             //WaveForm = new WaveControl(this) { StartPosition = FormStartPosition.Manual };	// create Wave form
 
@@ -2137,6 +2167,8 @@ namespace Thetis
             initializing = true;
 
             ptbDisplayZoom_Scroll(this, EventArgs.Empty);
+            ptbRX2DisplayZoom_Scroll(this, EventArgs.Empty); // MW0LGE_22x
+            ptbRX2DisplayPan_Scroll(this, EventArgs.Empty); // MW0LGE_22x
             ptbRX0Gain_Scroll(this, EventArgs.Empty);
             ptbRX1Gain_Scroll(this, EventArgs.Empty);
             ptbPanMainRX_Scroll(this, EventArgs.Empty);
@@ -2385,8 +2417,7 @@ namespace Thetis
                     {
                         if (!IsSetupFormNull) SetupForm.DisableTCPIPCatServerDueToError();
                         removeTCPIPcatDelegates();
-                        MessageBox.Show("Unable to start the server." + Environment.NewLine + Environment.NewLine + "[ " + m_tcpCATServer.LastError + " ]", "TCPIP CAT Server",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                        Common.ReportError("TCPIP CAT Server", "Unable to start the server." + Environment.NewLine + Environment.NewLine + "[ " + m_tcpCATServer.LastError + " ]");
                     }
                 }
                 //
@@ -2505,8 +2536,7 @@ namespace Thetis
                     {
                         if (!IsSetupFormNull) SetupForm.DisableTCIServerDueToError();
                         removeTCIDelegates();
-                        MessageBox.Show("Unable to start the server." + Environment.NewLine + Environment.NewLine + "[ " + m_tcpTCIServer.LastError + " ]", "TCI Server",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                        Common.ReportError("TCI Server", "Unable to start the server." + Environment.NewLine + Environment.NewLine + "[ " + m_tcpTCIServer.LastError + " ]");
                     }
                 }
                 //
@@ -13520,6 +13550,18 @@ namespace Thetis
             if (oldDecimation != Display.Decimation) DisplayDecimationChangedHanders?.Invoke(oldDecimation, Display.Decimation);
         }
 
+        public void RestartDisplayDX()
+        {
+            if (!Display.IsDX2DSetup) return;
+
+            _pause_DisplayThread = true;
+
+            Display.ShutdownDX2D();
+            Display.Target = pnlDisplay;
+
+            _pause_DisplayThread = false;
+        }
+
         private bool diversity_rx_ref;
         public bool DiversityRXRef
         {
@@ -16876,11 +16918,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling CAT on COM" + cat_port + ".\n" +
-                        "Please check CAT settings and try again.",
-                        "CAT Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("CAT Error", "Error enabling CAT on COM" + cat_port + ".\n" +
+                        "Please check CAT settings and try again.");
                     if (!IsSetupFormNull) SetupForm.CATEnabled = false;
                 }
             }
@@ -16917,11 +16956,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling Andromeda on COM" + cat_port + ".\n" +
-                        "Please check settings and try again.",
-                        "Andromeda CAT Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Andromeda CAT Error", "Error enabling Andromeda on COM" + cat_port + ".\n" +
+                        "Please check settings and try again.");
                     if (!IsSetupFormNull)
                     {
                         if (!andromeda_g2_enabled)
@@ -16957,11 +16993,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling Aries on COM" + cat_port + ".\n" +
-                        "Please check settings and try again.",
-                        "Aries CAT Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Aries CAT Error", "Error enabling Aries on COM" + cat_port + ".\n" +
+                        "Please check settings and try again.");
                     if (!IsSetupFormNull) SetupForm.AriesCATEnabled = false;
                 }
             }
@@ -16992,11 +17025,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling Ganymede on COM" + cat_port + ".\n" +
-                        "Please check settings and try again.",
-                        "Ganymede CAT Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("Ganymede CAT Error", "Error enabling Ganymede on COM" + cat_port + ".\n" +
+                        "Please check settings and try again.");
                     if (!IsSetupFormNull) SetupForm.GanymedeCATEnabled = false;
                 }
             }
@@ -17025,11 +17055,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling CAT2 on COM" + cat_port + ".\n" +
-                        "Please check CAT2 settings and try again.",
-                        "CAT2 Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("CAT2 Error", "Error enabling CAT2 on COM" + cat_port + ".\n" +
+                        "Please check CAT2 settings and try again.");
                     if (!IsSetupFormNull) SetupForm.CAT2Enabled = false;
                 }
             }
@@ -17058,11 +17085,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling CAT3 on COM" + cat_port + ".\n" +
-                        "Please check CAT3 settings and try again.",
-                        "CAT3 Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("CAT3 Error", "Error enabling CAT3 on COM" + cat_port + ".\n" +
+                        "Please check CAT3 settings and try again.");
                     if (!IsSetupFormNull) SetupForm.CAT3Enabled = false;
                 }
             }
@@ -17091,11 +17115,8 @@ namespace Thetis
                 }
                 catch (Exception)
                 {
-                    MessageBox.Show("Error enabling CAT4 on COM" + cat_port + ".\n" +
-                        "Please check CAT4 settings and try again.",
-                        "CAT4 Error",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                    Common.ReportError("CAT4 Error", "Error enabling CAT4 on COM" + cat_port + ".\n" +
+                        "Please check CAT4 settings and try again.");
                     if (!IsSetupFormNull) SetupForm.CAT4Enabled = false;
                 }
             }
@@ -17200,9 +17221,8 @@ namespace Thetis
                         {
                             SetupForm.copyCATPropsToDialogVars(); // need to make sure the props on the setup page get reset 
                         }
-                        MessageBox.Show("Could not initialize PTT Bit Bang control.  Exception was:\n\n " + ex.Message +
-                            "\n\nPTT Bit Bang control has been disabled.", "Error Initializing PTT control",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                        Common.ReportError("Error Initializing PTT control", "Could not initialize PTT Bit Bang control.  Exception was:\n\n " + ex.Message +
+                            "\n\nPTT Bit Bang control has been disabled.", ex);
 
                     }
                 }
@@ -19560,6 +19580,193 @@ namespace Thetis
         {
             Zoom = ptbDisplayZoom.Value = ptbDisplayZoom.Minimum;
         }
+
+        // MW0LGE_22x per-rx zoom/pan - RX2 pane has its own sliders
+        public int Zoom2
+        {
+            get { return ptbRX2DisplayZoom.Value; }
+            set
+            {
+                ptbRX2DisplayZoom.Value = value;
+                ptbRX2DisplayZoom_Scroll(this, EventArgs.Empty);
+
+                //max bin detect
+                if (_display_max_bin_enabled[0]) setupDisplayMaxBinDetect(1, false, true);
+                if (_display_max_bin_enabled[1]) setupDisplayMaxBinDetect(2, false, true);
+            }
+        }
+
+        public int Pan2
+        {
+            get { return ptbRX2DisplayPan.Value; }
+            set
+            {
+                ptbRX2DisplayPan.Value = value;
+                ptbRX2DisplayPan_Scroll(this, EventArgs.Empty);
+
+                //max bin detect
+                if (_display_max_bin_enabled[0]) setupDisplayMaxBinDetect(1, false, true);
+                if (_display_max_bin_enabled[1]) setupDisplayMaxBinDetect(2, false, true);
+            }
+        }
+
+        public void PanCentreRX2()
+        {
+            double spur_tune_width = 200e6 / Math.Pow(2, 16);
+
+            int width = Display.RX2DisplayHigh - Display.RX2DisplayLow;
+
+            int max_pan_width = (int)(sample_rate_rx2 - 2 * spur_tune_width - width);
+            if (max_pan_width == 0)
+            {
+                ptbRX2DisplayPan.Value = (ptbRX2DisplayPan.Maximum - ptbRX2DisplayPan.Minimum) / 2;
+                ptbRX2DisplayPan_Scroll(btnDisplayPanCenter, EventArgs.Empty);
+                return;
+            }
+
+            int low = -width / 2; // target -- if width is centered at 0, low will be half the width below 0
+
+            int abs_low = (int)(-(double)sample_rate_rx2 * 0.5 + spur_tune_width);
+
+            int offset = low - abs_low;
+
+            int new_val = (int)((double)offset * (double)ptbRX2DisplayPan.Maximum / (double)max_pan_width);
+            Pan2 = Math.Min(Math.Max(ptbRX2DisplayPan.Minimum, new_val), ptbRX2DisplayPan.Maximum);
+        }
+
+        private void btnDisplayPanCenter_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Middle && rx2_enabled) PanCentreRX2(); // middle click centres the RX2 pane (ke9ns style)
+        }
+
+        private void btnRX2DisplayPanCenter_Click(object sender, EventArgs e)
+        {
+            PanCentreRX2();
+        }
+
+        // MW0LGE_22x legacy expanded layout: exact duplicates of the rx1 groups.
+        // Left side: the rx2 pan trio [label][slider][centre button] - identical construction to the
+        // rx1 pan trio - seated directly after it. Right side: the rx2 zoom group
+        // [label][slider][ztb][presets], an exact translated copy of the rx1 zoom group, floating
+        // just before its left edge. Sliders keep their normal (basis) sizes; nothing stretches.
+        // Both groups autohide independently when the available room runs out - the pan trio is
+        // prioritised, and neither group ever encroaches on the rx1 controls.
+        // Requires ExpandDisplay / ResizeConsole to have positioned the rx1 anchors.
+        private void PositionRX2DisplayClusterLegacy()
+        {
+            int yRow = tb_display_zoom_basis.Y + v_delta;
+            bool rx2vis = rx2_enabled;
+
+            const int GAP_PAN_GROUPS = 12;      // rx1 pan trio -> rx2 pan trio
+            const int GAP_BEFORE_RX1_ZOOM = 6;  // rx2 zoom group -> rx1 zoom group
+            const int GAP_MIN = 8;              // minimum breathing room between groups
+
+            if (!rx2vis)
+            {
+                lblRX2DisplayPan.Hide();
+                ptbRX2DisplayPan.Hide();
+                btnRX2DisplayPanCenter.Hide();
+                lblRX2DisplayZoom.Hide();
+                ptbRX2DisplayZoom.Hide();
+                radRX2DisplayZoom05.Hide();
+                radRX2DisplayZoom1x.Hide();
+                radRX2DisplayZoom2x.Hide();
+                radRX2DisplayZoom4x.Hide();
+                btnRX2DisplayZTB.Hide();
+                return;
+            }
+
+            //
+            // measure the TRUE extents of the rx1 zoom cluster first - the preset radios sit to
+            // the RIGHT of the ztb button, not inside [label..ztb]
+            //
+            int xMin = Math.Min(lblDisplayZoom.Left,
+                      Math.Min(ptbDisplayZoom.Left,
+                      Math.Min(btnDisplayZTB.Left,
+                      Math.Min(radDisplayZoom05.Left,
+                      Math.Min(radDisplayZoom1x.Left,
+                      Math.Min(radDisplayZoom2x.Left, radDisplayZoom4x.Left))))));
+            int xMax = Math.Max(lblDisplayZoom.Right,
+                      Math.Max(ptbDisplayZoom.Right,
+                      Math.Max(btnDisplayZTB.Right,
+                      Math.Max(radDisplayZoom05.Right,
+                      Math.Max(radDisplayZoom1x.Right,
+                      Math.Max(radDisplayZoom2x.Right, radDisplayZoom4x.Right))))));
+
+            //
+            // left: rx2 pan trio, a copy of [lblDisplayPan][ptbDisplayPan][btnDisplayPanCenter].
+            // Must fully clear the rx1 zoom cluster or it hides entirely (pan side is prioritised).
+            //
+            int trioStart = btnDisplayPanCenter.Right + GAP_PAN_GROUPS;
+            int trioSpan = btnDisplayPanCenter.Right - lblDisplayPan.Left; // label -> centre button
+            int panShift = trioStart - lblDisplayPan.Left;
+
+            bool bPanFits = trioStart + trioSpan <= xMin - GAP_MIN;
+
+            // left edge the translated zoom group would land at; it must clear whatever sits on its left
+            int zoomGroupLeft = xMin - GAP_BEFORE_RX1_ZOOM - (xMax - xMin);
+            int zoomClearLeft = bPanFits ? btnRX2DisplayPanCenter.Right : btnDisplayPanCenter.Right;
+            bool bZoomFits = zoomGroupLeft >= zoomClearLeft + GAP_MIN;
+
+            lblRX2DisplayPan.Visible = bPanFits;
+            ptbRX2DisplayPan.Visible = bPanFits;
+            btnRX2DisplayPanCenter.Visible = bPanFits;
+
+            if (bPanFits)
+            {
+                lblRX2DisplayPan.Location = new Point(lblDisplayPan.Left + panShift, yRow);
+                ptbRX2DisplayPan.Location = new Point(ptbDisplayPan.Left + panShift, yRow);
+                ptbRX2DisplayPan.Size = tb_displaypan_size_basis;
+                btnRX2DisplayPanCenter.Location = new Point(btnDisplayPanCenter.Left + panShift, yRow);
+
+                lblRX2DisplayPan.Show();
+                ptbRX2DisplayPan.Show();
+                btnRX2DisplayPanCenter.Show();
+            }
+
+            //
+            // right: rx2 zoom group as an exact translated copy of the rx1 zoom group, ending
+            // just before it (floating with it on resize); hides when the room is gone
+            //
+            int zoomShift = xMin - GAP_BEFORE_RX1_ZOOM - xMax;
+
+            lblRX2DisplayZoom.Visible = bZoomFits;
+            ptbRX2DisplayZoom.Visible = bZoomFits;
+            radRX2DisplayZoom05.Visible = bZoomFits;
+            radRX2DisplayZoom1x.Visible = bZoomFits;
+            radRX2DisplayZoom2x.Visible = bZoomFits;
+            radRX2DisplayZoom4x.Visible = bZoomFits;
+            btnRX2DisplayZTB.Visible = bZoomFits;
+
+            if (bZoomFits)
+            {
+                lblRX2DisplayZoom.Location = new Point(lblDisplayZoom.Left + zoomShift, yRow);
+                ptbRX2DisplayZoom.Location = new Point(ptbDisplayZoom.Left + zoomShift, yRow);
+                ptbRX2DisplayZoom.Size = tb_display_zoom_size_basis;
+                radRX2DisplayZoom05.Location = new Point(radDisplayZoom05.Left + zoomShift, yRow);
+                radRX2DisplayZoom1x.Location = new Point(radDisplayZoom1x.Left + zoomShift, yRow);
+                radRX2DisplayZoom2x.Location = new Point(radDisplayZoom2x.Left + zoomShift, yRow);
+                radRX2DisplayZoom4x.Location = new Point(radDisplayZoom4x.Left + zoomShift, yRow);
+                btnRX2DisplayZTB.Location = new Point(btnDisplayZTB.Left + zoomShift, yRow);
+            }
+        }
+
+        private bool m_bRX2ClusterSeeded = false;
+
+        // MW0LGE_22x whenever rx2 is enabled, start the rx2 sliders matched to rx1 so both panes begin
+        // identical and can then diverge freely (ke9ns .304 behaviour). Visibility itself is handled by
+        // RepositionControlsForCollapsedlDisplay / ExpandDisplay.
+        private void UpdateRX2DisplayClusterVisibility()
+        {
+            if (rx2_enabled && !m_bRX2ClusterSeeded)
+            {
+                ptbRX2DisplayZoom.Value = ptbDisplayZoom.Value;
+                ptbRX2DisplayPan.Value = ptbDisplayPan.Value;
+                ptbRX2DisplayZoom_Scroll(this, EventArgs.Empty);
+                ptbRX2DisplayPan_Scroll(this, EventArgs.Empty);
+            }
+            m_bRX2ClusterSeeded = rx2_enabled;
+        }
         private AGCMode m_RX1agcMode = AGCMode.FIRST;
         public AGCMode RX1AGCMode
         {
@@ -21721,10 +21928,11 @@ namespace Thetis
             {
                 if (this.InvokeRequired)
                 {
-                    this.Invoke(new MethodInvoker(() =>
+                    this.BeginInvoke(new MethodInvoker(() =>
                     {
                         run = this.chkPower.Checked;
                     }));
+                    System.Threading.Thread.Sleep(50);
                 }
                 else
                     run = this.chkPower.Checked;
@@ -21743,12 +21951,13 @@ namespace Thetis
                 {
                     if (this.InvokeRequired)
                     {
-                        this.Invoke(new MethodInvoker(() =>
+                        this.BeginInvoke(new MethodInvoker(() =>
                         {
                             checkOverloadsAndSync();
                             if (count == 0) checkSeqErrors();
-                            run = this.chkPower.Checked;
                         }));
+                        System.Threading.Thread.Sleep(100);
+                        run = this.chkPower.Checked;
                     }
                     else
                     {
@@ -27495,80 +27704,65 @@ namespace Thetis
 
                 if (multimeter_thread != null)
                 {
-                    if (!multimeter_thread.Join(/*500*/Math.Max(meter_delay, meter_dig_delay) + 50)) //MW0LGE change to meter delay
-                        multimeter_thread.Abort();
+                    multimeter_thread.Join(Math.Max(meter_delay, meter_dig_delay) + 50);
                 }
                 if (rx2_meter_thread != null)
                 {
-                    if (!rx2_meter_thread.Join(/*500*/Math.Max(meter_delay, meter_dig_delay) + 50)) //MW0LGE change to meter delay
-                        rx2_meter_thread.Abort();
+                    rx2_meter_thread.Join(Math.Max(meter_delay, meter_dig_delay) + 50);
                 }
                 //MW0LGE_[2.9.0.7]
                 if (multimeter2_thread_rx1 != null)
                 {
-                    if (!multimeter2_thread_rx1.Join(MeterManager.QuickestUpdateInterval(1, MOX)))
-                        multimeter2_thread_rx1.Abort();
+                    multimeter2_thread_rx1.Join(MeterManager.QuickestUpdateInterval(1, MOX));
                 }
                 if (multimeter2_thread_rx2 != null)
                 {
-                    if (!multimeter2_thread_rx2.Join(MeterManager.QuickestUpdateInterval(2, MOX)))
-                        multimeter2_thread_rx2.Abort();
+                    multimeter2_thread_rx2.Join(MeterManager.QuickestUpdateInterval(2, MOX));
                 }
                 //
                 if (rx2_sql_update_thread != null)
                 {
-                    if (!rx2_sql_update_thread.Join(500))
-                        rx2_sql_update_thread.Abort();
+                    rx2_sql_update_thread.Join(500);
                 }
                 if (rx2_sql_update_thread != null)
                 {
-                    if (!rx2_sql_update_thread.Join(500))
-                        rx2_sql_update_thread.Abort();
+                    rx2_sql_update_thread.Join(500);
                 }
                 if (sql_update_thread != null)
                 {
-                    if (!sql_update_thread.Join(500))
-                        sql_update_thread.Abort();
+                    sql_update_thread.Join(500);
                 }
                 if (noise_gate_update_thread != null)
                 {
-                    if (!noise_gate_update_thread.Join(500))
-                        noise_gate_update_thread.Abort();
+                    noise_gate_update_thread.Join(500);
                 }
                 if (vox_update_thread != null)
                 {
-                    if (!vox_update_thread.Join(500))
-                        vox_update_thread.Abort();
+                    vox_update_thread.Join(500);
                 }
                 if (poll_ptt_thread != null)
                 {
-                    if (!poll_ptt_thread.Join(500))
-                        poll_ptt_thread.Abort();
+                    poll_ptt_thread.Join(500);
                 }
                 if (poll_cw_thread != null)
                 {
-                    if (!poll_cw_thread.Join(500))
-                        poll_cw_thread.Abort();
+                    poll_cw_thread.Join(500);
                 }
                 if (poll_pa_pwr_thread != null)
                 {
-                    if (!poll_pa_pwr_thread.Join(500))
-                        poll_pa_pwr_thread.Abort();
+                    poll_pa_pwr_thread.Join(500);
                 }
                 if (_overload_thread != null)
                 {
-                    if (!_overload_thread.Join(500))
-                        _overload_thread.Abort();
+                    _overload_thread.Join(500);
                 }
                 if (poll_tx_inhibit_thead != null)
                 {
-                    if (!poll_tx_inhibit_thead.Join(500))
-                        poll_tx_inhibit_thead.Abort();
+                    poll_tx_inhibit_thead.Join(500);
                 }
                 if (display_volts_amps_thead != null)
                 {
-                    if (!display_volts_amps_thead.Join(650)) // there is a sleep 600 in there MW0LGE
-                        display_volts_amps_thead.Abort();
+                    display_volts_amps_thead.Join(650);
                 }
                 if (ATUTunetokenSource != null &&
                     ATUTunetokenSource.IsCancellationRequested == false)
@@ -28095,8 +28289,156 @@ namespace Thetis
         }
         private ShutdownForm _frmShutDownForm = null;
         private bool _is_shutting_down = false;
+        private bool _is_closing_now = false;
+        #region GPU usage indicator
+
+        private GpuUsageMonitor _gpuUsageMonitor;
+        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel_GPU;
+
+        private void initGpuUsageMeter()
+        {
+            // lives on the bottom status bar, right after the RX/TX antenna selectors
+            toolStripStatusLabel_GPU = new System.Windows.Forms.ToolStripStatusLabel();
+            toolStripStatusLabel_GPU.Name = "toolStripStatusLabel_GPU";
+            toolStripStatusLabel_GPU.AutoSize = false;
+            toolStripStatusLabel_GPU.Size = new System.Drawing.Size(68, 20);
+            toolStripStatusLabel_GPU.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            toolStripStatusLabel_GPU.ForeColor = SystemColors.ControlLightLight;
+            toolStripStatusLabel_GPU.Text = "";
+            toolStripStatusLabel_GPU.Visible = false; // shown once the monitor reports a value
+            int insertAt = statusStripMain.Items.IndexOf(toolStripStatusLabelTXAnt);
+            statusStripMain.Items.Insert(insertAt < 0 ? statusStripMain.Items.Count : insertAt + 1, toolStripStatusLabel_GPU);
+
+            _gpuUsageMonitor = new GpuUsageMonitor(gpuPercent =>
+            {
+                if (IsDisposed || toolStripStatusLabel_GPU == null || toolStripStatusLabel_GPU.IsDisposed)
+                    return;
+                toolStripStatusLabel_GPU.Visible = gpuPercent >= 0f; // -1 => counters unavailable
+                if (gpuPercent >= 0f)
+                    toolStripStatusLabel_GPU.Text = "GPU " + Math.Round(gpuPercent) + "%";
+            });
+            _gpuUsageMonitor.Start();
+        }
+
+        #endregion
+
+        #region update check
+        // MW0LGE_22x roadmap #3: quiet startup query against the GitHub releases API. If a newer
+        // release exists, a status-bar label appears that opens the release page when clicked.
+        // Silent on any failure (offline, rate limit) so it never bothers the user.
+
+        private const string c_UpdateCheckApiUrl = "https://api.github.com/repos/nubbyless/SDR-VST3/releases/latest";
+        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel_Update;
+
+        private void initUpdateCheck()
+        {
+            toolStripStatusLabel_Update = new System.Windows.Forms.ToolStripStatusLabel();
+            toolStripStatusLabel_Update.Name = "toolStripStatusLabel_Update";
+            toolStripStatusLabel_Update.AutoSize = true;
+            toolStripStatusLabel_Update.Font = new System.Drawing.Font("Segoe UI", 11F, System.Drawing.FontStyle.Bold); // well visible
+            toolStripStatusLabel_Update.Margin = new System.Windows.Forms.Padding(18, 0, 0, 0); // a few spaces right of the GPU meter
+            toolStripStatusLabel_Update.ForeColor = System.Drawing.Color.LimeGreen;
+            toolStripStatusLabel_Update.Text = "";
+            toolStripStatusLabel_Update.Visible = false;
+            toolStripStatusLabel_Update.Click += (s, e) =>
+            {
+                try
+                {
+                    string url = toolStripStatusLabel_Update.Tag as string;
+                    if (!string.IsNullOrEmpty(url))
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch { }
+            };
+            // seat it a few spaces right of the GPU meter
+            int insertAt = statusStripMain.Items.IndexOf(toolStripStatusLabel_GPU);
+            statusStripMain.Items.Insert(insertAt < 0 ? statusStripMain.Items.Count : insertAt + 1, toolStripStatusLabel_Update);
+
+            checkForUpdateAsync();
+        }
+
+        private async void checkForUpdateAsync()
+        {
+            try
+            {
+                await Task.Delay(5000).ConfigureAwait(true); // let startup + network settle before querying
+
+                string tag = null;
+                string htmlUrl = null;
+                using (System.Net.Http.HttpClient hc = new System.Net.Http.HttpClient())
+                {
+                    hc.Timeout = TimeSpan.FromSeconds(10);
+                    hc.DefaultRequestHeaders.UserAgent.ParseAdd("SDR-VST3-Console"); // GitHub API rejects requests without a UA
+                    hc.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+                    string json = await hc.GetStringAsync(c_UpdateCheckApiUrl).ConfigureAwait(true);
+
+                    Newtonsoft.Json.Linq.JObject o = Newtonsoft.Json.Linq.JObject.Parse(json);
+                    tag = (string)o["tag_name"];
+                    htmlUrl = (string)o["html_url"];
+                }
+
+                if (IsDisposed || Disposing || string.IsNullOrEmpty(tag)) return;
+
+                Version latest = ParseLooseVersion(tag);
+                Version current = ParseLooseVersion(Application.ProductVersion);
+                if (latest != null && current != null && !string.IsNullOrEmpty(htmlUrl))
+                {
+                    if (latest > current)
+                    {
+                        toolStripStatusLabel_Update.Text = "Update available : " + tag;
+                        toolStripStatusLabel_Update.ForeColor = System.Drawing.Color.Red;
+                    }
+                    else
+                    {
+                        toolStripStatusLabel_Update.Text = "Up to date : " + tag;
+                        toolStripStatusLabel_Update.ForeColor = System.Drawing.Color.LimeGreen;
+                    }
+                    toolStripStatusLabel_Update.ToolTipText = "Click to open " + htmlUrl;
+                    toolStripStatusLabel_Update.Tag = htmlUrl;
+                    toolStripStatusLabel_Update.Visible = true;
+                }
+            }
+            catch
+            {
+                // offline / rate limited / shutdown race - stay silent by design
+            }
+        }
+
+        /// <summary>Parses a loose version like "v4.6", "4.6.0.0" or "v4.6.0.1-beta2"; returns null when no digits found.</summary>
+        private static Version ParseLooseVersion(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return null;
+
+            int start = 0;
+            while (start < s.Length && !char.IsDigit(s[start])) start++;
+            if (start >= s.Length) return null;
+
+            int end = start;
+            while (end < s.Length && (char.IsDigit(s[end]) || s[end] == '.')) end++;
+
+            string[] parts = s.Substring(start, end - start).Split('.');
+            int a = 0, b = 0, c = 0, d = 0;
+            try
+            {
+                if (parts.Length > 0) a = int.Parse(parts[0]);
+                if (parts.Length > 1) b = int.Parse(parts[1]);
+                if (parts.Length > 2) c = int.Parse(parts[2]);
+                if (parts.Length > 3) d = int.Parse(parts[3]);
+            }
+            catch { return null; }
+            return new Version(a, b, c, d);
+        }
+
+        #endregion
+
         private void Console_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (_is_closing_now)
+            {
+                e.Cancel = true;
+                return;
+            }
+
             if (Display.RunningFPSProfile)
             {
                 MessageBox.Show("Stop the FPS profile test first !",
@@ -28110,12 +28452,19 @@ namespace Thetis
 
             if (!_is_shutting_down)
             {
-                shutdownLogStringToPath("Inside Console_Closing()");
+            shutdownLogStringToPath("Inside Console_Closing()");
 
-                //show the shutdown form and then restart the close process via BeginInvoke
-                //removes the doevents issue and allows the shutdown form to show properly
-                e.Cancel = true;
-                _is_shutting_down = true;
+            // stop GPU% sampling before anything else tears down the UI
+            if (_gpuUsageMonitor != null)
+            {
+                _gpuUsageMonitor.Dispose();
+                _gpuUsageMonitor = null;
+            }
+
+            //show the shutdown form and then restart the close process via BeginInvoke
+            //removes the doevents issue and allows the shutdown form to show properly
+            e.Cancel = true;
+            _is_shutting_down = true;
 
                 _frmShutDownForm = new ShutdownForm();
                 _frmShutDownForm.StartPosition = FormStartPosition.Manual;
@@ -28136,6 +28485,7 @@ namespace Thetis
                 return;
             }
 
+            _is_closing_now = true;
             shutdownLogStringToPath("Before ThetisBotDiscord.Disconnect()");
             ThetisBotDiscord.Shutdown();
 
@@ -28150,6 +28500,8 @@ namespace Thetis
 
             shutdownLogStringToPath("Before MessageFloodControl.Shutdown()");
             MessageFloodControl.Shutdown();
+
+            ThetisSkinService.Shutdown();
 
             if (m_tcpTCIServer != null)
             {
@@ -28188,7 +28540,7 @@ namespace Thetis
             if (chkPower.Checked == true)  // If we're quitting without first clicking off the "Power" button            
                 chkPower.Checked = false;
 
-            Thread.Sleep(200); //[2.10.3.12]MW0LGE give some time for power down, increased to 200ms as psform loops were not detecting power off fast enough
+            Thread.Sleep(100); //[2.10.3.12]MW0LGE give some time for power down
 
             if (psform != null)
             {
@@ -28238,8 +28590,9 @@ namespace Thetis
             cmaster.Hidewb(0);
 
             shutdownLogStringToPath("Before Display.ShutdownDX2D()");
+            _pause_DisplayThread = true; // prevent RenderDX2D from being called, releases _objDX2Lock
             m_bDisplayLoopRunning = false; // will cause the display loop to exit
-            if (draw_display_thread != null && draw_display_thread.IsAlive) draw_display_thread.Join(1100); // added 1100, slightly longer than 1fps MW0LGE [2.9.0.7]
+            if (draw_display_thread != null && draw_display_thread.IsAlive) draw_display_thread.Join(500);
             Display.ShutdownDX2D(); // MW0LGE
 
             shutdownLogStringToPath("Before removeDelegates()");
@@ -28260,7 +28613,7 @@ namespace Thetis
 
                 SetupForm.IgnoreButtonState = true; // prevents threads from updating controls in the blocked thead caused by WaitForSaveLoad
                 Debug.Write("waiting existing save/load...");
-                SetupForm.WaitForSaveLoad(10000); // MW0LGE [2.9.0.8] wait 10 seconds, should be enough?
+                SetupForm.WaitForSaveLoad(5000); // reduced from 10000 for faster shutdown
                 if (SetupForm.StillWaitingForSaveLoad)
                 {
                     // save didnt complete
@@ -28350,10 +28703,14 @@ namespace Thetis
                 using (StreamWriter w = File.AppendText(AppDataPath + "\\shutdown_log.txt"))
                 {
                     //using block will auto close stream
-                    w.WriteLine(entry);
+                    w.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {entry}");
+                    w.Flush();
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Shutdown log write failed: {ex.Message} path={AppDataPath}");
+            }
         }
         private void removeShutdownLog()
         {
@@ -29965,6 +30322,39 @@ namespace Thetis
             {
                 AVGChangedHandlers?.Invoke(1, old_on, specRX.GetSpecRX(0).AverageOn);
             }
+        }
+
+        private CheckBoxTS btnDisplay3DPan;
+
+        private void chkDisplay3DPan_CheckedChanged(object sender, EventArgs e)
+        {
+            Display.Pan3DEnabled = btnDisplay3DPan.Checked;
+            btnDisplay3DPan.BackColor = btnDisplay3DPan.Checked ? button_selected_color : SystemColors.Control;
+
+            // keep the setup checkbox in sync with the toolbar button (guarded so we
+            // never lazily create the Setup form just for this; its CheckedChanged
+            // re-pushes the same engine value and re-syncs this button - idempotent)
+            if (!IsSetupFormNull) SetupForm.Display3DPanadapter = btnDisplay3DPan.Checked;
+        }
+
+        /// <summary>
+        /// Keeps the display-toolbar '3D Pan' button in sync when the state is
+        /// changed elsewhere (setup checkbox at boot / by the user).
+        /// </summary>
+        public void SyncDisplay3DPanButton(bool state)
+        {
+            if (btnDisplay3DPan == null) return;
+            if (btnDisplay3DPan.Checked != state) btnDisplay3DPan.Checked = state; // fires CheckedChanged -> engine + colour
+            else btnDisplay3DPan.BackColor = state ? button_selected_color : SystemColors.Control;
+        }
+
+        private void btnDisplay3DPan_MouseUp(object sender, MouseEventArgs e)
+        {
+            // Thetis convention: right-click a button to jump to its settings popup.
+            // NOTE: WinForms never raises MouseClick/Click for the right button,
+            // so this must hang off MouseUp.
+            if (IsSetupFormNull || e.Button != MouseButtons.Right) return;
+            SetupForm.Show3DPanadapterSettings();
         }
 
         private void chkDisplayPeak_CheckedChanged(object sender, System.EventArgs e)
@@ -33593,14 +33983,22 @@ namespace Thetis
         private void ptbDisplayPan_Scroll(object sender, System.EventArgs e)
         {
             specRX.GetSpecRX(0).PanSlider = (double)ptbDisplayPan.Value / 1000.0;
-            specRX.GetSpecRX(1).PanSlider = (double)ptbDisplayPan.Value / 1000.0;
             specRX.GetSpecRX(cmaster.inid(1, 0)).PanSlider = (double)ptbDisplayPan.Value / 1000.0;
             CalcDisplayFreq();
-            CalcRX2DisplayFreq();
             CalcTXDisplayFreq();
             if (sender.GetType() == typeof(PrettyTrackBar))
             {
                 ptbDisplayPan.Focus();
+            }
+        }
+
+        private void ptbRX2DisplayPan_Scroll(object sender, System.EventArgs e)
+        {
+            specRX.GetSpecRX(1).PanSlider = (double)ptbRX2DisplayPan.Value / 1000.0;
+            CalcRX2DisplayFreq();
+            if (sender.GetType() == typeof(PrettyTrackBar))
+            {
+                ptbRX2DisplayPan.Focus();
             }
         }
 
@@ -33661,7 +34059,8 @@ namespace Thetis
             if ((int)(spanMHz * 1e6) > spec.SampleRate)
             {
                 // can't fit, so max zoom out
-                Zoom = ptbDisplayZoom.Minimum;
+                if (rx == 2) Zoom2 = ptbRX2DisplayZoom.Minimum;
+                else Zoom = ptbDisplayZoom.Minimum;
             }
             else
             {
@@ -33679,9 +34078,16 @@ namespace Thetis
                 zoom /= 9.0;
 
                 m_bIgnoreZoomCentre = true; //[2.10.3.5]MW0LGE used in ptbDisplayZoom_Scroll to ignore the shift key which might be held for RX2
-                PanCentre();
 
-                Zoom = (int)((zoom * 230.0) + 10.0);
+                if (rx == 2)
+                    PanCentreRX2();
+                else
+                    PanCentre();
+
+                if (rx == 2)
+                    Zoom2 = (int)((zoom * 230.0) + 10.0);
+                else
+                    Zoom = (int)((zoom * 230.0) + 10.0);
 
                 m_bIgnoreZoomCentre = false;
 
@@ -33722,7 +34128,6 @@ namespace Thetis
             double dOldZoomFactor = lastZoomFactor;//MW0LGE21d
 
             specRX.GetSpecRX(0).ZoomSlider = ((double)ptbDisplayZoom.Value - 10.0) / 230.0;
-            specRX.GetSpecRX(1).ZoomSlider = ((double)ptbDisplayZoom.Value - 10.0) / 230.0;
             specRX.GetSpecRX(cmaster.inid(1, 0)).ZoomSlider = ((double)ptbDisplayZoom.Value - 10.0) / 230.0;
             double zoom_factor = 1.0 / ((ptbDisplayZoom.Maximum + ptbDisplayZoom.Minimum - ptbDisplayZoom.Value) * 0.01);
 
@@ -33773,11 +34178,6 @@ namespace Thetis
                     CentreFrequency = VFOAFreq;
                     txtVFOAFreq_LostFocus(this, EventArgs.Empty);
                 }
-                if (rx2_enabled && (ClickTuneRX2Display && zoomingIn) && bCentre)  //MW0LGE - we should do rx2 as well !
-                {
-                    CentreRX2Frequency = VFOBFreq;
-                    txtVFOBFreq_LostFocus(this, EventArgs.Empty);
-                }
             }
 
             lastZoomFactor = zoom_factor;
@@ -33789,7 +34189,74 @@ namespace Thetis
 
             if (dOldZoomFactor != zoom_factor) ZoomFactorChangedHandlers?.Invoke(dOldZoomFactor, zoom_factor, ptbDisplayZoom.Value); //MW0LGE_21d
 
-            SetDisplayZoomGeneralSettings(0, dzb);
+            SetDisplayZoomGeneralSettings(1, dzb);
+        }
+
+        private double lastZoomFactorRX2 = 1.0;
+
+        private void ptbRX2DisplayZoom_Scroll(object sender, System.EventArgs e)
+        {
+            double dOldZoomFactor = lastZoomFactorRX2;
+
+            specRX.GetSpecRX(1).ZoomSlider = ((double)ptbRX2DisplayZoom.Value - 10.0) / 230.0;
+            double zoom_factor = 1.0 / ((ptbRX2DisplayZoom.Maximum + ptbRX2DisplayZoom.Minimum - ptbRX2DisplayZoom.Value) * 0.01);
+
+            DisplayZoomButton dzb;
+
+            if (zoom_factor == 0.5)
+            {
+                radRX2DisplayZoom05.Checked = true;
+                dzb = DisplayZoomButton.B05;
+            }
+            else if (zoom_factor == 1.0)
+            {
+                radRX2DisplayZoom1x.Checked = true;
+                dzb = DisplayZoomButton.B1;
+            }
+            else if (zoom_factor == 2.0)
+            {
+                radRX2DisplayZoom2x.Checked = true;
+                dzb = DisplayZoomButton.B2;
+            }
+            else if (zoom_factor == 4.0)
+            {
+                radRX2DisplayZoom4x.Checked = true;
+                dzb = DisplayZoomButton.B4;
+            }
+            else
+            {
+                radRX2DisplayZoom05.Checked = false;
+                radRX2DisplayZoom1x.Checked = false;
+                radRX2DisplayZoom2x.Checked = false;
+                radRX2DisplayZoom4x.Checked = false;
+                dzb = DisplayZoomButton.NONE;
+            }
+
+            CalcRX2DisplayFreq();
+
+            if (initializing) lastZoomFactorRX2 = zoom_factor;
+            bool zoomingIn = (zoom_factor > lastZoomFactorRX2);
+
+            if (!m_bIgnoreZoomCentre && rx2_enabled) //[2.10.3.5]MW0LGE fixes #345
+            {
+                // MW0LGE shift modifier
+                bool bCentre = !m_bZoomShiftModifier || (m_bZoomShiftModifier && ((!Common.ShiftKeyDown && !m_bZoomShiftModifierReverse) || (Common.ShiftKeyDown && m_bZoomShiftModifierReverse)));
+
+                if ((ClickTuneRX2Display && zoomingIn) && bCentre)  // force centering display when zooming in with CTUN on, to keep the vfo within the display
+                {
+                    CentreRX2Frequency = VFOBFreq;
+                    txtVFOBFreq_LostFocus(this, EventArgs.Empty);
+                }
+            }
+
+            lastZoomFactorRX2 = zoom_factor;
+
+            if (sender.GetType() == typeof(PrettyTrackBar))
+            {
+                ptbRX2DisplayZoom.Focus();
+            }
+
+            SetDisplayZoomGeneralSettings(2, dzb);
         }
 
         private void radDisplayZoom05_CheckedChanged(object sender, System.EventArgs e)
@@ -33841,6 +34308,49 @@ namespace Thetis
         {
             PanCentre();
             Zoom = ptbDisplayZoom.Maximum + ptbDisplayZoom.Minimum - (int)(100.0 / 4.0);
+        }
+
+        // MW0LGE_22x RX2 zoom presets - each pane gets its own cluster
+        private void radRX2DisplayZoom05_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (radRX2DisplayZoom05.Checked)
+            {
+                DisplayZoomPreset(0.5, 1);
+            }
+        }
+        private void radRX2DisplayZoom1x_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (radRX2DisplayZoom1x.Checked)
+            {
+                DisplayZoomPreset(1.0, 1);
+            }
+        }
+        private void radRX2DisplayZoom2x_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (radRX2DisplayZoom2x.Checked)
+            {
+                DisplayZoomPreset(2.0, 1);
+            }
+        }
+        private void radRX2DisplayZoom4x_CheckedChanged(object sender, System.EventArgs e)
+        {
+            if (radRX2DisplayZoom4x.Checked)
+            {
+                DisplayZoomPreset(4.0, 1);
+            }
+        }
+        private void DisplayZoomPreset(double factor, int rx)
+        {
+            if (rx == 1)
+                PanCentreRX2();
+            else
+                PanCentre();
+
+            PrettyTrackBar tb = rx == 1 ? ptbRX2DisplayZoom : ptbDisplayZoom;
+            if (rx == 1)
+                Zoom2 = tb.Maximum + tb.Minimum - (int)(100.0 / factor);
+            else
+                Zoom = tb.Maximum + tb.Minimum - (int)(100.0 / factor);
         }
         #endregion
 
@@ -37065,6 +37575,8 @@ namespace Thetis
                 lblRX2ModeBigLabel.Hide();
                 panelVFOLabels.Hide();
                 panelAndromedaMisc.Hide();
+
+                PositionRX2DisplayClusterLegacy(); // MW0LGE_22x keep rx2 cluster fitted on resize (expanded view)
             }
 
             setPAProfileLabelPos();  //[2.10.1.0] MW0LGE
@@ -37540,6 +38052,11 @@ namespace Thetis
             setSmallRX2ModeFilterLabels();
 
             setupZTBButton();
+
+            // MW0LGE_22x rx2 display cluster: seed sliders from rx1 on enable, then relayout
+            UpdateRX2DisplayClusterVisibility();
+            if (collapsedDisplay) RepositionControlsForCollapsedlDisplay();
+            else PositionRX2DisplayClusterLegacy();
 
             // need to update anything on the info bar buttons that is relying on rx2
             SetupInfoBarButton(ucInfoBar.ActionTypes.ActivePeaks, Display.SpectralPeakHoldRX1 || (RX2Enabled && Display.SpectralPeakHoldRX2));
@@ -41382,10 +41899,14 @@ namespace Thetis
             ptbDisplayZoom.Size = tb_display_zoom_size_basis;
             lblDisplayZoom.Location = new Point(ptbDisplayZoom.Location.X - lbl_display_zoom_size_basis.Width, lbl_display_zoom_basis.Y + v_delta);
 
-            lblDisplayPan.Location = new Point(lbl_displaypan_basis.X, lbl_displaypan_basis.Y + v_delta);
+            lblDisplayPan.Location = new Point(ptbDisplayPan.Location.X - lbl_displaypan_size_basis.Width, lbl_displaypan_basis.Y + v_delta); // MW0LGE_22x right-align to the slider like the zoom label, so longer text can't run under it
             ptbDisplayPan.Location = new Point(tb_displaypan_basis.X, tb_displaypan_basis.Y + v_delta);
             ptbDisplayPan.Size = tb_displaypan_size_basis;
             btnDisplayPanCenter.Location = new Point(ptbDisplayPan.Location.X + ptbDisplayPan.Width + 4, ptbDisplayPan.Location.Y);
+
+            // MW0LGE_22x legacy expanded layout: place the rx2 cluster into the dead space between the
+            // pan/centre group and the rx1 zoom cluster. Degrades: drop rx2 buttons first, then hide all.
+            PositionRX2DisplayClusterLegacy();
 
             // :NOTE: Force update on pan control
             Pan = ptbDisplayPan.Value;
@@ -42317,27 +42838,175 @@ namespace Thetis
             panelDisplay.Size = new Size(this.ClientSize.Width, height);
 
             top = infoBar.Location.Y + infoBar.Size.Height + 5;
-            int dynamicWidth = pnlDisplay.Width - (lblDisplayPan.Width + btnDisplayPanCenter.Width + 5 + comboDisplayMode.Width + 5 + lblDisplayZoom.Width + (btnDisplayZTB.Width * 5)); // *5 buttons
 
-            lblDisplayPan.Location = new Point(pnlDisplay.Location.X, top);
-            ptbDisplayPan.Location = new Point(lblDisplayPan.Location.X + lblDisplayPan.Width, top);
-            ptbDisplayPan.Size = new Size(dynamicWidth / 2, tb_display_pan_size_basis.Height);
-            btnDisplayPanCenter.Location = new Point(ptbDisplayPan.Location.X + ptbDisplayPan.Width, top);
+            // MW0LGE_22x dual display control rows/clusters: RX1 cluster at the right, RX2 cluster to its
+            // left when rx2 is enabled. Sliders flex; if the window is too narrow we drop the RX2 preset
+            // buttons first (tier 2) and then the whole RX2 group (tier 3).
+            {
+                int left = pnlDisplay.Location.X;
+                int right = left + pnlDisplay.Width;
+                int availW = right - left;
+                const int GAP = 5;
+                const int CLUSTER_GAP = 10;
+                const int SLIDER_ZTB_GAP = 4;
+                const int MIN_SLIDER_W = 60;
+
+                bool rx2vis = rx2_enabled;
+                bool rx2btns = rx2vis;
+
+                int comboW = Math.Max(comboDisplayMode.Width, comboRX2DisplayMode.Width);
+                int btns1W = btnDisplayZTB.Width + radDisplayZoom05.Width + radDisplayZoom1x.Width + radDisplayZoom2x.Width + radDisplayZoom4x.Width + 4; // four 1px gaps
+                int btns2W = btnRX2DisplayZTB.Width + radRX2DisplayZoom05.Width + radRX2DisplayZoom1x.Width + radRX2DisplayZoom2x.Width + radRX2DisplayZoom4x.Width + 4;
+                int ctr2W = rx2vis ? btnRX2DisplayPanCenter.Width : 0;
+
+                bool bTier2 = false; // drop RX2 preset buttons
+                bool bTier3 = false; // drop whole RX2 cluster
+
+                // fixed widths + gaps for the full (tier 1) rx2 layout
+                int fixedA = lblDisplayPan.Width + lblRX2DisplayPan.Width + btnDisplayPanCenter.Width + ctr2W + comboW
+                           + lblDisplayZoom.Width + lblRX2DisplayZoom.Width
+                           + btns1W + btns2W;
+                int gapsA = 5 * GAP + 2 * SLIDER_ZTB_GAP + CLUSTER_GAP;
+
+                if (availW < fixedA + gapsA + 4 * MIN_SLIDER_W)
+                    bTier2 = true;
+
+                if (bTier2)
+                {
+                    // keep rx2 sliders, lose rx2 buttons
+                    int fixedB = fixedA - btns2W;
+                    int gapsB = 5 * GAP + SLIDER_ZTB_GAP + CLUSTER_GAP;
+
+                    if (availW < fixedB + gapsB + 4 * MIN_SLIDER_W)
+                        bTier3 = true;
+                }
+
+                if (bTier3)
+                    rx2vis = false;
+
+                rx2btns = rx2vis && !bTier2;
+
+                radRX2DisplayZoom05.Visible = rx2btns;
+                radRX2DisplayZoom1x.Visible = rx2btns;
+                radRX2DisplayZoom2x.Visible = rx2btns;
+                radRX2DisplayZoom4x.Visible = rx2btns;
+                btnRX2DisplayZTB.Visible = rx2btns;
+
+                int btns2Eff = rx2btns ? btns2W : 0;
+                int l2Eff = rx2vis ? lblRX2DisplayZoom.Width : 0;
+
+                // total stretch shared by the sliders (2 pan + 1or2 zoom)
+                int gapsEff = rx2vis ? (3 * GAP + 2 * SLIDER_ZTB_GAP + CLUSTER_GAP) : (3 * GAP + SLIDER_ZTB_GAP); // MW0LGE_22x pan trios own their centre buttons now
+                int fixedEff = lblDisplayPan.Width + btnDisplayPanCenter.Width + ctr2W + comboW + lblDisplayZoom.Width + btns1W
+                             + (rx2vis ? lblRX2DisplayPan.Width + l2Eff + btns2Eff : 0);
+                int nStretch = rx2vis ? 4 : 2;
+                int stretch = Math.Max(availW - gapsEff - fixedEff, nStretch * MIN_SLIDER_W);
+                int each = stretch / nStretch;
+
+                int wPan1 = each;
+                int wPan2 = rx2vis ? each : 0;
+                int wZoom1 = each;
+                int wZoom2 = rx2vis ? each : 0;
+
+                // give the rounding leftover to the RX1 zoom slider
+                wZoom1 += stretch - each * nStretch;
+
+                // ---- place left to right ---------------------------------------
+                int cur = left;
+                lblDisplayPan.Location = new Point(cur, top);
+                cur += lblDisplayPan.Width;
+                ptbDisplayPan.Location = new Point(cur, top);
+                ptbDisplayPan.Size = new Size(wPan1, tb_display_pan_size_basis.Height);
+                cur += wPan1;
+                btnDisplayPanCenter.Location = new Point(cur, top); // MW0LGE_22x centre button belongs to ITS OWN pan slider
+                cur += btnDisplayPanCenter.Width;
+
+                if (rx2vis)
+                {
+                    cur += GAP;
+                    lblRX2DisplayPan.Location = new Point(cur, top);
+                    cur += lblRX2DisplayPan.Width;
+                    ptbRX2DisplayPan.Location = new Point(cur, top);
+                    ptbRX2DisplayPan.Size = new Size(wPan2, tb_display_pan_size_basis.Height);
+                    cur += wPan2;
+                    btnRX2DisplayPanCenter.Location = new Point(cur, top);
+                    cur += ctr2W + GAP;
+                    lblRX2DisplayPan.Visible = true; // MW0LGE_22x re-show (may have been hidden by tier fallback or legacy layout)
+                    ptbRX2DisplayPan.Visible = true;
+                    btnRX2DisplayPanCenter.Visible = true;
+                }
+                else
+                {
+                    lblRX2DisplayPan.Visible = false;
+                    ptbRX2DisplayPan.Visible = false;
+                    btnRX2DisplayPanCenter.Visible = false;
+                }
+
+                comboDisplayMode.Parent = panelDisplay;
+                comboRX2DisplayMode.Parent = panelDisplay;
+                comboDisplayMode.Location = new Point(cur, top);
+                comboRX2DisplayMode.Location = new Point(cur, top);
+                cur += comboW + GAP;
+
+                // ---- RX2 zoom cluster (sits left of the RX1 one) -----------------
+                if (rx2vis)
+                {
+                    lblRX2DisplayZoom.Location = new Point(cur, top);
+                    cur += lblRX2DisplayZoom.Width;
+                    ptbRX2DisplayZoom.Location = new Point(cur, top);
+                    ptbRX2DisplayZoom.Size = new Size(wZoom2, tb_display_zoom_size_basis.Height);
+                    cur += wZoom2;
+                    lblRX2DisplayZoom.Visible = true; // MW0LGE_22x re-show (may have been hidden by tier fallback or legacy layout)
+                    ptbRX2DisplayZoom.Visible = true;
+
+                    if (rx2btns)
+                    {
+                        cur += SLIDER_ZTB_GAP;
+                        btnRX2DisplayZTB.Location = new Point(cur, top);
+                        cur += btnRX2DisplayZTB.Width + 1;
+                        radRX2DisplayZoom05.Location = new Point(cur, top);
+                        cur += radRX2DisplayZoom05.Width + 1;
+                        radRX2DisplayZoom1x.Location = new Point(cur, top);
+                        cur += radRX2DisplayZoom1x.Width + 1;
+                        radRX2DisplayZoom2x.Location = new Point(cur, top);
+                        cur += radRX2DisplayZoom2x.Width + 1;
+                        radRX2DisplayZoom4x.Location = new Point(cur, top);
+                        cur += radRX2DisplayZoom4x.Width + 1;
+                    }
+
+                    cur += CLUSTER_GAP;
+                }
+                else
+                {
+                    lblRX2DisplayZoom.Visible = false;
+                    ptbRX2DisplayZoom.Visible = false;
+                }
+
+                // ---- RX1 zoom cluster fills out to the right edge ---------------
+                lblDisplayZoom.Location = new Point(cur, top);
+                cur += lblDisplayZoom.Width;
+                ptbDisplayZoom.Location = new Point(cur, top);
+                ptbDisplayZoom.Size = new Size(right - btns1W - cur, tb_display_zoom_size_basis.Height);
+                cur += ptbDisplayZoom.Width + SLIDER_ZTB_GAP;
+
+                btnDisplayZTB.Location = new Point(cur, top);
+                cur += btnDisplayZTB.Width + 1;
+                radDisplayZoom05.Location = new Point(cur, top);
+                cur += radDisplayZoom05.Width + 1;
+                radDisplayZoom1x.Location = new Point(cur, top);
+                cur += radDisplayZoom1x.Width + 1;
+                radDisplayZoom2x.Location = new Point(cur, top);
+                cur += radDisplayZoom2x.Width + 1;
+                radDisplayZoom4x.Location = new Point(cur, top);
+            }
 
             // :NOTE: Force update on pan control
             Pan = ptbDisplayPan.Value;
-
-            comboDisplayMode.Parent = panelDisplay;
-            comboDisplayMode.Location = new Point(btnDisplayPanCenter.Location.X + btnDisplayPanCenter.Width + 5, top);
-            comboRX2DisplayMode.Parent = panelDisplay;
-            comboRX2DisplayMode.Location = new Point(btnDisplayPanCenter.Location.X + btnDisplayPanCenter.Width + 5, top);
-
-            lblDisplayZoom.Location = new Point(comboDisplayMode.Location.X + comboDisplayMode.Width + 5, top);
-            ptbDisplayZoom.Location = new Point(lblDisplayZoom.Location.X + lblDisplayZoom.Width, top);
-            ptbDisplayZoom.Size = new Size(btnDisplayZTB.Location.X - (lblDisplayZoom.Location.X + lblDisplayZoom.Size.Width), tb_display_zoom_size_basis.Height);
+            if (rx2_enabled) Pan2 = ptbRX2DisplayPan.Value;
 
             // :NOTE: Force update on zoom control
             Zoom = ptbDisplayZoom.Value;
+            if (rx2_enabled) Zoom2 = ptbRX2DisplayZoom.Value;
 
             top = panelDisplay.Location.Y + panelDisplay.Height;
             // G8NJJ to add new Andromeda button bar in place of band, mode controls
@@ -44792,6 +45461,12 @@ namespace Thetis
 
             updateResolutionStatusBarText(); //MW0LGE_21b need to call this here so that drop shadow sizes can be obtained
 
+            // GPU% indicator - small label under the Power/RX2 button strip
+            initGpuUsageMeter();
+
+            // update check - quiet GitHub releases query, status-bar label only when a newer release exists
+            initUpdateCheck();
+
             // set the multifunction setting to the status bar
             DataTable multitable = AndromedaSet.Tables["Multifunction Settings"];
             toolStripStatusLabelAndromedaMulti.Text = multitable.Rows[CurrentMultifunctionOption]["Multi Description"].ToString();
@@ -46319,22 +46994,33 @@ namespace Thetis
         public void ZoomToBand(bool bStore)
         {
             int rx; // note, 0 indexed rx, rx1 = 0, rx2 = 1
+
+            if (RX2Enabled && Common.ShiftKeyDown)
+                rx = 1; //rx2
+            else
+                rx = 0; //rx1
+
+            ZoomToBandChannel(rx, bStore);
+        }
+
+        // MW0LGE_22x rx is 0 indexed (0 = rx1, 1 = rx2) - each display cluster acts on its own rx
+        public void ZoomToBandChannel(int rx, bool bStore)
+        {
             Band band;
             double centre;
             DSPMode dsp;
             bool bCTUN;
 
-            if (RX2Enabled && Common.ShiftKeyDown)
+            if (rx == 1) //rx2
             {
-                rx = 1; //rx2
                 band = RX2Band;
-                centre = CentreRX2Frequency;                
+                centre = CentreRX2Frequency;
             }
             else
             {
                 rx = 0; //rx1
                 band = RX1Band;
-                centre = CentreFrequency;                                
+                centre = CentreFrequency;
             }
 
             // store recall ZTB
@@ -46342,13 +47028,14 @@ namespace Thetis
             {
                 // store
                 ztb_data_by_band[rx][(int)band].CentreFrequency = centre;
-                ztb_data_by_band[rx][(int)band].ZoomSliderPosition = ptbDisplayZoom.Value;
-                ztb_data_by_band[rx][(int)band].PanSliderPosition = ptbDisplayPan.Value;
+                ztb_data_by_band[rx][(int)band].ZoomSliderPosition = rx == 1 ? ptbRX2DisplayZoom.Value : ptbDisplayZoom.Value;
+                ztb_data_by_band[rx][(int)band].PanSliderPosition = rx == 1 ? ptbRX2DisplayPan.Value : ptbDisplayPan.Value;
                 ztb_data_by_band[rx][(int)band].Initalised = true;
                 return;
             }
 
-            if (rx == 1) { //rx2
+            if (rx == 1)
+            { //rx2
                 if (!chkX2TR.Checked) chkX2TR.Checked = true;
                 dsp = RX2DSPMode;
                 bCTUN = chkX2TR.Checked;
@@ -46375,8 +47062,16 @@ namespace Thetis
 
                     m_bIgnoreLimitsForZTB = true;
 
-                    if (Pan != ztb.PanSliderPosition) Pan = ztb.PanSliderPosition;
-                    if (Zoom != ztb.ZoomSliderPosition) Zoom = ztb.ZoomSliderPosition;
+                    if (rx == 0)
+                    {
+                        if (Pan != ztb.PanSliderPosition) Pan = ztb.PanSliderPosition;
+                        if (Zoom != ztb.ZoomSliderPosition) Zoom = ztb.ZoomSliderPosition;
+                    }
+                    else
+                    {
+                        if (Pan2 != ztb.PanSliderPosition) Pan2 = ztb.PanSliderPosition;
+                        if (Zoom2 != ztb.ZoomSliderPosition) Zoom2 = ztb.ZoomSliderPosition;
+                    }
 
                     if (rx == 0)
                     {
@@ -46423,11 +47118,29 @@ namespace Thetis
                 toolTip1.SetToolTip(btnDisplayZTB, "Recall/Store mode. Left click to recall, right to store Zoom/Pan/Center per band, per RX. Shift for RX2.");
             else
                 toolTip1.SetToolTip(btnDisplayZTB, "Zoom to the band using Region band edges. Shift for RX2.");
+
+            if (m_bZTBisRecallStore)
+                toolTip1.SetToolTip(btnRX2DisplayZTB, "RX2 Recall/Store mode. Left click to recall, right to store Zoom/Pan/Center per band.");
+            else
+                toolTip1.SetToolTip(btnRX2DisplayZTB, "RX2: Zoom to the band using Region band edges.");
         }
 
         private void btnDisplayZTB_MouseUp(object sender, MouseEventArgs e)
         {
             if(e.Button == MouseButtons.Right) btnDisplayZTB_Click(sender, e);
+        }
+
+        // MW0LGE_22x RX2 ZTB - acts on the rx2 channel directly, no shift modifier needed
+        private void btnRX2DisplayZTB_Click(object sender, EventArgs e)
+        {
+            MouseEventArgs me = e as MouseEventArgs;
+            bool is_right = me != null && me.Button == MouseButtons.Right;
+            ZoomToBandChannel(1, is_right);
+        }
+
+        private void btnRX2DisplayZTB_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right) btnRX2DisplayZTB_Click(sender, e);
         }
 
         private void Console_Activated(object sender, EventArgs e)

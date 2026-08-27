@@ -100,8 +100,18 @@ namespace Thetis
         private GroupBoxTS _grpVacRxVst;
         private CheckBoxTS chkVACApplyRxVst;
         private CheckBoxTS chkVAC2ApplyRxVst;
-        private CheckBoxTS chkVACBypassTxVst;
-        private CheckBoxTS chkVAC2BypassTxVst;
+        private CheckBoxTS chkVACApplyTxVst;
+        private CheckBoxTS chkVAC2ApplyTxVst;
+        private CheckBoxTS chkTCIApplyRxVst;
+        private CheckBoxTS chkTCIApplyTxVst;
+        // Yurij-eu2av - 2026-07-08: Phase Rotator auto/reset/status controls
+        // built programmatically in InitPhaseRotatorControls() (designer file is unreliable)
+        private CheckBoxTS chkPHROTAuto;
+        private ButtonTS btnPHROTReset;
+        private LabelTS lblPHROTStatus;
+        private LabelTS lblPHROTAsymIn;
+        private LabelTS lblPHROTAsymOut;
+        private LabelTS lblPHROTFc;
 
         #endregion
 
@@ -112,6 +122,8 @@ namespace Thetis
             LogTool.AddLogEntry("      Setup init components...", "INITCOMPSETUP");
             InitializeComponent();
             InitializeVacVstControls();
+            InitializeTciVstControls();
+            InitPhaseRotatorControls(); // Yurij-eu2av - 2026-07-08: build Phase Rotator extras programmatically
 
             _original_pnlP1_adcs_location = pnlP1_adcs.Location;
 
@@ -138,7 +150,7 @@ namespace Thetis
             GroupBoxTS grpVacRxVst = new GroupBoxTS();
             _grpVacRxVst = grpVacRxVst;
             grpVacRxVst.Visible = Console.VstEnabled;
-            grpVacRxVst.Location = new Point(230, 134);
+            grpVacRxVst.Location = new Point(230, 163);
             grpVacRxVst.Name = "grpVacRxVst";
             grpVacRxVst.Size = new Size(240, 140);
             grpVacRxVst.TabIndex = 7;
@@ -170,33 +182,60 @@ namespace Thetis
             chkVAC2ApplyRxVst.CheckedChanged += new EventHandler(chkVAC2ApplyRxVst_CheckedChanged);
             grpVacRxVst.Controls.Add(chkVAC2ApplyRxVst);
 
-            chkVACBypassTxVst = new CheckBoxTS();
-            chkVACBypassTxVst.AutoSize = true;
-            chkVACBypassTxVst.Image = null;
-            chkVACBypassTxVst.Location = new Point(18, 78);
-            chkVACBypassTxVst.Name = "chkVACBypassTxVst";
-            chkVACBypassTxVst.Size = new Size(170, 17);
-            chkVACBypassTxVst.Text = "Bypass TX VST Chain for VAC1";
-            chkVACBypassTxVst.UseVisualStyleBackColor = true;
-            toolTip1.SetToolTip(chkVACBypassTxVst, "When VAC1 is the active TX VAC input, bypass the TX VST chain for that VAC audio.");
-            chkVACBypassTxVst.CheckedChanged += new EventHandler(chkVACBypassTxVst_CheckedChanged);
-            grpVacRxVst.Controls.Add(chkVACBypassTxVst);
+            chkVACApplyTxVst = new CheckBoxTS();
+            chkVACApplyTxVst.AutoSize = true;
+            chkVACApplyTxVst.Image = null;
+            chkVACApplyTxVst.Location = new Point(18, 78);
+            chkVACApplyTxVst.Name = "chkVACApplyTxVst";
+            chkVACApplyTxVst.Size = new Size(170, 17);
+            chkVACApplyTxVst.Text = "Apply TX VST Chain to VAC1";
+            chkVACApplyTxVst.UseVisualStyleBackColor = true;
+            toolTip1.SetToolTip(chkVACApplyTxVst, "Apply the TX VST chain to VAC1 TX audio. When checked, transmitted VAC1 audio is processed by the TX VST chain. When unchecked, VAC1 TX audio is transmitted unprocessed.");
+            chkVACApplyTxVst.CheckedChanged += new EventHandler(chkVACApplyTxVst_CheckedChanged);
+            grpVacRxVst.Controls.Add(chkVACApplyTxVst);
 
-            chkVAC2BypassTxVst = new CheckBoxTS();
-            chkVAC2BypassTxVst.AutoSize = true;
-            chkVAC2BypassTxVst.Image = null;
-            chkVAC2BypassTxVst.Location = new Point(18, 104);
-            chkVAC2BypassTxVst.Name = "chkVAC2BypassTxVst";
-            chkVAC2BypassTxVst.Size = new Size(170, 17);
-            chkVAC2BypassTxVst.Text = "Bypass TX VST Chain for VAC2";
-            chkVAC2BypassTxVst.UseVisualStyleBackColor = true;
-            toolTip1.SetToolTip(chkVAC2BypassTxVst, "When VAC2 is the active TX VAC input, bypass the TX VST chain for that VAC audio.");
-            chkVAC2BypassTxVst.CheckedChanged += new EventHandler(chkVAC2BypassTxVst_CheckedChanged);
-            grpVacRxVst.Controls.Add(chkVAC2BypassTxVst);
+            chkVAC2ApplyTxVst = new CheckBoxTS();
+            chkVAC2ApplyTxVst.AutoSize = true;
+            chkVAC2ApplyTxVst.Image = null;
+            chkVAC2ApplyTxVst.Location = new Point(18, 104);
+            chkVAC2ApplyTxVst.Name = "chkVAC2ApplyTxVst";
+            chkVAC2ApplyTxVst.Size = new Size(170, 17);
+            chkVAC2ApplyTxVst.Text = "Apply TX VST Chain to VAC2";
+            chkVAC2ApplyTxVst.UseVisualStyleBackColor = true;
+            toolTip1.SetToolTip(chkVAC2ApplyTxVst, "Apply the TX VST chain to VAC2 TX audio. When checked, transmitted VAC2 audio is processed by the TX VST chain. When unchecked, VAC2 TX audio is transmitted unprocessed.");
+            chkVAC2ApplyTxVst.CheckedChanged += new EventHandler(chkVAC2ApplyTxVst_CheckedChanged);
+            grpVacRxVst.Controls.Add(chkVAC2ApplyTxVst);
 
             tpAudioOptions.Controls.Add(grpVacRxVst);
 
             UpdateVacVstControlStates();
+        }
+
+        private void InitializeTciVstControls()
+        {
+            chkTCIApplyRxVst = new CheckBoxTS();
+            chkTCIApplyRxVst.AutoSize = true;
+            chkTCIApplyRxVst.Image = null;
+            chkTCIApplyRxVst.Location = new Point(243, 100);
+            chkTCIApplyRxVst.Name = "chkTCIApplyRxVst";
+            chkTCIApplyRxVst.Size = new Size(120, 17);
+            chkTCIApplyRxVst.Text = "Apply RX VST";
+            chkTCIApplyRxVst.UseVisualStyleBackColor = true;
+            toolTip1.SetToolTip(chkTCIApplyRxVst, "Apply the RX VST chain to TCI receiver audio streams. When checked, remote TCI clients hear the same processed audio as the local receiver.");
+            chkTCIApplyRxVst.CheckedChanged += new EventHandler(chkTCIApplyRxVst_CheckedChanged);
+            grpTCIServer.Controls.Add(chkTCIApplyRxVst);
+
+            chkTCIApplyTxVst = new CheckBoxTS();
+            chkTCIApplyTxVst.AutoSize = true;
+            chkTCIApplyTxVst.Image = null;
+            chkTCIApplyTxVst.Location = new Point(243, 79);
+            chkTCIApplyTxVst.Name = "chkTCIApplyTxVst";
+            chkTCIApplyTxVst.Size = new Size(120, 17);
+            chkTCIApplyTxVst.Text = "Apply TX VST";
+            chkTCIApplyTxVst.UseVisualStyleBackColor = true;
+            toolTip1.SetToolTip(chkTCIApplyTxVst, "Apply the TX VST chain to TCI TX audio. When checked, transmitted TCI audio is processed by the TX VST chain. When unchecked, TCI TX audio is transmitted unprocessed.");
+            chkTCIApplyTxVst.CheckedChanged += new EventHandler(chkTCIApplyTxVst_CheckedChanged);
+            grpTCIServer.Controls.Add(chkTCIApplyTxVst);
         }
 
         private void UpdateVacVstControlStates()
@@ -272,9 +311,10 @@ namespace Thetis
 
             //MW0LGE_21d some defaults
             chkShowZeroLine.Checked = true;
-            chkGridControl.Checked = true;
-            chkGridControl_minor.Checked = true;
+            chkGridControl.Checked = false;
+            chkGridControl_minor.Checked = false;
             chkDisplayPanFill.Checked = true;
+            chkDisplay3DPanadapter.Checked = false;
             showRegionBandstackWarning(false);
             //
 
@@ -489,11 +529,19 @@ namespace Thetis
 
             initRecordingPlaybackAudio(); //prior to getOptions setup audio recording/playback options
 
+            // Yurij_eu2av: hardware-specific defaults for PureSignal advanced settings.
+            // Done before getOptions() so a saved user override takes precedence.
+            PSTargetFeedbackLevel = HardwareSpecific.PSTargetFeedbackLevel;
+            PSOutlierEnable = HardwareSpecific.PSOutlierEnableDefault;
+            PSOutlierSigma = HardwareSpecific.PSOutlierSigmaDefault;
+
             LogTool.AddLogEntry("        Setup getting options...", "GETOPTIONS");
             getOptions();
             LogTool.Completed("GETOPTIONS");
 
             selectSkin();
+
+            AskToEnableSDRVST3Skin();
 
             //MW0LGE [2.9.0.7] setup amp/volts calibration
             initVoltsAmpsCalibration();
@@ -606,6 +654,11 @@ namespace Thetis
 
             //-----------------------------
             initializing = false;
+
+            // push 3D panadapter enable state to Display (skipped during init due to 'initializing' guard)
+            // remaining 3D settings are pushed by the 3D Panadapter Settings window
+            Display.Pan3DEnabled = chkDisplay3DPanadapter.Checked;
+            console.SyncDisplay3DPanButton(chkDisplay3DPanadapter.Checked);
 
             udDisplayScopeTime_ValueChanged(this, EventArgs.Empty);
 
@@ -1022,6 +1075,7 @@ namespace Thetis
             if (needsRecovering(recoveryList, "udTXGridStep")) udTXGridStep.Value = Display.TXSpectrumGridStep;
             if (needsRecovering(recoveryList, "udTXWFAmpMax")) udTXWFAmpMax.Value = Display.TXWFAmpMax;
             if (needsRecovering(recoveryList, "udTXWFAmpMin")) udTXWFAmpMin.Value = Display.TXWFAmpMin;
+            if (needsRecovering(recoveryList, "chkDisplay3DPanadapter")) chkDisplay3DPanadapter.Checked = false;
 
             // MW0LGE in the case where we don't have a setting in the db, this function (initdisplaytab) is called, use console instead
             SetMultiMeterMode(console.MMMeasureMode);
@@ -1283,7 +1337,9 @@ namespace Thetis
 
             if (skin == "")
             {
-                if (comboAppSkin.Items.Contains("IK3VIG Special"))
+                if (comboAppSkin.Items.Contains("SDRVST3"))
+                    comboAppSkin.Text = "SDRVST3";
+                else if (comboAppSkin.Items.Contains("IK3VIG Special"))
                     comboAppSkin.Text = "IK3VIG Special";
                 else
                     comboAppSkin.Text = "OpenHPSDR-Gray";
@@ -1291,6 +1347,35 @@ namespace Thetis
             else if (comboAppSkin.Items.Contains(skin))
                 comboAppSkin.Text = skin;
             else comboAppSkin.Text = "IK3VIG Special";
+        }
+
+        private void AskToEnableSDRVST3Skin()
+        {
+            if (comboAppSkin.Text == "SDRVST3") return;
+            if (!comboAppSkin.Items.Contains("SDRVST3")) return;
+
+            const string markerKey = "SDRVST3SkinAskV1";
+
+            Dictionary<string, string> state = DB.GetVarsDictionary("State");
+            if (state.ContainsKey(markerKey)) return;
+
+            if (MessageBox.Show("Would you like to load the new SDRVST3 skin?",
+                "SDR-VST3",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button1,
+                Common.MB_TOPMOST) == DialogResult.Yes)
+            {
+                comboAppSkin.Text = "SDRVST3";
+
+                Dictionary<string, string> options = DB.GetVarsDictionary("Options");
+                options["comboAppSkin"] = "SDRVST3";
+                DB.SaveVarsDictionary("Options", ref options, true);
+            }
+
+            state.Add(markerKey, "1");
+            DB.SaveVarsDictionary("State", ref state, true);
+            DB.WriteDB();
         }
 
         private void GetHosts()
@@ -1747,6 +1832,25 @@ namespace Thetis
             if (getDict.ContainsKey("chkDisableHPFonPS")) // replaced by chkDisableHPFonPSb
                 _oldSettings.Add("chkDisableHPFonPS");
 
+            // 3D panadapter settings moved from this form to the frm3DPanadapter window
+            // (stored under its own "3DPanadapter" table) - remove stale entries here
+            string[] moved3DSettings = new string[]
+            {
+                "ud3DXOffset",
+                "ud3DYOffset",
+                "ud3DLineCount",
+                "ud3DRidgeHeight",
+                "ud3DHaze",
+                "ud3DSpeed",
+                "clrbtn3DLineColor",
+                "chk3DWaterfallSync",
+                "chk3DSideWalls",
+                "combo3DColorMap"
+            };
+            foreach (string s in moved3DSettings)
+                if (getDict.ContainsKey(s))
+                    _oldSettings.Add(s);
+
             handleOldPAGainSettings(ref getDict);
         }
         private void removeOutdatedOptions()
@@ -2084,13 +2188,13 @@ namespace Thetis
                 }
                 if (!ok)
                 {
-                    MessageBox.Show("There was an issue restoring the settings for MultiMeterIO. Existing settings will be lost.", "MultiMeterIO RestoreSaveData",
+                    MessageBox.Show("This version of SDR-VST3 requires restoring the settings for MultiMeterIO.\n\nAny existing meter input/output connections (UDP, TCP/IP or serial) will need to be removed and re-added.", "MultiMeterIO RestoreSaveData",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 }
 
                 if (!MeterManager.RestoreSettings(ref a)) // pass this dictionary of settings to the meter manager to restore from
                 {
-                    MessageBox.Show("There was an issue restoring the settings for MultiMeter. Please remove all meters, re-add, and restart Thetis.", "MultiMeter RestoreSettings",
+                    MessageBox.Show("There was an issue restoring the settings for MultiMeter. Please remove all meters, re-add, and restart SDR-VST3.", "MultiMeter RestoreSettings",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 }
             }
@@ -2407,6 +2511,10 @@ namespace Thetis
             setupTuneAnd2ToneRadios(); //MW0LGE_22b
 
             // Display Tab
+            chkForceCPURendering_CheckedChanged(this, e);
+            chkSpectrumGlow_CheckedChanged(this, e);
+            chkGpuMesh3D_CheckedChanged(this, e);
+            chkGpuComputeShaders_CheckedChanged(this, e);
             udDisplayDecimation_ValueChanged(this, e);
             udDisplayGridMax_ValueChanged(this, e);
             udDisplayGridMin_ValueChanged(this, e);
@@ -2869,6 +2977,7 @@ namespace Thetis
             udPhRotFreq_ValueChanged(this, e);
             udPHROTStages_ValueChanged(this, e);
             chkPHROTReverse_CheckedChanged(this, e);
+            chkPHROTAuto_CheckedChanged(this, e);
 
             // TXEQ
             console.EQForm.SetTXProfile();
@@ -2942,6 +3051,7 @@ namespace Thetis
 
             //options3 tab
             chkVFOsync_settings_changed(this, e);
+            chkMeshDiagLog_CheckedChanged(this, e); // MW0LGE_22x apply restored state to the runtime diag sink
 
             // auto start tab
             updateAutoLaunchControls();
@@ -3027,8 +3137,12 @@ namespace Thetis
 
                 HashSet<string> profile_names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                foreach (DataRow dr in tx_profile_table.Rows)
+                DataView dv = tx_profile_table.DefaultView;
+                dv.Sort = "Ordinal ASC";
+
+                foreach (DataRowView drv in dv)
                 {
+                    DataRow dr = drv.Row;
                     if (dr == null) continue;
                     if (dr.RowState == DataRowState.Deleted) continue;
                     if (dr.IsNull("Name")) continue;
@@ -3184,7 +3298,7 @@ namespace Thetis
             if (isTXProfileSettingDifferent<bool>(dr, "VAC1_IQ_Output", (bool)chkAudioIQtoVAC.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<bool>(dr, "VAC1_IQ_Correct", (bool)chkAudioCorrectIQ.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<bool>(dr, "VAC1_Apply_RX_VST", (bool)chkVACApplyRxVst.Checked, out sReportOut)) sReport += sReportOut;
-            if (isTXProfileSettingDifferent<bool>(dr, "VAC1_Bypass_TX_VST", (bool)chkVACBypassTxVst.Checked, out sReportOut)) sReport += sReportOut;
+            if (isTXProfileSettingDifferent<bool>(dr, "VAC1_Bypass_TX_VST", (bool)chkVACApplyTxVst.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<bool>(dr, "VAC1_PTT_OverRide", (bool)chkVACAllowBypass.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<bool>(dr, "VAC1_Combine_Input_Channels", (bool)chkVACCombine.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<bool>(dr, "VAC1_Latency_On", (bool)chkAudioLatencyManual2.Checked, out sReportOut)) sReport += sReportOut;
@@ -3211,7 +3325,7 @@ namespace Thetis
             if (isTXProfileSettingDifferent<bool>(dr, "VAC2_IQ_Output", (bool)chkVAC2DirectIQ.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<bool>(dr, "VAC2_IQ_Correct", (bool)chkVAC2DirectIQCal.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<bool>(dr, "VAC2_Apply_RX_VST", (bool)chkVAC2ApplyRxVst.Checked, out sReportOut)) sReport += sReportOut;
-            if (isTXProfileSettingDifferent<bool>(dr, "VAC2_Bypass_TX_VST", (bool)chkVAC2BypassTxVst.Checked, out sReportOut)) sReport += sReportOut;
+            if (isTXProfileSettingDifferent<bool>(dr, "VAC2_Bypass_TX_VST", (bool)chkVAC2ApplyTxVst.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<bool>(dr, "VAC2_Combine_Input_Channels", (bool)chkVAC2Combine.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<bool>(dr, "VAC2_Latency_On", (bool)chkVAC2LatencyManual.Checked, out sReportOut)) sReport += sReportOut;
             if (isTXProfileSettingDifferent<int>(dr, "VAC2_Latency_Duration", (int)udVAC2Latency.Value, out sReportOut)) sReport += sReportOut;
@@ -3292,6 +3406,7 @@ namespace Thetis
                 if (isTXProfileSettingDifferent<bool>(dr, "CFCPhaseReverseEnabled", chkPHROTReverse.Checked, out sReportOut)) sReport += sReportOut;
                 if (isTXProfileSettingDifferent<int>(dr, "CFCPhaseRotatorFreq", (int)udPhRotFreq.Value, out sReportOut)) sReport += sReportOut;
                 if (isTXProfileSettingDifferent<int>(dr, "CFCPhaseRotatorStages", (int)udPHROTStages.Value, out sReportOut)) sReport += sReportOut;
+                if (isTXProfileSettingDifferent<bool>(dr, "CFCPhaseRotatorAuto", chkPHROTAuto.Checked, out sReportOut)) sReport += sReportOut;
                 int[] cfceq = CFCCOMPEQ;
                 if (isTXProfileSettingDifferent<int>(dr, "CFCPreComp", cfceq[0], out sReportOut)) sReport += sReportOut;
                 for (int i = 1; i < 11; i++)
@@ -3390,7 +3505,7 @@ namespace Thetis
             if (DB.ConvertFromDBVal<bool>(dr["VAC1_IQ_Output"]) != (bool)chkAudioIQtoVAC.Checked) return true;
             if (DB.ConvertFromDBVal<bool>(dr["VAC1_IQ_Correct"]) != (bool)chkAudioCorrectIQ.Checked) return true;
             if (DB.ConvertFromDBVal<bool>(dr["VAC1_Apply_RX_VST"]) != (bool)chkVACApplyRxVst.Checked) return true;
-            if (DB.ConvertFromDBVal<bool>(dr["VAC1_Bypass_TX_VST"]) != (bool)chkVACBypassTxVst.Checked) return true;
+            if (DB.ConvertFromDBVal<bool>(dr["VAC1_Bypass_TX_VST"]) != (bool)chkVACApplyTxVst.Checked) return true;
             if (DB.ConvertFromDBVal<bool>(dr["VAC1_PTT_OverRide"]) != (bool)chkVACAllowBypass.Checked) return true;
             if (DB.ConvertFromDBVal<bool>(dr["VAC1_Combine_Input_Channels"]) != (bool)chkVACCombine.Checked) return true;
             if (DB.ConvertFromDBVal<bool>(dr["VAC1_Latency_On"]) != (bool)chkAudioLatencyManual2.Checked) return true;
@@ -3420,7 +3535,7 @@ namespace Thetis
             if (DB.ConvertFromDBVal<bool>(dr["VAC2_IQ_Output"]) != (bool)chkVAC2DirectIQ.Checked) return true;
             if (DB.ConvertFromDBVal<bool>(dr["VAC2_IQ_Correct"]) != (bool)chkVAC2DirectIQCal.Checked) return true;
             if (DB.ConvertFromDBVal<bool>(dr["VAC2_Apply_RX_VST"]) != (bool)chkVAC2ApplyRxVst.Checked) return true;
-            if (DB.ConvertFromDBVal<bool>(dr["VAC2_Bypass_TX_VST"]) != (bool)chkVAC2BypassTxVst.Checked) return true;
+            if (DB.ConvertFromDBVal<bool>(dr["VAC2_Bypass_TX_VST"]) != (bool)chkVAC2ApplyTxVst.Checked) return true;
             if (DB.ConvertFromDBVal<bool>(dr["VAC2_Combine_Input_Channels"]) != (bool)chkVAC2Combine.Checked) return true;
             if (DB.ConvertFromDBVal<bool>(dr["VAC2_Latency_On"]) != (bool)chkVAC2LatencyManual.Checked) return true;
             if (DB.ConvertFromDBVal<int>(dr["VAC2_Latency_Duration"]) != (int)udVAC2Latency.Value) return true;
@@ -3504,6 +3619,7 @@ namespace Thetis
                 if (DB.ConvertFromDBVal<bool>(dr["CFCPhaseReverseEnabled"]) != chkPHROTReverse.Checked) return true;
                 if (DB.ConvertFromDBVal<int>(dr["CFCPhaseRotatorFreq"]) != (int)udPhRotFreq.Value) return true;
                 if (DB.ConvertFromDBVal<int>(dr["CFCPhaseRotatorStages"]) != (int)udPHROTStages.Value) return true;
+                if (DB.ConvertFromDBVal<bool>(dr["CFCPhaseRotatorAuto"]) != chkPHROTAuto.Checked) return true;
                 int[] cfceq = CFCCOMPEQ;
                 if (DB.ConvertFromDBVal<int>(dr["CFCPreComp"]) != cfceq[0]) return true;
                 for (int i = 1; i < 11; i++)
@@ -3567,7 +3683,7 @@ namespace Thetis
             Common.HightlightControl(chkAudioIQtoVAC, bHighlight);
             Common.HightlightControl(chkAudioCorrectIQ, bHighlight);
             Common.HightlightControl(chkVACApplyRxVst, bHighlight);
-            Common.HightlightControl(chkVACBypassTxVst, bHighlight);
+            Common.HightlightControl(chkVACApplyTxVst, bHighlight);
             Common.HightlightControl(chkVACAllowBypass, bHighlight);
             Common.HightlightControl(chkVACCombine, bHighlight);
             Common.HightlightControl(chkAudioLatencyManual2, bHighlight);
@@ -3594,7 +3710,7 @@ namespace Thetis
             Common.HightlightControl(chkVAC2DirectIQ, bHighlight);
             Common.HightlightControl(chkVAC2DirectIQCal, bHighlight);
             Common.HightlightControl(chkVAC2ApplyRxVst, bHighlight);
-            Common.HightlightControl(chkVAC2BypassTxVst, bHighlight);
+            Common.HightlightControl(chkVAC2ApplyTxVst, bHighlight);
             Common.HightlightControl(chkVAC2Combine, bHighlight);
             Common.HightlightControl(chkVAC2LatencyManual, bHighlight);
             Common.HightlightControl(udVAC2Latency, bHighlight);
@@ -3771,7 +3887,7 @@ namespace Thetis
             dr["VAC1_IQ_Output"] = (bool)chkAudioIQtoVAC.Checked;
             dr["VAC1_IQ_Correct"] = (bool)chkAudioCorrectIQ.Checked;
             dr["VAC1_Apply_RX_VST"] = (bool)chkVACApplyRxVst.Checked;
-            dr["VAC1_Bypass_TX_VST"] = (bool)chkVACBypassTxVst.Checked;
+            dr["VAC1_Bypass_TX_VST"] = (bool)chkVACApplyTxVst.Checked;
             dr["VAC1_PTT_OverRide"] = (bool)chkVACAllowBypass.Checked;
             dr["VAC1_Combine_Input_Channels"] = (bool)chkVACCombine.Checked;
             dr["VAC1_Latency_On"] = (bool)chkAudioLatencyManual2.Checked;
@@ -3798,7 +3914,7 @@ namespace Thetis
             dr["VAC2_IQ_Output"] = (bool)chkVAC2DirectIQ.Checked;
             dr["VAC2_IQ_Correct"] = (bool)chkVAC2DirectIQCal.Checked;
             dr["VAC2_Apply_RX_VST"] = (bool)chkVAC2ApplyRxVst.Checked;
-            dr["VAC2_Bypass_TX_VST"] = (bool)chkVAC2BypassTxVst.Checked;
+            dr["VAC2_Bypass_TX_VST"] = (bool)chkVAC2ApplyTxVst.Checked;
             dr["VAC2_Combine_Input_Channels"] = (bool)chkVAC2Combine.Checked;
             dr["VAC2_Latency_On"] = (bool)chkVAC2LatencyManual.Checked;
             dr["VAC2_Latency_Duration"] = (int)udVAC2Latency.Value;
@@ -3877,6 +3993,7 @@ namespace Thetis
             dr["CFCPhaseReverseEnabled"] = (bool)chkPHROTReverse.Checked;
             dr["CFCPhaseRotatorFreq"] = (int)udPhRotFreq.Value;
             dr["CFCPhaseRotatorStages"] = (int)udPHROTStages.Value;
+            dr["CFCPhaseRotatorAuto"] = (bool)chkPHROTAuto.Checked;
             int[] cfceq = CFCCOMPEQ;
             dr["CFCPreComp"] = cfceq[0];
             for (int i = 1; i < 11; i++)
@@ -4109,6 +4226,55 @@ namespace Thetis
                         udATTOnTX_ValueChanged(this, EventArgs.Empty);
                     else
                         udATTOnTX.Value = value;
+                }
+            }
+        }
+
+        public int PSTargetFeedbackLevel
+        {
+            get
+            {
+                if (udPSTargetFeedbackLevel != null) return (int)udPSTargetFeedbackLevel.Value;
+                else return HardwareSpecific.PSTargetFeedbackLevel;
+            }
+            set
+            {
+                if (udPSTargetFeedbackLevel != null)
+                {
+                    if (value > (int)udPSTargetFeedbackLevel.Maximum) value = (int)udPSTargetFeedbackLevel.Maximum;
+                    if (value < (int)udPSTargetFeedbackLevel.Minimum) value = (int)udPSTargetFeedbackLevel.Minimum;
+                    udPSTargetFeedbackLevel.Value = value;
+                }
+            }
+        }
+
+        public bool PSOutlierEnable
+        {
+            get
+            {
+                if (chkPSOutlierEnable != null) return chkPSOutlierEnable.Checked;
+                else return HardwareSpecific.PSOutlierEnableDefault;
+            }
+            set
+            {
+                if (chkPSOutlierEnable != null) chkPSOutlierEnable.Checked = value;
+            }
+        }
+
+        public double PSOutlierSigma
+        {
+            get
+            {
+                if (udPSOutlierSigma != null) return (double)udPSOutlierSigma.Value;
+                else return HardwareSpecific.PSOutlierSigmaDefault;
+            }
+            set
+            {
+                if (udPSOutlierSigma != null)
+                {
+                    if (value > (double)udPSOutlierSigma.Maximum) value = (double)udPSOutlierSigma.Maximum;
+                    if (value < (double)udPSOutlierSigma.Minimum) value = (double)udPSOutlierSigma.Minimum;
+                    udPSOutlierSigma.Value = (decimal)value;
                 }
             }
         }
@@ -9485,7 +9651,7 @@ namespace Thetis
             chkAudioIQtoVAC.Checked = (bool)dr["VAC1_IQ_Output"];
             chkAudioCorrectIQ.Checked = (bool)dr["VAC1_IQ_Correct"];
             chkVACApplyRxVst.Checked = DB.ConvertFromDBVal<bool>(dr["VAC1_Apply_RX_VST"]);
-            chkVACBypassTxVst.Checked = DB.ConvertFromDBVal<bool>(dr["VAC1_Bypass_TX_VST"]);
+            chkVACApplyTxVst.Checked = DB.ConvertFromDBVal<bool>(dr["VAC1_Bypass_TX_VST"]);
             chkVACAllowBypass.Checked = (bool)dr["VAC1_PTT_OverRide"];
             chkVACCombine.Checked = (bool)dr["VAC1_Combine_Input_Channels"];
             chkAudioLatencyManual2.Checked = (bool)dr["VAC1_Latency_On"];
@@ -9516,7 +9682,7 @@ namespace Thetis
             chkVAC2DirectIQ.Checked = (bool)dr["VAC2_IQ_Output"];
             chkVAC2DirectIQCal.Checked = (bool)dr["VAC2_IQ_Correct"];
             chkVAC2ApplyRxVst.Checked = DB.ConvertFromDBVal<bool>(dr["VAC2_Apply_RX_VST"]);
-            chkVAC2BypassTxVst.Checked = DB.ConvertFromDBVal<bool>(dr["VAC2_Bypass_TX_VST"]);
+            chkVAC2ApplyTxVst.Checked = DB.ConvertFromDBVal<bool>(dr["VAC2_Bypass_TX_VST"]);
             chkVAC2Combine.Checked = (bool)dr["VAC2_Combine_Input_Channels"];
             chkVAC2LatencyManual.Checked = (bool)dr["VAC2_Latency_On"];
             udVAC2Latency.Value = (int)dr["VAC2_Latency_Duration"];
@@ -9611,6 +9777,7 @@ namespace Thetis
 
             udPhRotFreq.Value = Math.Min(Math.Max((int)dr["CFCPhaseRotatorFreq"], udPhRotFreq.Minimum), udPhRotFreq.Maximum);
             udPHROTStages.Value = Math.Min(Math.Max((int)dr["CFCPhaseRotatorStages"], udPHROTStages.Minimum), udPHROTStages.Maximum);
+            chkPHROTAuto.Checked = DB.ConvertFromDBVal<bool>(dr["CFCPhaseRotatorAuto"]);
 
             cfceq[0] = (int)dr["CFCPreComp"];
             for (int i = 1; i < 11; i++)
@@ -9730,6 +9897,7 @@ namespace Thetis
             {
                 dr = DB.ds.Tables["TXProfile"].NewRow();
                 dr["Name"] = name;
+                dr["Ordinal"] = comboTXProfileName.Items.Count;
             }
 
             if (dr == null)
@@ -9793,6 +9961,16 @@ namespace Thetis
             int index = comboTXProfileName.SelectedIndex;
             comboTXProfileName.Items.Remove(comboTXProfileName.Text);
 
+            // re-sequence ordinals for remaining profiles
+            int seq = 0;
+            foreach (object item in comboTXProfileName.Items)
+            {
+                DataRow[] remainingRows = getDataRowsForTXProfile((string)item);
+                if (remainingRows.Length == 1)
+                    remainingRows[0]["Ordinal"] = seq;
+                seq++;
+            }
+
             // tell delgates that we changed the tx profile list
             console.TXProfilesChangedHandlers?.Invoke();
 
@@ -9804,6 +9982,35 @@ namespace Thetis
             }
 
             console.UpdateTXProfile(comboTXProfileName.Text);
+        }
+
+        private void btnTXProfileOrder_Click(object sender, EventArgs e)
+        {
+            DataSet data_set = DB.ds;
+            if (data_set == null) return;
+            if (!data_set.Tables.Contains("TXProfile")) return;
+
+            DataTable txProfileTable = data_set.Tables["TXProfile"];
+            if (txProfileTable == null || txProfileTable.Rows.Count == 0) return;
+
+            using (TXProfileReorderForm dlg = new TXProfileReorderForm(txProfileTable))
+            {
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    string currentName = comboTXProfileName.Text;
+
+                    // refresh combos with new order
+                    GetTxProfiles();
+                    console.BuildTXProfileCombos();
+
+                    // reselect same profile
+                    if (!string.IsNullOrEmpty(currentName))
+                    {
+                        comboTXProfileName.Text = currentName;
+                        console.UpdateTXProfile(currentName);
+                    }
+                }
+            }
         }
 
         private void udVOXGain_ValueChanged(object sender, System.EventArgs e)
@@ -12331,9 +12538,19 @@ namespace Thetis
             Audio.VAC1ApplyRxVst = chkVACApplyRxVst.Checked;
         }
 
-        private void chkVACBypassTxVst_CheckedChanged(object sender, EventArgs e)
+        private void chkTCIApplyRxVst_CheckedChanged(object sender, EventArgs e)
         {
-            Audio.VAC1BypassTxVst = chkVACBypassTxVst.Checked;
+            Audio.TCIApplyRxVst = chkTCIApplyRxVst.Checked;
+        }
+
+        private void chkTCIApplyTxVst_CheckedChanged(object sender, EventArgs e)
+        {
+            Audio.TCIApplyTxVst = chkTCIApplyTxVst.Checked;
+        }
+
+        private void chkVACApplyTxVst_CheckedChanged(object sender, EventArgs e)
+        {
+            Audio.VAC1ApplyTxVst = chkVACApplyTxVst.Checked;
         }
 
         private void chkCWAutoSwitchMode_CheckedChanged(object sender, System.EventArgs e)
@@ -12486,9 +12703,9 @@ namespace Thetis
             Audio.VAC2ApplyRxVst = chkVAC2ApplyRxVst.Checked;
         }
 
-        private void chkVAC2BypassTxVst_CheckedChanged(object sender, EventArgs e)
+        private void chkVAC2ApplyTxVst_CheckedChanged(object sender, EventArgs e)
         {
-            Audio.VAC2BypassTxVst = chkVAC2BypassTxVst.Checked;
+            Audio.VAC2ApplyTxVst = chkVAC2ApplyTxVst.Checked;
         }
 
         private void chkRX2AutoMuteRX1OnVFOBTX_CheckedChanged(object sender, System.EventArgs e)
@@ -12560,10 +12777,14 @@ namespace Thetis
             {
                 dr = DB.ds.Tables["TXProfile"].NewRow();
                 dr["Name"] = name;
+                dr["Ordinal"] = comboTXProfileName.Items.Count;
             }
 
             for (int i = 0; i < dr.ItemArray.Length; i++)
                 dr[i] = rows[0][i];
+
+            // preserve the Ordinal we set (copy loop overwrites it from the source def row)
+            dr["Ordinal"] = comboTXProfileName.Items.Count;
 
             if (!comboTXProfileName.Items.Contains(name))
             {
@@ -12689,6 +12910,45 @@ namespace Thetis
         private void chkTXPanFill_CheckedChanged(object sender, System.EventArgs e)
         {
             Display.TXPanFill = chkTXPanFill.Checked;
+        }
+
+        public bool Display3DPanadapter
+        {
+            get { return chkDisplay3DPanadapter.Checked; }
+            set { chkDisplay3DPanadapter.Checked = value; }
+        }
+        private void chkDisplay3DPanadapter_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.Pan3DEnabled = chkDisplay3DPanadapter.Checked;
+            console.SyncDisplay3DPanButton(chkDisplay3DPanadapter.Checked);
+        }
+
+        private frm3DPanadapter _frm3DPanadapter = null;
+        /// <summary>
+        /// Lazily creates / raises the 3D panadapter settings popup (shared by the
+        /// setup button and the console display-toolbar button's right-click).
+        /// </summary>
+        public void Show3DPanadapterSettings()
+        {
+            if (_frm3DPanadapter == null || _frm3DPanadapter.IsDisposed)
+            {
+                _frm3DPanadapter = new frm3DPanadapter();
+            }
+
+            if (!_frm3DPanadapter.Visible)
+            {
+                _frm3DPanadapter.Show(this);
+                _frm3DPanadapter.Focus();
+            }
+            else
+            {
+                _frm3DPanadapter.BringToFront();
+            }
+        }
+        private void btn3DSettings_Click(object sender, EventArgs e)
+        {
+            Show3DPanadapterSettings();
         }
 
         private bool _skinChanging = false;
@@ -19632,6 +19892,38 @@ namespace Thetis
                 Display.VerticalBlanks = 0;
                 MeterManager.SetVsync(false);
             }
+        }
+
+        private void chkForceCPURendering_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.ForceCPURendering = chkForceCPURendering.Checked;
+            console.RestartDisplayDX();
+            if (_frm3DPanadapter != null && !_frm3DPanadapter.IsDisposed)
+                _frm3DPanadapter.ApplyRenderPathLimits();
+        }
+
+        private void chkSpectrumGlow_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.SpectrumGlow = chkSpectrumGlow.Checked;
+        }
+
+        private void chkGpuMesh3D_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.GpuMeshEnabled = chkGpuMesh3D.Checked;
+        }
+
+        private void chkGpuComputeShaders_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.GpuComputeEnabled = chkGpuComputeShaders.Checked;
+        }
+
+        private void chkMeshDiagLog_CheckedChanged(object sender, EventArgs e)
+        {
+            Common.MeshDiagLogEnabled = chkMeshDiagLog.Checked; // MW0LGE_22x runtime toggle, no restart needed
         }
 
         private void chkBlobPeakHold_CheckedChanged(object sender, EventArgs e)
@@ -28566,6 +28858,134 @@ namespace Thetis
             WDSP.SetTXAPHROTReverse(WDSP.id(1, 0), run);
         }
 
+        // Yurij-eu2av - 2026-07-08: Build the extra Phase Rotator controls
+        // programmatically and add them to the existing grpPhRot group box.
+        private void InitPhaseRotatorControls()
+        {
+            if (grpPhRot == null) return;
+
+            // Auto FC checkbox
+            chkPHROTAuto = new CheckBoxTS();
+            chkPHROTAuto.AutoSize = true;
+            chkPHROTAuto.Image = null;
+            chkPHROTAuto.Location = new System.Drawing.Point(120, 19);
+            chkPHROTAuto.Name = "chkPHROTAuto";
+            chkPHROTAuto.Size = new System.Drawing.Size(63, 17);
+            chkPHROTAuto.TabIndex = 158;
+            chkPHROTAuto.Text = "Auto FC";
+            toolTip1.SetToolTip(chkPHROTAuto, "Enable automatic corner-frequency optimisation");
+            chkPHROTAuto.UseVisualStyleBackColor = true;
+            chkPHROTAuto.CheckedChanged += new System.EventHandler(this.chkPHROTAuto_CheckedChanged);
+            grpPhRot.Controls.Add(chkPHROTAuto);
+
+            // Reset button
+            btnPHROTReset = new ButtonTS();
+            btnPHROTReset.Image = null;
+            btnPHROTReset.Location = new System.Drawing.Point(120, 42);
+            btnPHROTReset.Name = "btnPHROTReset";
+            btnPHROTReset.Size = new System.Drawing.Size(45, 23);
+            btnPHROTReset.TabIndex = 159;
+            btnPHROTReset.Text = "Reset";
+            toolTip1.SetToolTip(btnPHROTReset, "Reset optimiser to default 338 Hz and restart search");
+            btnPHROTReset.UseVisualStyleBackColor = true;
+            btnPHROTReset.Click += new System.EventHandler(this.btnPHROTReset_Click);
+            grpPhRot.Controls.Add(btnPHROTReset);
+
+            // Status label
+            lblPHROTStatus = new LabelTS();
+            lblPHROTStatus.AutoSize = true;
+            lblPHROTStatus.Image = null;
+            lblPHROTStatus.Location = new System.Drawing.Point(170, 47);
+            lblPHROTStatus.Name = "lblPHROTStatus";
+            lblPHROTStatus.Size = new System.Drawing.Size(21, 13);
+            lblPHROTStatus.TabIndex = 160;
+            lblPHROTStatus.Text = "Off";
+            toolTip1.SetToolTip(lblPHROTStatus, "Auto-optimiser status");
+            grpPhRot.Controls.Add(lblPHROTStatus);
+
+            // Asymmetry IN label
+            lblPHROTAsymIn = new LabelTS();
+            lblPHROTAsymIn.AutoSize = true;
+            lblPHROTAsymIn.Image = null;
+            lblPHROTAsymIn.Location = new System.Drawing.Point(120, 72);
+            lblPHROTAsymIn.Name = "lblPHROTAsymIn";
+            lblPHROTAsymIn.Size = new System.Drawing.Size(27, 13);
+            lblPHROTAsymIn.TabIndex = 161;
+            lblPHROTAsymIn.Text = "IN: -";
+            grpPhRot.Controls.Add(lblPHROTAsymIn);
+
+            // Asymmetry OUT label
+            lblPHROTAsymOut = new LabelTS();
+            lblPHROTAsymOut.AutoSize = true;
+            lblPHROTAsymOut.Image = null;
+            lblPHROTAsymOut.Location = new System.Drawing.Point(120, 90);
+            lblPHROTAsymOut.Name = "lblPHROTAsymOut";
+            lblPHROTAsymOut.Size = new System.Drawing.Size(39, 13);
+            lblPHROTAsymOut.TabIndex = 162;
+            lblPHROTAsymOut.Text = "OUT: -";
+            grpPhRot.Controls.Add(lblPHROTAsymOut);
+
+            // Corner frequency label
+            lblPHROTFc = new LabelTS();
+            lblPHROTFc.AutoSize = true;
+            lblPHROTFc.Image = null;
+            lblPHROTFc.Location = new System.Drawing.Point(120, 108);
+            lblPHROTFc.Name = "lblPHROTFc";
+            lblPHROTFc.Size = new System.Drawing.Size(27, 13);
+            lblPHROTFc.TabIndex = 163;
+            lblPHROTFc.Text = "FC: -";
+            grpPhRot.Controls.Add(lblPHROTFc);
+        }
+
+        // Yurij-eu2av - 2026-07-08: Phase Rotator Auto FC toggle.
+        private void chkPHROTAuto_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            WDSP.SetTXAPHROTAutoMode(WDSP.id(1, 0), chkPHROTAuto.Checked ? 1 : 0);
+        }
+
+        // Yurij-eu2av - 2026-07-08: Phase Rotator reset to default 338 Hz.
+        private void btnPHROTReset_Click(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            WDSP.SetTXAPHROTAutoReset(WDSP.id(1, 0));
+        }
+
+        // Yurij-eu2av - 2026-07-08: Phase Rotator status/asymmetry/FC update timer.
+        private void timerPhRot_Tick(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            unsafe
+            {
+                double in_pos = 0.0, in_neg = 0.0, in_ratio = 0.0;
+                double out_pos = 0.0, out_neg = 0.0, out_ratio = 0.0;
+                double current_fc = 0.0, auto_step = 0.0;
+                double* p_in_pos = &in_pos;
+                double* p_in_neg = &in_neg;
+                double* p_in_ratio = &in_ratio;
+                double* p_out_pos = &out_pos;
+                double* p_out_neg = &out_neg;
+                double* p_out_ratio = &out_ratio;
+                double* p_current_fc = &current_fc;
+                double* p_auto_step = &auto_step;
+                WDSP.GetTXAPHROTAsymmetry(WDSP.id(1, 0),
+                                          p_in_pos, p_in_neg, p_in_ratio,
+                                          p_out_pos, p_out_neg, p_out_ratio,
+                                          p_current_fc, p_auto_step);
+
+                lblPHROTAsymIn.Text = string.Format("IN: {0:F1}%", in_ratio * 100.0);
+                lblPHROTAsymOut.Text = string.Format("OUT: {0:F1}%", out_ratio * 100.0);
+                lblPHROTFc.Text = string.Format("FC: {0:F0} Hz", current_fc);
+
+                if (auto_step == 0.0)
+                    lblPHROTStatus.Text = "Off";
+                else if (auto_step == -1.0)
+                    lblPHROTStatus.Text = "Done";
+                else
+                    lblPHROTStatus.Text = "Search";
+            }
+        }
+
         private void chkRecoverPAProfileFromTXProfile_CheckedChanged(object sender, EventArgs e)
         {
             if (initializing) return;
@@ -33620,20 +34040,20 @@ namespace Thetis
 
         public Color[] WaterfallRXGradient()
         {
-            Color[] waterfall_grad = new Color[101];
-            for (int perc = 0; perc <= 100; perc++)
+            Color[] waterfall_grad = new Color[Display.WaterfallGradSteps];
+            for (int perc = 0; perc < waterfall_grad.Length; perc++)
             {
-                Color c = lgLinearGradient_waterfall.GetColourAtPercent(perc / 100f);
+                Color c = lgLinearGradient_waterfall.GetColourAtPercent(perc / (float)(waterfall_grad.Length - 1));
                 waterfall_grad[perc] = c;
             }
             return waterfall_grad;
         }
         public Color[] WaterfallTXGradient()
         {
-            Color[] waterfall_grad = new Color[101];
-            for (int perc = 0; perc <= 100; perc++)
+            Color[] waterfall_grad = new Color[Display.WaterfallGradSteps];
+            for (int perc = 0; perc < waterfall_grad.Length; perc++)
             {
-                Color c = lgLinearGradientTX_waterfall.GetColourAtPercent(perc / 100f);
+                Color c = lgLinearGradientTX_waterfall.GetColourAtPercent(perc / (float)(waterfall_grad.Length - 1));
                 waterfall_grad[perc] = c;
             }
             return waterfall_grad;
@@ -36538,7 +36958,7 @@ namespace Thetis
             if (string.IsNullOrEmpty(txtRecording_customFolder.Text))
             {
                 txtRecording_customFolder.TextChanged -= txtRecording_customFolder_TextChanged;
-                txtRecording_customFolder.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "Thetis");
+                txtRecording_customFolder.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "SDR-VST3");
                 txtRecording_customFolder.TextChanged += txtRecording_customFolder_TextChanged;
             }
 

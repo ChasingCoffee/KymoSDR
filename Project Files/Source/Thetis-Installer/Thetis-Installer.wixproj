@@ -61,6 +61,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Product.wxs" />
+    <Compile Include="Skins-SDRVST3.wxs" />
   </ItemGroup>
   <ItemGroup>
     <WixExtension Include="WixUtilExtension">
@@ -92,9 +93,11 @@
 	<Target Name="AfterBuild">
 	</Target>
 	-->
-  <!-- rename the output msi with Version number -->
+  <!-- rename the output msi with Version number.
+       [4.6] .NET 10 migration: Thetis.exe is now a native apphost stub with no
+       assembly manifest, so read the version from the managed Thetis.dll instead -->
   <Target Name="AfterBuild">
-    <GetAssemblyIdentity AssemblyFiles="..\..\Bin\$(Platform)\$(Configuration)\Thetis.exe">
+    <GetAssemblyIdentity AssemblyFiles="..\..\Bin\$(Platform)\$(Configuration)\Thetis.dll">
       <Output TaskParameter="Assemblies" ItemName="AssemblyInfo" />
     </GetAssemblyIdentity>
     <PropertyGroup>

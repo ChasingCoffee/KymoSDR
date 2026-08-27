@@ -1511,15 +1511,18 @@ namespace Thetis
                 m_sendThread = new Thread(new ThreadStart(SendThreadProc));
                 m_sendThread.Name = "TCI client sender Thread";
                 m_sendThread.Priority = ThreadPriority.AboveNormal;
+                m_sendThread.IsBackground = true;
                 m_sendThread.Start();
 
 				m_VFODataThread = new Thread(new ThreadStart(VFOdata));
 				m_VFODataThread.Priority = ThreadPriority.Normal;
+				m_VFODataThread.IsBackground = true;
 				m_VFODataThread.Start();
 
 				m_clientListenerThread =
 					new Thread(new ThreadStart(SocketListenerThreadStart));
 				m_clientListenerThread.Name = "TCI client listener Thread";
+				m_clientListenerThread.IsBackground = true;
 
                 m_clientListenerThread.Start();
 			}
@@ -1825,7 +1828,7 @@ namespace Thetis
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     Debug.Print("problem writing queued frame");
                     abortSocketTransport();
@@ -3074,22 +3077,12 @@ namespace Thetis
                 if (m_sendThread != null)
                 {
                     m_sendThread.Join(100);
-
-                    if (m_sendThread.IsAlive)
-                    {
-                        m_sendThread.Abort();
-                    }
                     m_sendThread = null;
                 }
 
 				if (m_VFODataThread != null)
 				{
 					m_VFODataThread.Join(50);
-
-					if (m_VFODataThread.IsAlive)
-					{
-						m_VFODataThread.Abort();
-					}
 					m_VFODataThread = null;
 				}
 
@@ -3097,13 +3090,9 @@ namespace Thetis
 				{
 					m_clientListenerThread.Join(50);
 
-					if (m_clientListenerThread.IsAlive)
-					{
-						m_clientListenerThread.Abort();
-						m_disconnected = true;
-                        notifyServerDisconnected(server);
-						ClientDisconnectedHandlers?.Invoke();
-					}
+					m_disconnected = true;
+					notifyServerDisconnected(server);
+					ClientDisconnectedHandlers?.Invoke();
 
 					m_clientListenerThread = null;
 				}
@@ -6797,11 +6786,13 @@ namespace Thetis
 					m_serverThread = new Thread(new ThreadStart(ServerThreadStart));
 					m_serverThread.Priority = ThreadPriority.BelowNormal;
 					m_serverThread.Name = "TCI server Thread";
+					m_serverThread.IsBackground = true;
 					m_serverThread.Start();
 
 					m_purgingThread = new Thread(new ThreadStart(PurgingThreadStart));
 					m_purgingThread.Priority = ThreadPriority.Lowest;
                     m_purgingThread.Name = "TCI purging Thread";
+                    m_purgingThread.IsBackground = true;
                     m_purgingThread.Start();
 				}
 				catch(SocketException se)
@@ -6914,23 +6905,19 @@ namespace Thetis
 
                 }
 
-				if (m_serverThread != null) {
-					m_serverThread.Join(50); // dont need to wait long here, as we are blocking anyway
-					if (m_serverThread.IsAlive)
-						m_serverThread.Abort();
-					m_serverThread = null;
-				}
+			if (m_serverThread != null) {
+				m_serverThread.Join(50);
+				m_serverThread = null;
+			}
 
-				m_stopPurging = true;
-				if (m_purgingThread != null)
-				{
-					if (!m_bSleepingInPurge)
-						m_purgingThread.Join(500);
+			m_stopPurging = true;
+			if (m_purgingThread != null)
+			{
+				if (!m_bSleepingInPurge)
+					m_purgingThread.Join(500);
 
-					if (m_purgingThread.IsAlive)
-						m_purgingThread.Abort();
-					m_purgingThread = null;
-				}
+				m_purgingThread = null;
+			}
 
 
 				// Stop All clients.

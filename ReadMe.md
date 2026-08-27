@@ -1,14 +1,6 @@
-Here is a link to a video showing you the basics of how it all works
-
-https://www.facebook.com/share/v/198hYDBFQr/
-
-
-
-After a brief discussion with Richie [MW0LGE] who maintains the last version of Thetis v2.10.3.15 which this software fork is based on 
-He suggested a rebrand to keep versions from becoming confusing among other issues.
-He also suggested it should be its own install databases etc. as to be able to run side by side with Thetis and not overwrite it.
-  
-SDR-VST3 is a rebranded build of Thetis (the OpenHPSDR software-defined radio console) that adds built-in VST3 plugin support. 
+What is SDR-VST3?
+SDR-VST3 is a fork of Thetis (the OpenHPSDR software-defined radio console application) that adds built-in VST3 audio plugin support to ham radio operations. It allows operators to insert professional audio plugins (EQs, compressors, gates, limiters, noise reduction, etc.) into both the RX (receive) and TX (transmit) signal chains — similar to how a DAW works, but for live radio signal processing.
+Originally called "Thetis Plus", it was rebranded to SDR-VST3 in v4.1 (at the suggestion of Thetis maintainer Richie MW0LGE) to run as a fully independent, side-by-side installation alongside standard Thetis.
 
 Key changes in this release:
 - New name, new look — The fork is now called "SDR-VST3" with updated splash screen, app icon, and installer artwork.
@@ -26,12 +18,8 @@ Install the MSI like any other Windows program — the installer will walk you t
 
 
 This version of thetis has a built in vst plugin system it can only use vst3 plugins it can not use .vst or .vst2 plugins
-simply add the -vst flag to you shortcut to activate the plugin system
+the plugin system is enabled by default, no shortcut flag is needed
 it is only for 64bit systems there is no x86 32 bit version.
-
-example:
-
-<img width="536" height="696" alt="Screenshot 2026-07-26 205107" src="https://github.com/user-attachments/assets/c9a2abb9-74e0-482e-b2a7-f755bb30d239" />
 
 
 Special Thanks to chasingcoffee his hard work is what made this vst version possible  
@@ -52,152 +40,196 @@ Added front panel buttons to bypass RX VST and TX VST processing independently r
 
 
 
+Release 4
+ v2.10.3.15-4
+ 
+In this version of Thetis plus with built in vst host we have added meter gadgets that can load a list of your active plugins for easy access from the front console just click the plugin and the editor instantly opens right from your console you can setup a container for rx and one for tx or load them both in one container however you choose.
+
+Also included in this version are the opensource linux studio plugins to give you something to start with right out of the box there are much better paid plugins available but these are free and can get you going right away they include various eqs compressors gates dynamics limiters etc.. a full package of plugins
+
+
+
+
+Version 4.1 Rebrand to avoid confusion
+ V4.1
+
+After a brief discussion with Richie [MW0LGE] who maintains the last version of Thetis v2.10.3.15 which this software fork is based on
+He suggested a rebrand to keep versions from becoming confusing among other issues.
+He also suggested it should be its own install databases etc. as to be able to run side by side with Thetis and not overwrite it.
+
+
+Key changes in this release:
+
+New name, new look — The fork is now called "SDR-VST3" with updated splash screen, app icon, and installer artwork.
+It now Installs side-by-side — It installs as its own separate program, so it won't overwrite or conflict with an existing Thetis installation. You can run both. (Understand there's No guarantees here that i didn't miss something but in my own testing everything works separately as it should)
+Separate settings — It keeps its own data folder (SDR-VST3-x64), so your VST chains and settings don't get mixed up with the original Thetis.
+Fresh version numbering — Versioning now starts clean at v4.1, so it's easy to tell releases apart.
+Install the MSI like any other Windows program — the installer will walk you through it.
+
+
+
+
+ V4.2 all new user interface
+
+ 
+Big shoutout to Ben Shapiro aka Chasing coffee for the new rack user interface and the mini rack user interface for the meter gadgets
+
+VST Rack Gadgets
+
+Added new TX and RX VST Plugin gadgets to the meter system. Instead of the old plain text plugin list, each gadget now shows the interactive rack: one row per plugin with artwork, a status light, and buttons to enable/disable, bypass/unbypass, open the editor, remove, or reorder plugins with a drag. A chain that's bypassed dims the whole rack.
+Gadgets are added from Setup, and persist across restarts, and can be floated into their own window and placed anywhere (including another monitor) using the float button that appears when you hover over the top right corner.
+Bypass & Enable sync
+
+Enabling or bypassing a plugin (or the whole chain) now stays in sync everywhere at once: the rack gadgets, the chain manager, and the TX/RX VST bypass buttons on the main screen all update together, no matter which one you use.
+Cleaner help
+
+Hovering over rack controls now shows a short tooltip explaining what each button does (e.g. "Bypass plugin",
+
+
+
+V4.3 updated to wdsp 2.00
+ 
+What's new in this build
+
+Tonight we upgraded the engine that powers SDR-VST3 — the digital signal processing core that does the heavy lifting for receiving, filtering, and noise reduction.
+
+This newer engine (WDSP 2.00) modernizes the foundation underneath features you already use, including noise reduction, the audio equalizer/compressor, the spectrum display, and PureSignal's automatic transmit-signal correction.
+
+We also:
+
+Removed the need for the -vst flag to start in vst mode vst mode is the default now so no need to modify the shortcut any longer
+Fixed a startup crash that could affect people with existing saved settings — your old profiles now load cleanly.
+Fixed the Phase Rotator panel on the CFC tab, which was slightly too small and was clipping its new controls.
+Confirmed SDR-VST3 is fully self-contained. It keeps its own settings folder, saved data, and even its own recording and firewall entries, so you can install and run it side-by-side with a normal Thetis installation without the two mixing up or overwriting each other's settings.
+
+No need to start over — if you already have SDR-VST3 installed, your existing profiles and tuned-up radio performance carry straight over.
+Thanks to Yurij-eu2av for the WDSP 2.00 integration work, and to ChasingCoffee for the original VST3 host support, which this project builds on.
+It is not 100% Required to rebuild your wisdom file but if you know how you should its as simple as deleting it and when you start up again it will build a new one.
+It is usually located at C:\Users"your username"\AppData\Roaming\OpenHPSDR\SDR-VST3-x64
+
+
+V4.4 VST Routing for TCI and VAC Audio Visual changes
+  
+VST Routing for TCI and VAC Audio
+You can now decide whether audio going to/from your virtual sound cards (VAC) and TCI software passes through Thetis's VST effects (EQ, compressors, etc.) or stays "raw" and untouched.
+
+On the VAC audio options tab — Apply RX VST and Apply TX VST checkboxes for each VAC send your receive or transmit audio through the VST chains instead of the raw audio.
+On the TCI network tab — Apply RX VST and Apply TX VST checkboxes do the same for audio going to/from TCI-connected software.
+Each one is a simple checkbox, defaulting to off, so your sound stays exactly as it is today until you turn it on. Use them when you want software to hear your processed audio rather than the dry input.
+Visual changes
+
+The on-screen grid lines
+Fresh installs of SDR-VST3 now start with the "Display Major Grid" and "Display Minor Grid" lines turned off by default, so the screen looks cleaner out of the box.
+existing users settings are left completely alone. If you already had the grids on, they stay on. Only brand-new installs see them off.
+You can still turn the grids on/off any time in the Setup → Appearance → RX Display screen.
+
+New skin
+New installs use the new SDRVST3 Skin automatically.
+If you are upgrading from an older version you will get a one time popup after install of the new version.
+
+
+
+V4.5 Transmit profile organizer and 3d panadapter
+
+What's new in this version:
+
+3D Spectrum Display — Your panadapter now has a retro-future 3D waterfall view with stacked perspective traces You can adjust perspective, depth, ridge height, speed, and atmospheric haze to taste.
+Waterfall Color Sync option — The 3D display automatically uses your waterfall's color scheme, so everything looks cohesive.
+3D Spectrum can also use color of your choosing or use the standard Thetis gradient.
+WDSP 2.00 Engine — Upgraded the underlying DSP engine for better performance.
+TX Profile Reordering — Cleaner transmit profile management.
+Please Note:
+The 3d spectrum display is still a work in progress if your experience any DirectX related crashes let me know and if possible provide a screenshot of the error.
+
+
+
+V4.6 .NET 10 NEW GRAPHICS ENGINES
+
+What's New in this version
+
+Modernized Foundation (Still a work in progress)
+
+The application has been upgraded to the latest .NET 10 platform — bringing faster startup, better performance, improved security, and a future-proof base for continued development.
+
+The entire graphics system has been migrated from an outdated, no-longer-maintained DirectX library (SlimDX) to the modern, actively developed Vortice framework. All display drawing — panadapter, waterfall, meters, and scopes — now runs through this updated pipeline.
+
+A built-in safety net automatically falls back from GPU-accelerated to CPU-based drawing if a graphics driver problem is detected, so the display keeps working on problematic systems.
+
+Internal settings storage has been moved to a cleaner, more reliable modern format.
+
+Numerous low-level memory-safety improvements make crashes caused by the old code far less likely.
+
+-Redesigned 3D Panadapter
+Look and accuracy
+
+The 3D "waterfall history" display now uses proper perspective, ridges shrink and fade into the distance as they move back in time, giving a much stronger sense of depth.
+
+The live trace at the front is drawn to exactly the same scale as the 3D surface behind it, so signals no longer appear twice or "jump up" between the trace and the history.
+
+Hills and peaks are shaded by steepness — sharp signals catch the light, flat noise stays subdued — making the terrain easier to read at a glance.
+New control
+
+Floor Lift: raises the noise floor up into view so weak signals sitting just above the noise become visible instead of being buried flat against the bottom. Defaults to 0.90.
+Colors
+
+Waterfall Sync now reliably overrides every color option (colormaps, gradients, line colors), so the 3D surface always matches your waterfall palette when enabled.
+Performance
+
+-Faster, smoother display thanks to your graphics card
+Parts of the spectrum display that were previously drawn piece-by-piece by your computer's main processor are now rendered by the graphics card (GPU) in one go.
+This is an optional experiment — tick the "GPU mesh (exp.)" box in Setup → Display to try it. Everything looks the same as before; it's just lighter on your PC.
+
+Waterfall: now scrolls via the graphics card instead of being shuffled around in memory.
+
+Spectrum fill: the shaded area under the signal trace is now drawn as a single graphics-card operation instead of hundreds of individual pencil strokes.
+
+3D history surface: view is also GPU-accelerated when in experimental mode.
+
+-Neon glow for the signal trace
+The live spectrum trace can now have a soft neon-style glow around it. Turn it on under the Appearance/RX Display tab the strength of the blur is adjustable with the data line slider.
+It's rendered efficiently on the graphics card, and switches itself off automatically on machines where it would be too slow.
+
+Safety Net
+If the graphics path hits any problem — driver hiccups, window resizing, unsupported hardware — the display instantly falls back to the original drawing method.
+You should never see a stuck or missing display; worst case, it simply behaves exactly like it did before this update.
+
+
+
+
+v4.7 Latest GPU compute shaders dual zoom controls
+
+What's New — v4.7.0
+
+Independent RX1/RX2 pan and zoom controls — separate pan sliders, zoom sliders, center buttons, zoom-to-band presets, and recenter button for each receiver
+-Automatic update checker offering download of new version if available
+
+GPU Compute Shaders Waterfall color conversion moved to GPU compute shader — dBm-to-BGRA lookup runs entirely on the graphics card via HLSL, eliminating per-row CPU color math experimental for now enable gpu dhsders under Display/General DirectX setting best performance will be seen with both this and mesh enabled
+
+Spectrum normalization moved to GPU compute shader — peak-height calculation for panadapter fill runs on the GPU instead of the CPU column loop
+
+Both pipelines have full CPU fallback — if GPU compute fails, the existing CPU paths take over automatically
+
+Pipeline uses Texture2D staging with CopySubresourceRegion for reliable GPU↔CPU data transfer (works on AMD and NVIDIA)
+
+LUT is uploaded once per color-scheme/threshold change, not per frame
+GPU Fallback Architecture
+
+Graceful HW → WARP → CPU rendering chain on device loss or driver errors
+
+Runtime GPU diagnostic log toggle (Options → options3→ Diagnostics → "Log GPU mesh events")
+
+Error dialog capture logging — DX init errors, startup exceptions, and dialog text all written to ErrorLog.txt with version, render path, and stack trace
+
+-Crash Safety Net
+Unhandled exception handler catches and logs crashes with full stack trace to ErrorLog.txt before exit
+Display Improvements
+
+Waterfall gradient LUT upgraded from 101 to 1024 steps — eliminates color banding on Custom schemes
+
+CI release pipeline
+
+
+
 <br><br>
 
 See LICENSE and LICENSE-DUAL-LICENSING for licensing details.
-
-# This project is now active again for some big changes that are on the way related to remote op - 2nd July 2026
-
-Development is continuing for remote op access, with a full permission and state system, display codecs, opus support, remote web client (MW0LGE), remote windows client (OE3IDE). TCI will support WS and WSS connections. This is being implemented natively in Thetis and will not require 3rd party solutions.
-
-ETA - when it is done, perhaps a few months from now.
-
-73 MW0LGE - Richie.
-
-<img width="1700" height="1072" alt="image" src="https://github.com/user-attachments/assets/ae8e576e-d266-4dc7-8d49-fdb8283cdca5" />
-
-# This project is now archived - 2nd April 2026
-
-This fork of the original Thetis, which I started tinkering with in 2019, has now been archived. I will not be performing maintenance or adding features to it for the foreseeable future. Whilst I may return to it from time to time for minor fixes and/or if I develop something for personal use that I feel may also benefit others, active development has stopped.
-
-There are a number of technical issues that would need to be addressed in order to take the project forward. The codebase still depends on an older .NET Framework version (4.8), which is increasingly outdated and is beginning to fall out of support with other libraries used by the project. Rendering is also based on SharpDX, which is itself an archived project. Although moving to a more modern rendering engine would be desirable, many suitable replacements do not properly support the older .NET Framework this fork relies on.
-
-Work on multiple RX slices is also on hold, as that would require a rewrite of the display engine. Given that the current display engine is based on SharpDX, it would not seem prudent to invest that effort into an archived and outdated library.
-
-The project is gradually falling behind, and bringing it up to date would require a substantial amount of rework. I have therefore decided to archive this repository and focus my efforts elsewhere. Thetis is hopefully a better experience than it once was, and with recent milestones now reached, including TCI audio/IQ streaming, the voice keyer, and radio network/detection improvements, I feel this is a good point to call it "done".
-
-Cheers to all who have enjoyed the ride, helped test, and found bugs. With the progression of AI, perhaps in a few years we will be able to ask it to 'modernise the project'. Time will tell.
-
-73  
-MW0LGE - Richie
-
-
-# Latest Release v2.10.3.13 - 1st April 2026
-https://github.com/ramdor/Thetis/releases/tag/v2.10.3.13
-
-# Latest Release v2.10.3.5 December, 24th 2023
-https://github.com/ramdor/Thetis/releases/tag/v2.10.3.5
-
-# 2.10.3.4 (2023-19-11)
-https://github.com/ramdor/Thetis/releases/tag/v2.10.3.4
-
-# 2.10.3.3 (2023-03-11)
-https://github.com/ramdor/Thetis/releases/tag/v2.10.3.3
-
-# 2.10.3.2 (2023-03-11)
-https://github.com/ramdor/Thetis/releases/tag/v2.10.3.2
-
-# 2.10.3.1 (2023-03-11)
-https://github.com/ramdor/Thetis/releases/tag/v2.10.3.1
-
-# 2.10.3 (2023-02-11)
-https://github.com/ramdor/Thetis/releases/tag/v2.10.3
-
-# 2.10.2.2 (2023-13-10)
-
-# 2.10.2.1 (2023-11-10)
-
-# 2.10.2 (2023-11-10)
-
-# 2.10.0 (2023-19-06)
-
-# 2.9.0 (2022-03-04)
-See [ Thetis Change Log ](https://github.com/TAPR/OpenHPSDR-Thetis/blob/master/Thetis%20v2.9.0%20Change%20Log.pdf) for more details.
-
-# 2.8.11 (2020-20-10)
-See [ Thetis Change Log ](https://github.com/TAPR/OpenHPSDR-Thetis/blob/master/Thetis%20v2.8.11%20Change%20Log.pdf) for more details.
-
-# 2.8.9 (2020-13-10)
-See [ Thetis Change Log ](https://github.com/TAPR/OpenHPSDR-Thetis/blob/master/Thetis%20v2.8.9%20Change%20Log.pdf) for more details.
-
-# 2.8.8 (2020-10-10)
-See [ Thetis Change Log ](https://github.com/TAPR/OpenHPSDR-Thetis/blob/master/Thetis%20v2.8.8%20Change%20Log.pdf) for more details.
-
-# 2.8.7 (2020-10-7)
-See [ Thetis Change Log ](https://github.com/TAPR/OpenHPSDR-Thetis/blob/master/Thetis%20v2.8.7%20Change%20Log.pdf) for more details.
-
-# 2.8.6 (2020-10-6)
-See [ Thetis Change Log ](https://github.com/TAPR/OpenHPSDR-Thetis/blob/master/Thetis%20v2.8.6%20Change%20Log.pdf) for more details.
-
-# 2.7.0 Not Officially Released
-
-# 2.6.9 (2020-1-24)
-See [ Thetis Change Log ](https://github.com/TAPR/OpenHPSDR-Thetis/blob/master/Thetis%20v2.6.9%20Change%20Log.pdf) for more details.
-
-# 2.6.8 (2019-11-3)
-See [ Thetis Change Log ](https://github.com/TAPR/OpenHPSDR-Thetis/blob/master/Thetis%20v2.6.8%20Change%20Log.pdf) for more details.
-
-# 2.6.7 (2019-4-29)
-- fixed bug where the VOX/DEXP LookAhead feature was enabled when VOX/DEXP was not.
-- corrected compatiblity issue with the ANAN-10E. This requires new firmare to be flashed. v10.3
-- corrected the Spectrum and Histogram diplay during transmit
-
-# 2.6.6 (2019-4-21)
-- corrects issue with EU region using commas
-- corrects issue with having out of band frequency on startup
-- fixed transmit filter not being displayed when using split
-
-# 2.6.5 (2019-4-18)
-- corrected issue with console remaining open after exiting Thetis
-- fixed problem of program crashing when recording while transmitting
-- fixed problem with program crashing when receiving a bad packet
-
-# 2.6.4 (2019-4-13)
-- improved VOX/DEXP features and performance
-- QSK cabibility for the ANAN-200D, 7000DLE, and 8000DLE models
-- fixed VAC1 startup problem
-- fixed VAC2 resampler problem
-- added option to use VAC2 on split
-- improved TX-RX and RX-TX transistion on voice modes
-- transverter T/R relay bug fixed
-- added control for BYPS-EXT1-XVTR RX ANT for 7000DLE
-
-  * see "Release Notes for 2-6-4.docx" for detailed information.
-
-# 2.6.0 (2018-4-10)
-- added diagnostic LED array
-- divided open collector controls into 3 groups (HF-VHF-SWL)
-- bug fix for step tune using MIDI
-
-# 2.5.9 (2018-3-29)
-- changed "MDECAY" constant to 0.99 in netInterface.c
-- added 2Hz step tune choice
-- corrected duplicate db import dialogs
-- modified behavior of sequence errors so that sequence errors are ignored for seq 0
-- changes to VAC includes tooltips for various controls, fix for the Output Ringbuffer latency Monitor control not working, and added the ability to reset the diagnostics
-- forced BPF1 into ByPass during transmit if PureSignal is enabled for Orion MkII boards only
-
-# 2.5.8 (2018-3-25)
-- changed "MDECAY" constant to 0.9 in netInterface.c
-- fixes for VFO A&B Lock 
-- NB/NB2 is turned OFF while transmitting when DUP is enabled
-- Added 2kHz Tune Step
-- Changed ANF behavior so that it is disabled when in CW mode
-- Removed the 750Hz CW filter and added a 150Hz CW filter
-- Increased display buffer to support larger than 4k displays
-
-# 2.5.7 (2018-3-25)
-- spectrum roll-off adjusted to clip 4%
-- calls to PeakFwdPower(…) and PeakRevPower(…) moved from netInterface.c to network.c
-- skin graphics added for chkRxAnt and chkVFOBLock controls
-
-# 2.5.6 (2018-3-25)
-- added MIDI/CAT updates
-- added independent VFO Locks
-
-# 2.5.5 (2018-3-24)
-- added support for ANAN-7000DLE
-- added 'Rx Ant' support
-
-# 2.5.4 (2018-3-22)
-- added Audio Adaptive Variable Resampler with monitor tools

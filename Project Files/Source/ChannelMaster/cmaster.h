@@ -67,6 +67,7 @@ typedef struct _cmaster
 	void (*OutboundTCIRxIQ)(int id, int nsamples, double* buff);	// pointer to callback with receiver IQ samples
 	void (*InboundTCITxAudio)(int nsamples, double* buff);			// pointer to callback to fill TX audio input
 	volatile long tci_rx_out_run;											// run TCI RX IQ/audio callbacks
+	volatile long apply_tci_tx_vst;											// apply TX VST chain while TCI TX audio is the active source
 	void (*VstRxProcess)(double* buff, int frames);					// pointer to callback to process RX audio through VST chain
 	void (*VstTxProcess)(double* buff, int frames);					// pointer to callback to process TX audio through VST chain
 	void (*VstInitialize)(void);									// pointer to callback to initialize VST hosting
@@ -120,6 +121,7 @@ extern __declspec (dllexport) void SendpOutboundTCIRxIQ (void (*Outbound)(int id
 extern __declspec (dllexport) void SendpInboundTCITxAudio (void (*Inbound)(int nsamples, double* buff));
 extern __declspec (dllexport) void SetRXTCIRun (int active);
 extern __declspec (dllexport) void SetTXTCIAudioRun (int txid, int active);
+extern __declspec (dllexport) void SetTCIApplyTxVst (int apply);
 extern __declspec (dllexport) void SendpVstRxProcess (void (*Process)(double* buff, int frames));
 extern __declspec (dllexport) void SendpVstTxProcess (void (*Process)(double* buff, int frames));
 extern __declspec (dllexport) void SendpVstInitialize (void (*Init)(void));

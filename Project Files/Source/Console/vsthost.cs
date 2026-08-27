@@ -2040,7 +2040,6 @@ namespace Thetis
             {
                 VstPluginState desiredState = chainState.Plugins[i];
                 int index = addedIndexes[i];
-                VstPluginState liveState;
 
                 if (desiredState == null || index < 0)
                     continue;

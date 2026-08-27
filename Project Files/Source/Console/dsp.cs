@@ -783,6 +783,23 @@ namespace Thetis
         [DllImport("wdsp.dll", EntryPoint = "SetTXAPHROTReverse", CallingConvention = CallingConvention.Cdecl)]
         public static extern void SetTXAPHROTReverse(int channel, int reverse);
 
+        [DllImport("wdsp.dll", EntryPoint = "SetTXAPHROTAutoMode", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void SetTXAPHROTAutoMode(int channel, int autoMode);
+
+        [DllImport("wdsp.dll", EntryPoint = "SetTXAPHROTAutoReset", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void SetTXAPHROTAutoReset(int channel);
+
+        [DllImport("wdsp.dll", EntryPoint = "GetTXAPHROTAsymmetry", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void GetTXAPHROTAsymmetry(int channel,
+                                                       double* in_pos,
+                                                       double* in_neg,
+                                                       double* in_ratio,
+                                                       double* out_pos,
+                                                       double* out_neg,
+                                                       double* out_ratio,
+                                                       double* current_fc,
+                                                       double* auto_step);
+
         // TXEQ
         [DllImport("wdsp.dll", EntryPoint = "SetTXAEQProfile", CallingConvention = CallingConvention.Cdecl)]
         public static extern void SetTXAEQProfile(int channel, int nfreqs, double* F, double* G, double* Q);
@@ -790,10 +807,6 @@ namespace Thetis
         // RXEQ
         [DllImport("wdsp.dll", EntryPoint = "SetRXAEQProfile", CallingConvention = CallingConvention.Cdecl)]
         public static extern void SetRXAEQProfile(int channel, int nfreqs, double* F, double* G, double* Q);
-
-        // GetTXACFCOMPGainAndMask
-        [DllImport("wdsp.dll", EntryPoint = "GetTXACFCOMPGainAndMask", CallingConvention = CallingConvention.Cdecl)]
-        public static extern void GetTXACFCOMPGainAndMask(int channel, double* gain_values, double* mask_values, int* ready);
 
         // GetTXACFCOMPDisplayCompression
         [DllImport("wdsp.dll", EntryPoint = "GetTXACFCOMPDisplayCompression", CallingConvention = CallingConvention.Cdecl)]
