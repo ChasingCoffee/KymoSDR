@@ -32630,7 +32630,7 @@ namespace Thetis
                                     if (!resizeDX(out string err))
                                     {
                                         ShutdownDX();
-                                        MessageBox.Show("Unable to resize DirectX render target (target size changed). DirectX has been shut down.\n\n" + err, "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                                        MessageBox.Show("Unable to resize DirectX render target (target size changed). DirectX has been shut down.\n\n" + err, "SDR-VST3 DirectX", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                                         break;
                                     }
                                 }

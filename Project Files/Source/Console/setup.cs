@@ -1969,7 +1969,7 @@ namespace Thetis
                 string val = a["comboRadioModel"];
                 if (!comboRadioModel.Items.Contains(val))
                 {
-                    DialogResult dr = MessageBox.Show($"The radio model stored in the database is not known by this version of Thetis [{val}]. \n\nAre you using the correct version ? It will be reset back to HERMES.",
+                    DialogResult dr = MessageBox.Show($"The radio model stored in the database is not known by this version of SDR-VST3 [{val}]. \n\nAre you using the correct version ? It will be reset back to HERMES.",
                     "Model version issue",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
@@ -2515,6 +2515,7 @@ namespace Thetis
             chkSpectrumGlow_CheckedChanged(this, e);
             chkGpuMesh3D_CheckedChanged(this, e);
             chkGpuComputeShaders_CheckedChanged(this, e);
+            chkGpuOverlay_CheckedChanged(this, e);
             udDisplayDecimation_ValueChanged(this, e);
             udDisplayGridMax_ValueChanged(this, e);
             udDisplayGridMin_ValueChanged(this, e);
@@ -19921,6 +19922,12 @@ namespace Thetis
             Display.GpuComputeEnabled = chkGpuComputeShaders.Checked;
         }
 
+        private void chkGpuOverlay_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            Display.GpuOverlayEnabled = chkGpuOverlay.Checked;
+        }
+
         private void chkMeshDiagLog_CheckedChanged(object sender, EventArgs e)
         {
             Common.MeshDiagLogEnabled = chkMeshDiagLog.Checked; // MW0LGE_22x runtime toggle, no restart needed
@@ -34630,7 +34637,7 @@ namespace Thetis
                 return;
             }
             // ask user
-            DialogResult dr = MessageBox.Show("This test will change lots of settings, modes, band, resolution, sample rates, etc etc, to maintain consistancy between tests.\n\nPlease use a FRESH database using the DB manager for this test, with just radio model, region and connection details changed. You should be able to connect and power on/off using Thetis. Failure to do so may result in unexpected changes to configuration. No transmissions will be made.\n\nDo you want to perform this test?",
+            DialogResult dr = MessageBox.Show("This test will change lots of settings, modes, band, resolution, sample rates, etc etc, to maintain consistancy between tests.\n\nPlease use a FRESH database using the DB manager for this test, with just radio model, region and connection details changed. You should be able to connect and power on/off using SDR-VST3. Failure to do so may result in unexpected changes to configuration. No transmissions will be made.\n\nDo you want to perform this test?",
                 "FPS Profile Test",
                 MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2, Common.MB_TOPMOST);

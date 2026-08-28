@@ -463,7 +463,7 @@ namespace Thetis
 
             public LogForm()
             {
-                Text = "Thetis Startup Log";
+                Text = "SDR-VST3 Startup Log";
                 StartPosition = FormStartPosition.Manual;
                 Size = new Size(400, 680);
                 FormBorderStyle = FormBorderStyle.FixedToolWindow;

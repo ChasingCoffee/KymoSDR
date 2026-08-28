@@ -615,7 +615,7 @@ namespace Thetis
             this.Opacity = 0f; // FadeIn below. Note: console form has 0% set in form designer
 
             LogTool.ShowNewLog(this.Handle);
-            LogTool.AddLogEntry("Thetis is loading...", "THET", false);
+            LogTool.AddLogEntry("SDR-VST3 is loading...", "THET", false);
 
             Display.specready = false;
             bool bShowReleaseNotes = false;
@@ -3999,7 +3999,7 @@ namespace Thetis
                         }
                         else
                         {
-                            DialogResult dr = MessageBox.Show($"The version of hardware stored in the database is not known by this version of Thetis [{hw.ToString()}]. Are you using the correct version ?",
+                            DialogResult dr = MessageBox.Show($"The version of hardware stored in the database is not known by this version of SDR-VST3 [{hw.ToString()}]. Are you using the correct version ?",
                             "Hardware version issue",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
@@ -21542,7 +21542,7 @@ namespace Thetis
 
             if (_check_for_bad_adc && adc_oload_num == -1)
             {
-                MessageBox.Show("There has been an issue obtaining the ADC overload state. This will not be performed until the power is turned off/on inside Thetis.",
+                MessageBox.Show("There has been an issue obtaining the ADC overload state. This will not be performed until the power is turned off/on inside SDR-VST3.",
                     "ADC Overload Issue",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);

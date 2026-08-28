@@ -1382,7 +1382,7 @@ namespace Thetis
                         if (!resizeDX2D(out string err))
                         {
                             ShutdownDX2D();
-                            Common.ReportError("Thetis DirectX", "Unable to resize DirectX render target (Target). DirectX has been shut down.\n\n" + err);
+                            Common.ReportError("SDR-VST3 DirectX", "Unable to resize DirectX render target (Target). DirectX has been shut down.\n\n" + err);
                             return;
                         }
 
@@ -3566,6 +3566,7 @@ namespace Thetis
                     ReleaseGpuMeshDeviceObjects();
                     ReleaseWaterfallMeshObjects();
                     ReleaseSpectrumFillObjects();
+                    ReleaseSpectrumOverlayObjects();
                     ReleaseComputeResources();
                     _backBufferBitmap?.Dispose();
                     _d2dRenderTarget = null;
@@ -3607,7 +3608,7 @@ namespace Thetis
                 }
                 catch (Exception e)
                 {
-                    Common.ReportError("Thetis DirectX", "Problem Shutting Down DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", e);
+                    Common.ReportError("SDR-VST3 DirectX", "Problem Shutting Down DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", e);
                 }
             }
         }
@@ -3841,7 +3842,7 @@ namespace Thetis
                 {
                     // issue setting up dx
                     ShutdownDX2D();
-                    Common.ReportError("Thetis DirectX", "Problem initialising DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", e);
+                    Common.ReportError("SDR-VST3 DirectX", "Problem initialising DirectX !" + System.Environment.NewLine + System.Environment.NewLine + "[" + e.ToString() + "]", e);
                 }
             }
         }
@@ -3961,6 +3962,7 @@ namespace Thetis
             ReleaseGpuMeshDeviceObjects();
             ReleaseWaterfallMeshObjects();
             ReleaseSpectrumFillObjects();
+            ReleaseSpectrumOverlayObjects();
             ReleaseComputeResources();
             _backBufferBitmap?.Dispose();
             _d2dRenderTarget = null;
@@ -4106,7 +4108,7 @@ namespace Thetis
                     if (!resizeDX2D(out string err))
                     {
                         ShutdownDX2D();
-                        Common.ReportError("Thetis DirectX", "Unable to resize DirectX render target (ResetDX2DModeDescription). DirectX has been shut down.\n\n" + err);
+                        Common.ReportError("SDR-VST3 DirectX", "Unable to resize DirectX render target (ResetDX2DModeDescription). DirectX has been shut down.\n\n" + err);
                         return;
                     }
 
@@ -4133,6 +4135,7 @@ namespace Thetis
                     releaseGlowLayer();
                     ReleaseGpuMeshFrameState();
                     ReleaseSpectrumFillFrameState();
+                    ReleaseSpectrumOverlayFrameState();
                     _backBufferBitmap?.Dispose();
                     _surface?.Dispose();
 
@@ -4176,7 +4179,7 @@ namespace Thetis
                 //    msg += "\n\nDeviceRemoved or DeviceReset reported by DirectX, this indicates a problem with the graphics device or its driver.\n\nRemoval Code : " + _device.DeviceRemovedReason.Code.ToString();
                 //}
                 //ShutdownDX2D();
-                //MessageBox.Show(msg, "Thetis DirectX", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                //MessageBox.Show(msg, "SDR-VST3 DirectX", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
 
                 error = e.Message;
                 error += "\n\nDeviceRemovedReason : " + _device.DeviceRemovedReason.ToString();
@@ -4778,7 +4781,7 @@ namespace Thetis
                 if (!tryWarpDowngrade(e.Message))
                 {
                     ShutdownDX2D();
-                    Common.ReportError("Thetis DirectX", "Problem in DirectX Renderer !" + System.Environment.NewLine + System.Environment.NewLine + "[ " + e.ToString() + " ]", e);
+                    Common.ReportError("SDR-VST3 DirectX", "Problem in DirectX Renderer !" + System.Environment.NewLine + System.Environment.NewLine + "[ " + e.ToString() + " ]", e);
                 }
             }
         }
@@ -5901,6 +5904,31 @@ namespace Thetis
                         glowSegs = new List<(Vector2, Vector2, ID2D1Brush, float)>(nDecimatedWidth);
                 }
 
+                // Tier 3 GPU spectral peak-hold overlay: renders the Active Peak
+                // Fill columns / peak trace line into an offscreen GPU sheet and
+                // composites it here - stacked right after the pana-fill sheet,
+                // i.e. the exact position of the per-column peak strokes it replaces
+                // (after fill, before line). Engages when the GPU panafill sheet also
+                // drew (or there is no panafill at all), so the stacking order stays
+                // identical to the D2D path on every combination. On the 3D pan the
+                // fill is the surface itself (no fill sheet), so the peak strokes stack
+                // straight over it - engage there regardless of the fill sheet state.
+                // The overlay draws ONLY the live front-edge peaks (current spectralPeaks
+                // + data, mapped via live3DMapping) - historical surface lines are never
+                // touched, mirroring the D2D strokes it replaces. Any failure leaves the
+                // D2D peak strokes in the column loop untouched (GPU fallback 1).
+                bool bOverlayMesh = false;
+                if (bSpectralPeakHold && spectralPeaks != null &&
+                    (draw3DHistory || bSpecFillMesh || !pan_fill))
+                {
+                    bOverlayMesh = TryRenderSpectrumOverlayMesh(rx, nVerticalShift, W, H,
+                        nDecimatedWidth, data, fOffset, grid_min, grid_max, spectralPeaks,
+                        bSpectralPeakHold, bActivePeakFill, line_width,
+                        live3DMapping, live3DBottomY, live3DRidge, live3DZCurve);
+                    if (bOverlayMesh)
+                        BlitSpectrumOverlayMesh(rx, nVerticalShift, W, H);
+                }
+
                 for (int i = 0; i < nDecimatedWidth; i++)
                 {
                     point.X = i * local_Decimation;
@@ -6214,11 +6242,13 @@ namespace Thetis
 
                             if (bActivePeakFill)
                             {
-                                _d2dRenderTarget.DrawLine(point, spectralPeakPoint, fillPeaksBrush, local_Decimation);
+                                if (!bOverlayMesh)
+                                    _d2dRenderTarget.DrawLine(point, spectralPeakPoint, fillPeaksBrush, local_Decimation);
                             }
                             else
                             {
-                                _d2dRenderTarget.DrawLine(oldSpectralPeakPoint, spectralPeakPoint, fillPeaksBrush, line_width);
+                                if (!bOverlayMesh)
+                                    _d2dRenderTarget.DrawLine(oldSpectralPeakPoint, spectralPeakPoint, fillPeaksBrush, line_width);
                                 oldSpectralPeakPoint = spectralPeakPoint;
                             }
 

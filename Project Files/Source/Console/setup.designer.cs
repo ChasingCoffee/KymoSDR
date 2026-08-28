@@ -2013,6 +2013,7 @@
             this.chkForceCPURendering = new System.Windows.Forms.CheckBoxTS();
             this.chkGpuMesh3D = new System.Windows.Forms.CheckBoxTS();
             this.chkGpuComputeShaders = new System.Windows.Forms.CheckBoxTS();
+            this.chkGpuOverlay = new System.Windows.Forms.CheckBoxTS();
             this.chkSpectrumGlow = new System.Windows.Forms.CheckBoxTS();
             this.chkAccurateFrameTiming = new System.Windows.Forms.CheckBoxTS();
             this.chkAntiAlias = new System.Windows.Forms.CheckBoxTS();
@@ -11117,7 +11118,7 @@
             this.chkAutoLaunchTryToClose.Size = new System.Drawing.Size(81, 17);
             this.chkAutoLaunchTryToClose.TabIndex = 36;
             this.chkAutoLaunchTryToClose.Text = "Try to close";
-            this.toolTip1.SetToolTip(this.chkAutoLaunchTryToClose, "Thetis will try to close everything it has opened at launch. This will be done on" +
+            this.toolTip1.SetToolTip(this.chkAutoLaunchTryToClose, "SDR-VST3 will try to close everything it has opened at launch. This will be done on" +
         " shutdown.");
             this.chkAutoLaunchTryToClose.UseVisualStyleBackColor = true;
             // 
@@ -33251,6 +33252,7 @@
             this.grpDisplayDriverEngine.Controls.Add(this.chkForceCPURendering);
             this.grpDisplayDriverEngine.Controls.Add(this.chkGpuMesh3D);
             this.grpDisplayDriverEngine.Controls.Add(this.chkGpuComputeShaders);
+            this.grpDisplayDriverEngine.Controls.Add(this.chkGpuOverlay);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAccurateFrameTiming);
             this.grpDisplayDriverEngine.Controls.Add(this.chkAntiAlias);
             this.grpDisplayDriverEngine.Controls.Add(this.comboDisplayThreadPriority);
@@ -33315,6 +33317,20 @@
             this.toolTip1.SetToolTip(this.chkGpuComputeShaders, "Experimental: offloads waterfall colour conversion and spectrum normalisation to GPU compute shaders.\n\nHardware rendering only - automatically falls back to the CPU paths on WARP or if any compute pipeline fails.");
             this.chkGpuComputeShaders.UseVisualStyleBackColor = true;
             this.chkGpuComputeShaders.CheckedChanged += new System.EventHandler(this.chkGpuComputeShaders_CheckedChanged);
+
+            // 
+            // chkGpuOverlay
+            // 
+            this.chkGpuOverlay.AutoSize = true;
+            this.chkGpuOverlay.Image = null;
+            this.chkGpuOverlay.Location = new System.Drawing.Point(8, 100);
+            this.chkGpuOverlay.Name = "chkGpuOverlay";
+            this.chkGpuOverlay.Size = new System.Drawing.Size(131, 17);
+            this.chkGpuOverlay.TabIndex = 54;
+            this.chkGpuOverlay.Text = "GPU overlay (exp.)";
+            this.toolTip1.SetToolTip(this.chkGpuOverlay, "Experimental: renders the spectral peak-hold overlay (Active Peak Fill columns and peak trace line) as a GPU sheet.\n\nHardware rendering only, alongside the GPU panafill sheet - automatically falls back to the D2D peak strokes on WARP or if any overlay pipeline fails.");
+            this.chkGpuOverlay.UseVisualStyleBackColor = true;
+            this.chkGpuOverlay.CheckedChanged += new System.EventHandler(this.chkGpuOverlay_CheckedChanged);
             // 
             // chkSpectrumGlow
             // 
@@ -42598,7 +42614,7 @@
             this.btnNR3_model_load.Size = new System.Drawing.Size(75, 23);
             this.btnNR3_model_load.TabIndex = 2;
             this.btnNR3_model_load.Text = "Use Model";
-            this.toolTip1.SetToolTip(this.btnNR3_model_load, "Select a model that RNnoise will use. Note: if the format is bad, Thetis will pro" +
+            this.toolTip1.SetToolTip(this.btnNR3_model_load, "Select a model that RNnoise will use. Note: if the format is bad, SDR-VST3 will pro" +
         "bably crash !");
             this.btnNR3_model_load.UseVisualStyleBackColor = true;
             this.btnNR3_model_load.Click += new System.EventHandler(this.btnNR3_model_load_Click);
@@ -46887,7 +46903,7 @@
             this.chkTXInhibit.Size = new System.Drawing.Size(161, 16);
             this.chkTXInhibit.TabIndex = 68;
             this.chkTXInhibit.Text = "Update with TX Inhibit state";
-            this.toolTip1.SetToolTip(this.chkTXInhibit, "Thetis will update on TX inhibit state change");
+            this.toolTip1.SetToolTip(this.chkTXInhibit, "SDR-VST3 will update on TX inhibit state change");
             this.chkTXInhibit.CheckedChanged += new System.EventHandler(this.chkTXInhibit_CheckedChanged);
             // 
             // chkTXInhibitReverse
@@ -46908,8 +46924,8 @@
             this.chkSaveTXProfileOnExit.Name = "chkSaveTXProfileOnExit";
             this.chkSaveTXProfileOnExit.Size = new System.Drawing.Size(215, 18);
             this.chkSaveTXProfileOnExit.TabIndex = 67;
-            this.chkSaveTXProfileOnExit.Text = "Auto Save TX Profile on Thetis close";
-            this.toolTip1.SetToolTip(this.chkSaveTXProfileOnExit, "Automatically saves the current TX Profile when Thetis is closed");
+            this.chkSaveTXProfileOnExit.Text = "Auto Save TX Profile on SDR-VST3 close";
+            this.toolTip1.SetToolTip(this.chkSaveTXProfileOnExit, "Automatically saves the current TX Profile when SDR-VST3 is closed");
             this.chkSaveTXProfileOnExit.CheckedChanged += new System.EventHandler(this.chkSaveTXProfileOnExit_CheckedChanged);
             // 
             // chkAutoSaveTXProfile
@@ -58750,7 +58766,7 @@
             this.chkUseRX1vfoaForRX2vfoa.Size = new System.Drawing.Size(206, 17);
             this.chkUseRX1vfoaForRX2vfoa.TabIndex = 19;
             this.chkUseRX1vfoaForRX2vfoa.Text = "Use RX1 VFOa for RX2 VFOa (in+out)";
-            this.toolTip1.SetToolTip(this.chkUseRX1vfoaForRX2vfoa, "Thetis does not have VFOa for RX2. Use RX1 VFOa for RX2 VFOa");
+            this.toolTip1.SetToolTip(this.chkUseRX1vfoaForRX2vfoa, "SDR-VST3 does not have VFOa for RX2. Use RX1 VFOa for RX2 VFOa");
             this.chkUseRX1vfoaForRX2vfoa.UseVisualStyleBackColor = true;
             this.chkUseRX1vfoaForRX2vfoa.CheckedChanged += new System.EventHandler(this.chkUseRX1vfoaForRX2vfoa_CheckedChanged);
             // 
@@ -58763,7 +58779,7 @@
             this.chkCopyRX2VFObToVFOa.Size = new System.Drawing.Size(215, 17);
             this.chkCopyRX2VFObToVFOa.TabIndex = 18;
             this.chkCopyRX2VFObToVFOa.Text = "Duplicate RX2 VFOb to RX2 VFOa (out)";
-            this.toolTip1.SetToolTip(this.chkCopyRX2VFObToVFOa, "Thetis does not have VFOa for RX2. This option will duplicate vfob to vfoa");
+            this.toolTip1.SetToolTip(this.chkCopyRX2VFObToVFOa, "SDR-VST3 does not have VFOa for RX2. This option will duplicate vfob to vfoa");
             this.chkCopyRX2VFObToVFOa.UseVisualStyleBackColor = true;
             this.chkCopyRX2VFObToVFOa.CheckedChanged += new System.EventHandler(this.chkCopyRX2VFObToVFOa_CheckedChanged);
             // 
@@ -75387,6 +75403,7 @@
         private CheckBoxTS chkForceCPURendering;
         private CheckBoxTS chkGpuMesh3D;
         private CheckBoxTS chkGpuComputeShaders;
+        private CheckBoxTS chkGpuOverlay;
         private CheckBoxTS chkSpectrumGlow;
         private LabelTS lblBlobMS;
         private NumericUpDownTS udBlobPeakHoldMS;

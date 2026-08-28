@@ -10033,7 +10033,7 @@ Ctrl + Left Click on any Band Button adds to Stack</value>
     <value>138, 22</value>
   </data>
   <data name="thetisOnlyToolStripMenuItem.Text" xml:space="preserve">
-    <value>Thetis Only</value>
+    <value>SDR-VST3 Only</value>
   </data>
   <data name="toolStripDropDownButton_CPU.Font" type="System.Drawing.Font, System.Drawing">
     <value>Microsoft Sans Serif, 8.25pt, style=Bold</value>

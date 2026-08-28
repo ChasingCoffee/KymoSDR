@@ -99,7 +99,7 @@ namespace Thetis
             if (!Common.IsAdministrator())
             {
                 //msgbox need to be admin !
-                MessageBox.Show("To reset Thetis firewall entries please run Thetis 'As Administrator'.", "Firewall - No Administrator Rights", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
+                MessageBox.Show("To reset SDR-VST3 firewall entries please run SDR-VST3 'As Administrator'.", "Firewall - No Administrator Rights", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, Common.MB_TOPMOST);
                 return;
             }
 

@@ -254,7 +254,7 @@ Reboot after the change is made.</value>
 </value>
   </data>
   <data name="labelTS295.Text" xml:space="preserve">
-    <value>- Any changes made here will only apply after Thetis is restarted
+    <value>- Any changes made here will only apply after SDR-VST3 is restarted
 - If VAC is enabled input will be taken from the VAC and not cmASIO
 - If a red cmASIO icon is shown in the status bar there is an issue
 - The ASIO device will not be available to VAC if in use by cmASIO
