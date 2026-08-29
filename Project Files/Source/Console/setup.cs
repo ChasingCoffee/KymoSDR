@@ -1476,6 +1476,9 @@ namespace Thetis
             if (this.WindowState != FormWindowState.Normal) this.WindowState = FormWindowState.Normal; //MW0LGE_21i
 
             base.Show();
+
+            chkForceATTwhenOutPowerChanges_decreased.Left = chkForceATTwhenOutPowerChanges.Right - chkForceATTwhenOutPowerChanges_decreased.Width;
+            chkUndoAutoATTTx.Left = chkAutoATTTXPsOff.Right - chkUndoAutoATTTx.Width;
         }
         public new void Hide()
         {
