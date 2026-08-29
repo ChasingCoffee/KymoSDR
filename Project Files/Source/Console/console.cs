@@ -29722,6 +29722,13 @@ namespace Thetis
         private PreampMode temp_mode = PreampMode.HPSDR_OFF; // HPSDR preamp mode
         private PreampMode temp_mode2 = PreampMode.HPSDR_OFF; // HPSDR preamp mode
 
+        // courtesy tone: true when a release tone is holding the tx keyed until the wav finishes
+        private bool _courtesy_tone_release_pending = false;
+        // courtesy tone: true during the pass that finally performs the release (re-entrancy guard)
+        private bool _courtesy_tone_release_completing = false;
+        // courtesy tone: true while the tone is streaming through WDSP (tx start or tx release)
+        private bool _is_courtesy_tone_playing = false;
+
         private bool _forceATTwhenPSAoff = true; //MW0LGE [2.9.0.7] added
         public bool ForceATTwhenPSAoff
         {
@@ -29757,6 +29764,19 @@ namespace Thetis
                 chkMOX.Checked = false;
                 chkMOX.CheckedChanged += chkMOX_CheckedChanged2;
                 return;
+            }
+
+            // courtesy tone: on tx release, cut any tone streaming from tx start, then play the release tone
+            // and hold the transmitter keyed until that release tone has finished.
+            if (!chkMOX.Checked && _mox && CourtesyToneOnRelease && !_courtesy_tone_release_pending
+                && !_courtesy_tone_release_completing && courtesyToneOkForMode())
+            {
+                if (_is_courtesy_tone_playing) stopCourtesyTone();
+                if (startCourtesyTone(CourtesyToneEndFile, CourtesyToneEndVolumeDb))
+                {
+                    _courtesy_tone_release_pending = true;
+                    return;
+                }
             }
 
             bool bOldMox = _mox; //MW0LGE_21b used for state change delgates at end of fn
@@ -29804,6 +29824,12 @@ namespace Thetis
 
             if (tx)
             {
+                // courtesy tone: re-keyed whilst the release tone was playing - cancel the hold, transmit normally
+                if (_courtesy_tone_release_pending)
+                {
+                    _courtesy_tone_release_pending = false;
+                    stopCourtesyTone();
+                }
                 //FM Offsets
                 if (radio.GetDSPTX(0).CurrentDSPMode == DSPMode.FM && current_fm_tx_mode != FMTXMode.Simplex
                     && !chkVFOSplit.Checked)
@@ -30036,9 +30062,22 @@ namespace Thetis
                 }
                 else
                     AudioMOXChanged(tx);    // set MOX in audio.cs
+
+                // courtesy tone at the start of transmission
+                if (CourtesyToneOnStart && !_courtesy_tone_release_pending && courtesyToneOkForMode())
+                {
+                    startCourtesyTone(CourtesyToneStartFile, CourtesyToneStartVolumeDb);
+                }
             }
             else                        // change to RX mode
             {
+                _courtesy_tone_release_completing = false; // courtesy tone release in progress (re-entrancy guard) has completed
+                // cut any courtesy tone still streaming (e.g. the tone played at tx start) - tx releases immediately
+                if (_is_courtesy_tone_playing)
+                {
+                    stopCourtesyTone();
+                }
+
                 if (space_mox_delay > 0)
                     Thread.Sleep(space_mox_delay); // default 0 // from PSDR MW0LGE
 
@@ -45084,6 +45123,96 @@ namespace Thetis
             //if (bLoadedOk) QSOTimerAudioPlayer.Play();
         }
 
+        #region CourtesyTone
+        // courtesy tone - a wav played over the air at tx start (optional) and/or on tx release (tx held until the tone finishes)
+        private bool _courtesy_tone_on_start = false;
+        public bool CourtesyToneOnStart
+        {
+            get { return _courtesy_tone_on_start; }
+            set { _courtesy_tone_on_start = value; }
+        }
+        private bool _courtesy_tone_on_release = false;
+        public bool CourtesyToneOnRelease
+        {
+            get { return _courtesy_tone_on_release; }
+            set { _courtesy_tone_on_release = value; }
+        }
+        private string _courtesy_tone_start_file = "";
+        public string CourtesyToneStartFile
+        {
+            get { return _courtesy_tone_start_file; }
+            set { _courtesy_tone_start_file = value; }
+        }
+        private double _courtesy_tone_start_volume_db = 0.0;
+        public double CourtesyToneStartVolumeDb
+        {
+            get { return _courtesy_tone_start_volume_db; }
+            set { _courtesy_tone_start_volume_db = value; }
+        }
+        private string _courtesy_tone_end_file = "";
+        public string CourtesyToneEndFile
+        {
+            get { return _courtesy_tone_end_file; }
+            set { _courtesy_tone_end_file = value; }
+        }
+        private double _courtesy_tone_end_volume_db = 0.0;
+        public double CourtesyToneEndVolumeDb
+        {
+            get { return _courtesy_tone_end_volume_db; }
+            set { _courtesy_tone_end_volume_db = value; }
+        }
+        private BasicAudio m_objCourtesyToneStartBasicAudio;
+        public BasicAudio CourtesyToneStartBasicAudio
+        {
+            get
+            {
+                if (m_objCourtesyToneStartBasicAudio == null)
+                    m_objCourtesyToneStartBasicAudio = new BasicAudio();
+                return m_objCourtesyToneStartBasicAudio;
+            }
+            set { }
+        }
+        private BasicAudio m_objCourtesyToneEndBasicAudio;
+        public BasicAudio CourtesyToneEndBasicAudio
+        {
+            get
+            {
+                if (m_objCourtesyToneEndBasicAudio == null)
+                    m_objCourtesyToneEndBasicAudio = new BasicAudio();
+                return m_objCourtesyToneEndBasicAudio;
+            }
+            set { }
+        }
+        private bool courtesyToneOkForMode()
+        {
+            if (_current_ptt_mode == PTTMode.CW) return false;
+            DSPMode m = radio.GetDSPTX(0).CurrentDSPMode;
+            if (m == DSPMode.CWL || m == DSPMode.CWU) return false;
+            return true;
+        }
+        private bool courtesyToneFileOk(string file)
+        {
+            return !string.IsNullOrEmpty(file) && File.Exists(file);
+        }
+        private bool startCourtesyTone(string file, double volumeDb)
+        {
+            if (!courtesyToneFileOk(file))
+            {
+                return false;
+            }
+            bool prev = ARP.SuppressMoxOnPlayback;
+            ARP.SuppressMoxOnPlayback = true;
+            bool ok = ARP.PlayFileViaWDSP("courtesy_tone", file, 0, out _, volumeDb);
+            if (!ok) ARP.SuppressMoxOnPlayback = prev;
+            return ok;
+        }
+        private void stopCourtesyTone()
+        {
+            try { ARP.StopPlayback(out _); } catch { }
+            ARP.SuppressMoxOnPlayback = false;
+        }
+        #endregion
+
         private bool QSOTimerRunning {
             get { return m_bQSOTimerRunning; }
             set {
@@ -54413,7 +54542,22 @@ namespace Thetis
 
             Debug.Print("playing : " + playing.ToString());
 
-            if (id == "quick")
+            if (id == "courtesy_tone")
+            {
+                // courtesy tone playback state
+                _is_courtesy_tone_playing = playing;
+                if (!playing) ARP.SuppressMoxOnPlayback = false;
+                if (!playing && _courtesy_tone_release_pending)
+                {
+                    // tone finished - now really release the transmitter.
+                    // the operator already unchecked MOX (chkMOX.Checked is false), so flipping it
+                    // again is a no-op and cannot re-enter the handler - call the handler directly.
+                    _courtesy_tone_release_pending = false;
+                    _courtesy_tone_release_completing = true;
+                    chkMOX_CheckedChanged2(null, EventArgs.Empty);
+                }
+            }
+            else if (id == "quick")
             {
                 // quick playback
                 if (playing)

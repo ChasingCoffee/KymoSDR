@@ -216,6 +216,7 @@ namespace Thetis
         public float DitherAmount { get; set; }
 
         public bool MoxOnPlayback { get; set; } = true;
+        public bool SuppressMoxOnPlayback { get; set; } = false;
         public double MonoToStereoGainDb { get; set; } = 6.0;
 
         public bool GenerateMP3File { get; set; } = false;
@@ -503,7 +504,7 @@ namespace Thetis
                     _prePlaybackSetting["LEVELER"] = _console.LevelerEnabled;
                     _prePlaybackSetting["MON"] = _console.MON;
                     _prePlaybackSetting["BYPASS_VAC"] = Audio.VACBypass;
-                    _prePlaybackSetting["MOX"] = _console.MOX;
+                    if (!SuppressMoxOnPlayback) _prePlaybackSetting["MOX"] = _console.MOX;
                 }
                 else
                 {
@@ -521,7 +522,7 @@ namespace Thetis
                     if (_prePlaybackSetting.ContainsKey("LEVELER") && _console.LevelerEnabled != _prePlaybackSetting["LEVELER"]) _console.LevelerEnabled = _prePlaybackSetting["LEVELER"];
                     if (_prePlaybackSetting.ContainsKey("MON") && _console.MON != _prePlaybackSetting["MON"]) _console.MON = _prePlaybackSetting["MON"];
                     if (_prePlaybackSetting.ContainsKey("BYPASS_VAC") && Audio.VACBypass != _prePlaybackSetting["BYPASS_VAC"]) Audio.VACBypass = _prePlaybackSetting["BYPASS_VAC"];
-                    if (_prePlaybackSetting.ContainsKey("MOX") && _console.MOX != _prePlaybackSetting["MOX"]) _console.MOX = _prePlaybackSetting["MOX"];
+                    if (!SuppressMoxOnPlayback && _prePlaybackSetting.ContainsKey("MOX") && _console.MOX != _prePlaybackSetting["MOX"]) _console.MOX = _prePlaybackSetting["MOX"];
                 }
                 else
                 {
@@ -545,7 +546,7 @@ namespace Thetis
 
                 if (GetPlaybackSetting("MON") && !_console.MON) _console.MON = true;
                 Audio.VACBypass = _console.BypassVACWhenPlayingWAV;
-                if (!_console.MOX && MoxOnPlayback) _console.MOX = true;
+                if (!SuppressMoxOnPlayback && !_console.MOX && MoxOnPlayback) _console.MOX = true;
             }
             else
             {
@@ -1747,6 +1748,8 @@ namespace Thetis
                     error = "Invalid WDSP ID.";
                     return false;
                 }
+
+                if (play_id != "courtesy_tone") SuppressMoxOnPlayback = false;
 
                 if (_is_playing)
                 {

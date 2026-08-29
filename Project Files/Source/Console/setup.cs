@@ -2588,6 +2588,10 @@ namespace Thetis
             //
             setQSOTimerDuration();
 
+            chkCourtesyToneOnRelease_CheckedChanged(this, e);
+            chkCourtesyToneOnStart_CheckedChanged(this, e);
+            courtesyToneSyncFromControls();
+
             chkPanadpatorGradient_CheckedChanged(this, e);
             chkPanadpatorGradient_tx_CheckedChanged(this, e);
             chkSpecWarningLEDRenderDelay_CheckedChanged(this, e);
@@ -20238,6 +20242,113 @@ namespace Thetis
         {
             btnQSOTimerPlaySelectedWAV.Enabled = chkQSOTimerPlaySoundOnExpiry.Checked && bOk;
         }
+
+        #region CourtesyTone
+        private void chkCourtesyToneOnRelease_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            console.CourtesyToneOnRelease = chkCourtesyToneOnRelease.Checked;
+            enableCourtesyToneControls();
+        }
+
+        private void chkCourtesyToneOnStart_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            console.CourtesyToneOnStart = chkCourtesyToneOnStart.Checked;
+            enableCourtesyToneControls();
+        }
+
+        private void nudCourtesyToneStartVolume_ValueChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            if (console != null) console.CourtesyToneStartVolumeDb = (double)nudCourtesyToneStartVolume.Value;
+        }
+
+        private void nudCourtesyToneEndVolume_ValueChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            if (console != null) console.CourtesyToneEndVolumeDb = (double)nudCourtesyToneEndVolume.Value;
+        }
+
+        private void enableCourtesyToneControls()
+        {
+            lblCourtesyToneStartWav.Enabled = chkCourtesyToneOnStart.Checked;
+            txtCourtesyToneStartWav.Enabled = chkCourtesyToneOnStart.Checked;
+            btnCourtesyToneStartSelect.Enabled = chkCourtesyToneOnStart.Checked;
+            btnCourtesyToneStartTest.Enabled = chkCourtesyToneOnStart.Checked && !string.IsNullOrEmpty(txtCourtesyToneStartWav.Text);
+            lblCourtesyToneStartVolume.Enabled = chkCourtesyToneOnStart.Checked;
+            nudCourtesyToneStartVolume.Enabled = chkCourtesyToneOnStart.Checked;
+
+            lblCourtesyToneEndWav.Enabled = chkCourtesyToneOnRelease.Checked;
+            txtCourtesyToneEndWav.Enabled = chkCourtesyToneOnRelease.Checked;
+            btnCourtesyToneEndSelect.Enabled = chkCourtesyToneOnRelease.Checked;
+            btnCourtesyToneEndTest.Enabled = chkCourtesyToneOnRelease.Checked && !string.IsNullOrEmpty(txtCourtesyToneEndWav.Text);
+            lblCourtesyToneEndVolume.Enabled = chkCourtesyToneOnRelease.Checked;
+            nudCourtesyToneEndVolume.Enabled = chkCourtesyToneOnRelease.Checked;
+        }
+
+        private void btnCourtesyToneStartSelect_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog fd = new OpenFileDialog())
+            {
+                fd.Filter = "wav files(*.wav)|*.wav";
+                if (fd.ShowDialog() == DialogResult.OK)
+                {
+                    txtCourtesyToneStartWav.Text = fd.FileName;
+                    console.CourtesyToneStartFile = fd.FileName;
+                    console.CourtesyToneStartBasicAudio.LoadSound(fd.FileName);
+                    enableCourtesyToneControls();
+                }
+            }
+        }
+
+        private void btnCourtesyToneEndSelect_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog fd = new OpenFileDialog())
+            {
+                fd.Filter = "wav files(*.wav)|*.wav";
+                if (fd.ShowDialog() == DialogResult.OK)
+                {
+                    txtCourtesyToneEndWav.Text = fd.FileName;
+                    console.CourtesyToneEndFile = fd.FileName;
+                    console.CourtesyToneEndBasicAudio.LoadSound(fd.FileName);
+                    enableCourtesyToneControls();
+                }
+            }
+        }
+
+        private void btnCourtesyToneStartTest_Click(object sender, EventArgs e)
+        {
+            if (console != null) console.CourtesyToneStartBasicAudio.Play();
+        }
+
+        private void btnCourtesyToneEndTest_Click(object sender, EventArgs e)
+        {
+            if (console != null) console.CourtesyToneEndBasicAudio.Play();
+        }
+
+        private void courtesyToneSyncFromControls()
+        {
+            if (console == null) return;
+            string s = txtCourtesyToneStartWav.Text;
+            if (s != console.CourtesyToneStartFile)
+            {
+                console.CourtesyToneStartFile = s;
+                if (!string.IsNullOrEmpty(s)) console.CourtesyToneStartBasicAudio.LoadSound(s);
+            }
+            s = txtCourtesyToneEndWav.Text;
+            if (s != console.CourtesyToneEndFile)
+            {
+                console.CourtesyToneEndFile = s;
+                if (!string.IsNullOrEmpty(s)) console.CourtesyToneEndBasicAudio.LoadSound(s);
+            }
+            if (console.CourtesyToneStartVolumeDb != (double)nudCourtesyToneStartVolume.Value)
+                console.CourtesyToneStartVolumeDb = (double)nudCourtesyToneStartVolume.Value;
+            if (console.CourtesyToneEndVolumeDb != (double)nudCourtesyToneEndVolume.Value)
+                console.CourtesyToneEndVolumeDb = (double)nudCourtesyToneEndVolume.Value;
+            enableCourtesyToneControls();
+        }
+        #endregion
 
         private void udQSOTimerMinutes_ValueChanged(object sender, EventArgs e)
         {

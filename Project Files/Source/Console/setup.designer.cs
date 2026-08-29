@@ -406,6 +406,21 @@
             this.groupBoxTS57 = new System.Windows.Forms.GroupBoxTS();
             this.groupBoxTS58 = new System.Windows.Forms.GroupBoxTS();
             this.groupBoxTS71 = new System.Windows.Forms.GroupBoxTS();
+            this.groupBoxCourtesyTone = new System.Windows.Forms.GroupBoxTS();
+            this.chkCourtesyToneOnRelease = new System.Windows.Forms.CheckBoxTS();
+            this.chkCourtesyToneOnStart = new System.Windows.Forms.CheckBoxTS();
+            this.lblCourtesyToneStartWav = new System.Windows.Forms.LabelTS();
+            this.txtCourtesyToneStartWav = new System.Windows.Forms.TextBoxTS();
+            this.btnCourtesyToneStartSelect = new System.Windows.Forms.ButtonTS();
+            this.btnCourtesyToneStartTest = new System.Windows.Forms.ButtonTS();
+            this.lblCourtesyToneEndWav = new System.Windows.Forms.LabelTS();
+            this.txtCourtesyToneEndWav = new System.Windows.Forms.TextBoxTS();
+            this.btnCourtesyToneEndSelect = new System.Windows.Forms.ButtonTS();
+            this.btnCourtesyToneEndTest = new System.Windows.Forms.ButtonTS();
+            this.lblCourtesyToneEndVolume = new System.Windows.Forms.LabelTS();
+            this.nudCourtesyToneEndVolume = new System.Windows.Forms.NumericUpDownTS();
+            this.lblCourtesyToneStartVolume = new System.Windows.Forms.LabelTS();
+            this.nudCourtesyToneStartVolume = new System.Windows.Forms.NumericUpDownTS();
             this.chkMeshDiagLog = new System.Windows.Forms.CheckBoxTS();
             this.radVFOSYNC_nothing = new System.Windows.Forms.RadioButtonTS();
             this.radVFOSYNC_ab = new System.Windows.Forms.RadioButtonTS();
@@ -4617,6 +4632,7 @@
             this.tpOptions3.SuspendLayout();
             this.groupBoxTS57.SuspendLayout();
             this.groupBoxTS58.SuspendLayout();
+            this.groupBoxCourtesyTone.SuspendLayout();
             this.tpOptionsStartUp.SuspendLayout();
             this.groupBoxTS37.SuspendLayout();
             this.grpAutoLaunchFiles.SuspendLayout();
@@ -10955,6 +10971,7 @@
             this.tpOptions3.BackColor = System.Drawing.SystemColors.Control;
             this.tpOptions3.Controls.Add(this.groupBoxTS57);
             this.tpOptions3.Controls.Add(this.groupBoxTS71);
+            this.tpOptions3.Controls.Add(this.groupBoxCourtesyTone);
             this.tpOptions3.Location = new System.Drawing.Point(4, 22);
             this.tpOptions3.Name = "tpOptions3";
             this.tpOptions3.Size = new System.Drawing.Size(716, 384);
@@ -10983,6 +11000,203 @@
             this.toolTip1.SetToolTip(this.chkMeshDiagLog, "Write GPU mesh / spectrum glow diagnostic messages into ErrorLog.txt (in the application data folder).\n\nTakes effect immediately; enable before switching GPU modes to capture init/fallback events.");
             this.chkMeshDiagLog.UseVisualStyleBackColor = true;
             this.chkMeshDiagLog.CheckedChanged += new System.EventHandler(this.chkMeshDiagLog_CheckedChanged);
+            // 
+            // groupBoxCourtesyTone
+            // 
+            this.groupBoxCourtesyTone.Controls.Add(this.btnCourtesyToneEndTest);
+            this.groupBoxCourtesyTone.Controls.Add(this.btnCourtesyToneEndSelect);
+            this.groupBoxCourtesyTone.Controls.Add(this.txtCourtesyToneEndWav);
+            this.groupBoxCourtesyTone.Controls.Add(this.lblCourtesyToneEndWav);
+            this.groupBoxCourtesyTone.Controls.Add(this.nudCourtesyToneEndVolume);
+            this.groupBoxCourtesyTone.Controls.Add(this.lblCourtesyToneEndVolume);
+            this.groupBoxCourtesyTone.Controls.Add(this.btnCourtesyToneStartTest);
+            this.groupBoxCourtesyTone.Controls.Add(this.btnCourtesyToneStartSelect);
+            this.groupBoxCourtesyTone.Controls.Add(this.txtCourtesyToneStartWav);
+            this.groupBoxCourtesyTone.Controls.Add(this.lblCourtesyToneStartWav);
+            this.groupBoxCourtesyTone.Controls.Add(this.nudCourtesyToneStartVolume);
+            this.groupBoxCourtesyTone.Controls.Add(this.lblCourtesyToneStartVolume);
+            this.groupBoxCourtesyTone.Controls.Add(this.chkCourtesyToneOnStart);
+            this.groupBoxCourtesyTone.Controls.Add(this.chkCourtesyToneOnRelease);
+            this.groupBoxCourtesyTone.Location = new System.Drawing.Point(210, 72);
+            this.groupBoxCourtesyTone.Name = "groupBoxCourtesyTone";
+            this.groupBoxCourtesyTone.Size = new System.Drawing.Size(480, 190);
+            this.groupBoxCourtesyTone.TabIndex = 35;
+            this.groupBoxCourtesyTone.TabStop = false;
+            this.groupBoxCourtesyTone.Text = "courtesy tone";
+            // 
+            // chkCourtesyToneOnRelease
+            // 
+            this.chkCourtesyToneOnRelease.AutoSize = true;
+            this.chkCourtesyToneOnRelease.Enabled = true;
+            this.chkCourtesyToneOnRelease.Image = null;
+            this.chkCourtesyToneOnRelease.Location = new System.Drawing.Point(14, 20);
+            this.chkCourtesyToneOnRelease.Name = "chkCourtesyToneOnRelease";
+            this.chkCourtesyToneOnRelease.Size = new System.Drawing.Size(310, 17);
+            this.chkCourtesyToneOnRelease.TabIndex = 0;
+            this.chkCourtesyToneOnRelease.Text = "Tone when TX is released (TX held until tone has played)";
+            this.chkCourtesyToneOnRelease.UseVisualStyleBackColor = true;
+            this.chkCourtesyToneOnRelease.CheckedChanged += new System.EventHandler(this.chkCourtesyToneOnRelease_CheckedChanged);
+            // 
+            // lblCourtesyToneEndWav
+            // 
+            this.lblCourtesyToneEndWav.AutoSize = true;
+            this.lblCourtesyToneEndWav.Location = new System.Drawing.Point(27, 47);
+            this.lblCourtesyToneEndWav.Name = "lblCourtesyToneEndWav";
+            this.lblCourtesyToneEndWav.Size = new System.Drawing.Size(65, 15);
+            this.lblCourtesyToneEndWav.TabIndex = 1;
+            this.lblCourtesyToneEndWav.Text = "end wav file :";
+            // 
+            // txtCourtesyToneEndWav
+            // 
+            this.txtCourtesyToneEndWav.BackColor = System.Drawing.SystemColors.Window;
+            this.txtCourtesyToneEndWav.Enabled = true;
+            this.txtCourtesyToneEndWav.Location = new System.Drawing.Point(104, 43);
+            this.txtCourtesyToneEndWav.Name = "txtCourtesyToneEndWav";
+            this.txtCourtesyToneEndWav.ReadOnly = true;
+            this.txtCourtesyToneEndWav.Size = new System.Drawing.Size(190, 23);
+            this.txtCourtesyToneEndWav.TabIndex = 2;
+            // 
+            // btnCourtesyToneEndSelect
+            // 
+            this.btnCourtesyToneEndSelect.Image = null;
+            this.btnCourtesyToneEndSelect.Location = new System.Drawing.Point(296, 41);
+            this.btnCourtesyToneEndSelect.Name = "btnCourtesyToneEndSelect";
+            this.btnCourtesyToneEndSelect.Size = new System.Drawing.Size(56, 24);
+            this.btnCourtesyToneEndSelect.TabIndex = 3;
+            this.btnCourtesyToneEndSelect.Text = "Select...";
+            this.btnCourtesyToneEndSelect.UseVisualStyleBackColor = true;
+            this.btnCourtesyToneEndSelect.Click += new System.EventHandler(this.btnCourtesyToneEndSelect_Click);
+            // 
+            // btnCourtesyToneEndTest
+            // 
+            this.btnCourtesyToneEndTest.Image = global::Thetis.Properties.Resources.play;
+            this.btnCourtesyToneEndTest.Location = new System.Drawing.Point(356, 41);
+            this.btnCourtesyToneEndTest.Name = "btnCourtesyToneEndTest";
+            this.btnCourtesyToneEndTest.Size = new System.Drawing.Size(30, 24);
+            this.btnCourtesyToneEndTest.TabIndex = 4;
+            this.btnCourtesyToneEndTest.UseVisualStyleBackColor = true;
+            this.btnCourtesyToneEndTest.Click += new System.EventHandler(this.btnCourtesyToneEndTest_Click);
+            // 
+            // lblCourtesyToneEndVolume
+            // 
+            this.lblCourtesyToneEndVolume.AutoSize = true;
+            this.lblCourtesyToneEndVolume.Location = new System.Drawing.Point(27, 75);
+            this.lblCourtesyToneEndVolume.Name = "lblCourtesyToneEndVolume";
+            this.lblCourtesyToneEndVolume.Size = new System.Drawing.Size(76, 15);
+            this.lblCourtesyToneEndVolume.TabIndex = 5;
+            this.lblCourtesyToneEndVolume.Text = "volume (dB) :";
+            // 
+            // nudCourtesyToneEndVolume
+            // 
+            this.nudCourtesyToneEndVolume.DecimalPlaces = 1;
+            this.nudCourtesyToneEndVolume.Increment = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.nudCourtesyToneEndVolume.Location = new System.Drawing.Point(118, 71);
+            this.nudCourtesyToneEndVolume.Maximum = new decimal(new int[] {
+            20,
+            0,
+            0,
+            0});
+            this.nudCourtesyToneEndVolume.Minimum = new decimal(new int[] {
+            30,
+            0,
+            0,
+            -2147483648});
+            this.nudCourtesyToneEndVolume.Name = "nudCourtesyToneEndVolume";
+            this.nudCourtesyToneEndVolume.Size = new System.Drawing.Size(60, 23);
+            this.nudCourtesyToneEndVolume.TabIndex = 6;
+            this.nudCourtesyToneEndVolume.TinyStep = true;
+            this.nudCourtesyToneEndVolume.ValueChanged += new System.EventHandler(this.nudCourtesyToneEndVolume_ValueChanged);
+            // 
+            // chkCourtesyToneOnStart
+            // 
+            this.chkCourtesyToneOnStart.AutoSize = true;
+            this.chkCourtesyToneOnStart.Enabled = true;
+            this.chkCourtesyToneOnStart.Image = null;
+            this.chkCourtesyToneOnStart.Location = new System.Drawing.Point(14, 105);
+            this.chkCourtesyToneOnStart.Name = "chkCourtesyToneOnStart";
+            this.chkCourtesyToneOnStart.Size = new System.Drawing.Size(230, 17);
+            this.chkCourtesyToneOnStart.TabIndex = 7;
+            this.chkCourtesyToneOnStart.Text = "Tone at the start of transmission";
+            this.chkCourtesyToneOnStart.UseVisualStyleBackColor = true;
+            this.chkCourtesyToneOnStart.CheckedChanged += new System.EventHandler(this.chkCourtesyToneOnStart_CheckedChanged);
+            // 
+            // lblCourtesyToneStartWav
+            // 
+            this.lblCourtesyToneStartWav.AutoSize = true;
+            this.lblCourtesyToneStartWav.Location = new System.Drawing.Point(27, 132);
+            this.lblCourtesyToneStartWav.Name = "lblCourtesyToneStartWav";
+            this.lblCourtesyToneStartWav.Size = new System.Drawing.Size(74, 15);
+            this.lblCourtesyToneStartWav.TabIndex = 8;
+            this.lblCourtesyToneStartWav.Text = "start wav file :";
+            // 
+            // txtCourtesyToneStartWav
+            // 
+            this.txtCourtesyToneStartWav.BackColor = System.Drawing.SystemColors.Window;
+            this.txtCourtesyToneStartWav.Enabled = true;
+            this.txtCourtesyToneStartWav.Location = new System.Drawing.Point(104, 128);
+            this.txtCourtesyToneStartWav.Name = "txtCourtesyToneStartWav";
+            this.txtCourtesyToneStartWav.ReadOnly = true;
+            this.txtCourtesyToneStartWav.Size = new System.Drawing.Size(190, 23);
+            this.txtCourtesyToneStartWav.TabIndex = 9;
+            // 
+            // btnCourtesyToneStartSelect
+            // 
+            this.btnCourtesyToneStartSelect.Image = null;
+            this.btnCourtesyToneStartSelect.Location = new System.Drawing.Point(296, 126);
+            this.btnCourtesyToneStartSelect.Name = "btnCourtesyToneStartSelect";
+            this.btnCourtesyToneStartSelect.Size = new System.Drawing.Size(56, 24);
+            this.btnCourtesyToneStartSelect.TabIndex = 10;
+            this.btnCourtesyToneStartSelect.Text = "Select...";
+            this.btnCourtesyToneStartSelect.UseVisualStyleBackColor = true;
+            this.btnCourtesyToneStartSelect.Click += new System.EventHandler(this.btnCourtesyToneStartSelect_Click);
+            // 
+            // btnCourtesyToneStartTest
+            // 
+            this.btnCourtesyToneStartTest.Image = global::Thetis.Properties.Resources.play;
+            this.btnCourtesyToneStartTest.Location = new System.Drawing.Point(356, 126);
+            this.btnCourtesyToneStartTest.Name = "btnCourtesyToneStartTest";
+            this.btnCourtesyToneStartTest.Size = new System.Drawing.Size(30, 24);
+            this.btnCourtesyToneStartTest.TabIndex = 11;
+            this.btnCourtesyToneStartTest.UseVisualStyleBackColor = true;
+            this.btnCourtesyToneStartTest.Click += new System.EventHandler(this.btnCourtesyToneStartTest_Click);
+            // 
+            // lblCourtesyToneStartVolume
+            // 
+            this.lblCourtesyToneStartVolume.AutoSize = true;
+            this.lblCourtesyToneStartVolume.Location = new System.Drawing.Point(27, 160);
+            this.lblCourtesyToneStartVolume.Name = "lblCourtesyToneStartVolume";
+            this.lblCourtesyToneStartVolume.Size = new System.Drawing.Size(76, 15);
+            this.lblCourtesyToneStartVolume.TabIndex = 12;
+            this.lblCourtesyToneStartVolume.Text = "volume (dB) :";
+            // 
+            // nudCourtesyToneStartVolume
+            // 
+            this.nudCourtesyToneStartVolume.DecimalPlaces = 1;
+            this.nudCourtesyToneStartVolume.Increment = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.nudCourtesyToneStartVolume.Location = new System.Drawing.Point(118, 156);
+            this.nudCourtesyToneStartVolume.Maximum = new decimal(new int[] {
+            20,
+            0,
+            0,
+            0});
+            this.nudCourtesyToneStartVolume.Minimum = new decimal(new int[] {
+            30,
+            0,
+            0,
+            -2147483648});
+            this.nudCourtesyToneStartVolume.Name = "nudCourtesyToneStartVolume";
+            this.nudCourtesyToneStartVolume.Size = new System.Drawing.Size(60, 23);
+            this.nudCourtesyToneStartVolume.TabIndex = 13;
+            this.nudCourtesyToneStartVolume.TinyStep = true;
+            this.nudCourtesyToneStartVolume.ValueChanged += new System.EventHandler(this.nudCourtesyToneStartVolume_ValueChanged);
             // 
             // groupBoxTS57
             // 
@@ -71534,6 +71748,8 @@
             this.groupBoxTS57.PerformLayout();
             this.groupBoxTS58.ResumeLayout(false);
             this.groupBoxTS58.PerformLayout();
+            this.groupBoxCourtesyTone.ResumeLayout(false);
+            this.groupBoxCourtesyTone.PerformLayout();
             this.tpOptionsStartUp.ResumeLayout(false);
             this.groupBoxTS37.ResumeLayout(false);
             this.groupBoxTS37.PerformLayout();
@@ -77137,6 +77353,21 @@
         private TabPage tpOptions3;
         private GroupBoxTS groupBoxTS57;
         private GroupBoxTS groupBoxTS71;
+        private GroupBoxTS groupBoxCourtesyTone;
+        private CheckBoxTS chkCourtesyToneOnRelease;
+        private CheckBoxTS chkCourtesyToneOnStart;
+        private LabelTS lblCourtesyToneStartWav;
+        private TextBoxTS txtCourtesyToneStartWav;
+        private ButtonTS btnCourtesyToneStartSelect;
+        private ButtonTS btnCourtesyToneStartTest;
+        private LabelTS lblCourtesyToneEndWav;
+        private TextBoxTS txtCourtesyToneEndWav;
+        private ButtonTS btnCourtesyToneEndSelect;
+        private ButtonTS btnCourtesyToneEndTest;
+        private LabelTS lblCourtesyToneEndVolume;
+        private NumericUpDownTS nudCourtesyToneEndVolume;
+        private LabelTS lblCourtesyToneStartVolume;
+        private NumericUpDownTS nudCourtesyToneStartVolume;
         private CheckBoxTS chkVFOsync_filter;
         private CheckBoxTS chkVFOsync_mode;
         private CheckBoxTS chkVFOsync_freq;
