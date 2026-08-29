@@ -83,7 +83,7 @@ namespace Thetis
     using FeatureLevel = Vortice.Direct3D.FeatureLevel;
     using FontStyle = System.Drawing.FontStyle;
     using AlphaMode = Vortice.DCommon.AlphaMode;
-    using RectangleF = Thetis.DXRectF;
+    using RectangleF = Vortice.Mathematics.Rect;
     using SDXPixelFormat = Vortice.DCommon.PixelFormat;
     using System.Threading;
 
@@ -4371,7 +4371,7 @@ namespace Thetis
                     if (_paused_display && _pause_bitmap != null)
                     {
                         RectangleF pr = new RectangleF(0, 0, displayTargetWidth, displayTargetHeight);
-                        _d2dRenderTarget.DrawBitmap(_pause_bitmap, pr, 1f, BitmapInterpolationMode.Linear);
+                        _d2dRenderTarget.DrawBitmap(_pause_bitmap, pr, 1f, BitmapInterpolationMode.Linear, null);
                         goto jump;
                     }
 
@@ -4413,7 +4413,7 @@ namespace Thetis
                                 rectDest = new RectangleF(0, 0, displayTargetWidth, displayTargetHeight);
                             }
 
-                            _d2dRenderTarget.DrawBitmap(_bitmapBackground, rectDest, 1f, BitmapInterpolationMode.Linear);
+                            _d2dRenderTarget.DrawBitmap(_bitmapBackground, rectDest, 1f, BitmapInterpolationMode.Linear, null);
                         }
 
                         _d2dRenderTarget.FillRectangle(rectDest, m_bDX2_display_background_brush);
@@ -9427,11 +9427,11 @@ namespace Thetis
                 {
                     if (rx == 1)
                     {
-                        _d2dRenderTarget.DrawBitmap(_waterfall_bmp_dx2d, new RectangleF(0, nVerticalShift + 20, _waterfall_bmp_dx2d.Size.Width, _waterfall_bmp_dx2d.Size.Height), m_fRX1WaterfallOpacity, BitmapInterpolationMode.Linear);
+                        _d2dRenderTarget.DrawBitmap(_waterfall_bmp_dx2d, new RectangleF(0, nVerticalShift + 20, _waterfall_bmp_dx2d.Size.Width, _waterfall_bmp_dx2d.Size.Height), m_fRX1WaterfallOpacity, BitmapInterpolationMode.Linear, null);
                     }
                     else
                     {
-                        _d2dRenderTarget.DrawBitmap(_waterfall_bmp2_dx2d, new RectangleF(0, nVerticalShift + 20, _waterfall_bmp2_dx2d.Size.Width, _waterfall_bmp2_dx2d.Size.Height), m_fRX2WaterfallOpacity, BitmapInterpolationMode.Linear);
+                        _d2dRenderTarget.DrawBitmap(_waterfall_bmp2_dx2d, new RectangleF(0, nVerticalShift + 20, _waterfall_bmp2_dx2d.Size.Width, _waterfall_bmp2_dx2d.Size.Height), m_fRX2WaterfallOpacity, BitmapInterpolationMode.Linear, null);
                     }
                 }
             }
@@ -13641,7 +13641,7 @@ namespace Thetis
 
             float y = displayTargetHeight - santa.Size.Height / 2;
             RectangleF rectDest = new RectangleF(_santaX, y, santa.Size.Width / 2, santa.Size.Height / 2);
-            _d2dRenderTarget.DrawBitmap(santa, rectDest, 1f, BitmapInterpolationMode.Linear);
+            _d2dRenderTarget.DrawBitmap(santa, rectDest, 1f, BitmapInterpolationMode.Linear, null);
 
             // xpos shift
             if (m_dElapsedFrameStart >= _oldSantaXFrame + 16)
@@ -13814,7 +13814,7 @@ namespace Thetis
                             flagWidth,
                             flagHeight);
 
-                        _d2dRenderTarget.DrawBitmap(flagBitmap, destRect, 1f, BitmapInterpolationMode.Linear);
+                        _d2dRenderTarget.DrawBitmap(flagBitmap, destRect, 1f, BitmapInterpolationMode.Linear, null);
                     }
 
                     textX += flagWidth + 3;

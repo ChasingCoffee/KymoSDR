@@ -255,7 +255,6 @@
       <DependentUpon>frmSeqLog.cs</DependentUpon>
     </Compile>
     <Compile Include="MeterManager.cs" />
-    <Compile Include="DXVorticeCompat.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>

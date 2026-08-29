@@ -603,8 +603,8 @@ namespace Thetis
             ID2D1Bitmap bmp = _spec[rx == 2 ? 1 : 0].SheetBitmap;
             if (bmp == null) return;
             _d2dRenderTarget.DrawBitmap(bmp,
-                new DXRectF(0f, nVerticalShift, W, H),
-                1f, BitmapInterpolationMode.Linear);
+                new Rect(0f, nVerticalShift, W, H),
+                1f, BitmapInterpolationMode.Linear, null);
         }
 
         #endregion

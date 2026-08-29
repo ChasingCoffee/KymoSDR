@@ -80,6 +80,7 @@ using Color4 = Vortice.Mathematics.Color4;
 using D2DPixelFormat = Vortice.DCommon.PixelFormat;
 using D2DAlphaMode = Vortice.DCommon.AlphaMode;
 using FeatureLevel = Vortice.Direct3D.FeatureLevel;
+using Rect = Vortice.Mathematics.Rect;
 using FontStyle = System.Drawing.FontStyle;
 using JsonElement = System.Text.Json.JsonElement;
 
@@ -11827,7 +11828,7 @@ namespace Thetis
             {
                 public WaveRecordHitType HitType { get; set; }
                 public string FilePath { get; set; }
-                public DXRectF Rect { get; set; }
+                public Rect Rect { get; set; }
             }
 
             private readonly clsMeter _owningmeter;
@@ -11838,9 +11839,9 @@ namespace Thetis
             private WaveRecordEntry[] _entries;
 
             private List<WaveRecordHitRegion> _hit_regions;
-            private DXRectF _content_rect;
-            private DXRectF _scroll_track_rect;
-            private DXRectF _scroll_thumb_rect;
+            private Rect _content_rect;
+            private Rect _scroll_track_rect;
+            private Rect _scroll_thumb_rect;
             private float _row_pitch_px;
             private float _max_scroll_px;
             private float _scroll_offset_px;
@@ -11890,9 +11891,9 @@ namespace Thetis
                 _entries = Array.Empty<WaveRecordEntry>();
                 _hit_regions = new List<WaveRecordHitRegion>();
 
-                _content_rect = new DXRectF();
-                _scroll_track_rect = new DXRectF();
-                _scroll_thumb_rect = new DXRectF();
+                _content_rect = default;
+                _scroll_track_rect = default;
+                _scroll_thumb_rect = default;
                 _row_pitch_px = 0f;
                 _max_scroll_px = 0f;
                 _scroll_offset_px = 0f;
@@ -12294,9 +12295,9 @@ namespace Thetis
             }
 
             public void SetRenderLayout(
-                DXRectF contentRect,
-                DXRectF scrollTrackRect,
-                DXRectF scrollThumbRect,
+                Rect contentRect,
+                Rect scrollTrackRect,
+                Rect scrollThumbRect,
                 float rowPitch,
                 float maxScroll,
                 bool showScrollbar,
@@ -32651,7 +32652,7 @@ namespace Thetis
                                 _renderTarget.Clear(_backColour_clear_colour);
 
                                 // overlay background colour
-                                DXRectF rect = new DXRectF(-0.5f, -0.5f, targetWidth + 1, targetHeight + 1);
+                                Rect rect = new Rect(-0.5f, -0.5f, targetWidth + 1, targetHeight + 1);
                                 _renderTarget.FillRectangle(rect, getDXBrushForColour(_backgroundColour));
 
 
@@ -32668,7 +32669,7 @@ namespace Thetis
                                 }
 
                                 //calcFps();
-                                //_renderTarget.DrawText(_nFps.ToString(), getDXTextFormatForFont("Trebuchet MS", 18, FontStyle.Regular), new DXRectF(10, 0, float.PositiveInfinity, float.PositiveInfinity), getDXBrushForColour(System.Drawing.Color.White), DrawTextOptions.None);
+                                //_renderTarget.DrawText(_nFps.ToString(), getDXTextFormatForFont("Trebuchet MS", 18, FontStyle.Regular), new Rect(10, 0, float.PositiveInfinity, float.PositiveInfinity), getDXBrushForColour(System.Drawing.Color.White), DrawTextOptions.None);
 
                                 // undo the translate
                                 _renderTarget.Transform = Matrix3x2.Identity;
@@ -33096,7 +33097,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
+                            Rect rect = new Rect(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -33105,9 +33106,9 @@ namespace Thetis
                                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                DXRectF clickRect = new DXRectF(x, y, w, h);
+                                Rect clickRect = new Rect(x, y, w, h);
 
-                                if (clickRect.Contains(new Point(e.X, e.Y)))
+                                if (clickRect.Contains(e.X, e.Y))
                                 {
                                     mi.MouseMovePoint = new PointF(e.X, e.Y);
                                     mi.MouseEntered = true;
@@ -33146,7 +33147,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
+                            Rect rect = new Rect(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -33155,9 +33156,9 @@ namespace Thetis
                                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                DXRectF clickRect = new DXRectF(x, y, w, h);
+                                Rect clickRect = new Rect(x, y, w, h);
 
-                                if (clickRect.Contains(new Point(e.X, e.Y)))
+                                if (clickRect.Contains(e.X, e.Y))
                                 {
                                     mi.MouseEntered = true;
                                     int number_of_moves = e.Delta * SystemInformation.MouseWheelScrollLines / 120;
@@ -33196,7 +33197,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
+                            Rect rect = new Rect(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -33205,9 +33206,9 @@ namespace Thetis
                                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                DXRectF clickRect = new DXRectF(x, y, w, h);
+                                Rect clickRect = new Rect(x, y, w, h);
 
-                                if (clickRect.Contains(new Point(e.X, e.Y)))
+                                if (clickRect.Contains(e.X, e.Y))
                                 {
                                     mi.MouseEntered = true;
                                     mi.MouseButton = e.Button;
@@ -33250,7 +33251,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
+                            Rect rect = new Rect(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -33259,9 +33260,9 @@ namespace Thetis
                                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                DXRectF clickRect = new DXRectF(x, y, w, h);
+                                Rect clickRect = new Rect(x, y, w, h);
 
-                                if (clickRect.Contains(new Point(e.X, e.Y)))
+                                if (clickRect.Contains(e.X, e.Y))
                                 {
                                     mi.MouseEntered = true;
                                     mi.MouseButton = e.Button;
@@ -33304,7 +33305,7 @@ namespace Thetis
                             float rw = m.XRatio;
                             float rh = m.YRatio;
 
-                            DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
+                            Rect rect = new Rect(0, 0, tw * rw, tw * rh);
 
                             foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                             {
@@ -33319,9 +33320,9 @@ namespace Thetis
                                         float w = rect.Width * (mi.Size.Width / m.XRatio);
                                         float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                        DXRectF clickRect = new DXRectF(x, y, w, h);
+                                        Rect clickRect = new Rect(x, y, w, h);
 
-                                        if (clickRect.Contains(new Point(e.X, e.Y)))
+                                        if (clickRect.Contains(e.X, e.Y))
                                         {
                                             m.MouseUp(e, m, cb);
                                         }
@@ -33334,9 +33335,9 @@ namespace Thetis
                                     float w = rect.Width * (mi.Size.Width / m.XRatio);
                                     float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                                    DXRectF clickRect = new DXRectF(x, y, w, h);
+                                    Rect clickRect = new Rect(x, y, w, h);
 
-                                    if (clickRect.Contains(new Point(e.X, e.Y)))
+                                    if (clickRect.Contains(e.X, e.Y))
                                     {
                                         mi.MouseButton = e.Button;
                                         mi.MouseUpPoint = new PointF(e.X, e.Y);
@@ -33417,7 +33418,7 @@ namespace Thetis
                         float tw = targetWidth - 1f;
                         float rw = m.XRatio;
                         float rh = m.YRatio;
-                        DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
+                        Rect rect = new Rect(0, 0, tw * rw, tw * rh);
 
                         for (int i = m.SortedMeterItemsForZOrder.Count - 1; i >= 0; i--)
                         {
@@ -33428,9 +33429,9 @@ namespace Thetis
                             float y = (mi.DisplayTopLeft.Y / m.YRatio) * rect.Height;
                             float w = rect.Width * (mi.Size.Width / m.XRatio);
                             float h = rect.Height * (mi.Size.Height / m.YRatio);
-                            DXRectF clickRect = new DXRectF(x, y, w, h);
+                            Rect clickRect = new Rect(x, y, w, h);
 
-                            if (clickRect.Contains(new Point(clientPoint.X, clientPoint.Y)))
+                            if (clickRect.Contains(clientPoint.X, clientPoint.Y))
                             {
                                 return mi as clsWaveRecord;
                             }
@@ -33466,7 +33467,7 @@ namespace Thetis
 
                         float rw = m.XRatio;
                         float rh = m.YRatio;
-                        DXRectF rect = new DXRectF(0, 0, tw * rw, tw * rh);
+                        Rect rect = new Rect(0, 0, tw * rw, tw * rh);
 
                         foreach (clsMeterItem mi in m.SortedMeterItemsForZOrder)
                         {                          
@@ -33754,7 +33755,7 @@ namespace Thetis
                 return mi.FadeValue;
             }
             //
-            private void renderNeedleScale(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderNeedleScale(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsNeedleScalePwrItem scale = (clsNeedleScalePwrItem)mi;
 
@@ -33765,7 +33766,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                DXRectF mirect = new DXRectF(x, y, w, h);
+                Rect mirect = new Rect(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.CornflowerBlue));
 
                 if (scale.ItemType == clsMeterItem.MeterItemType.NEEDLE_SCALE_PWR && (scale.ReadingSource == Reading.PWR || scale.ReadingSource == Reading.REVERSE_PWR))
@@ -33948,7 +33949,7 @@ namespace Thetis
                                 t.Translation += _pixelShift;
                                 _renderTarget.Transform = t;
 
-                                DXRectF txtrect = new DXRectF(fontEndX, fontEndY, szTextSize.Width, szTextSize.Height);
+                                Rect txtrect = new Rect(fontEndX, fontEndY, szTextSize.Width, szTextSize.Height);
                                 _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, getDXBrushForColour(scale.LowColour, 255));
 
                                 _renderTarget.Transform = currentTransform;
@@ -33968,7 +33969,7 @@ namespace Thetis
 
                 return fPower.ToString(sFormat);
             }
-            private void renderScale(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderScale(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsScaleItem scale = (clsScaleItem)mi;
 
@@ -33977,7 +33978,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                DXRectF mirect = new DXRectF(x, y, w, h);
+                Rect mirect = new Rect(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.CornflowerBlue));
 
                 Vector2 startPoint = new Vector2();
@@ -33994,7 +33995,7 @@ namespace Thetis
                         //string sText = scale.ReadingName;//MeterManager.ReadingName(scale.ReadingSource);
                         string sText = scale.IsCustom ? scale.CustomTitle : scale.ReadingName;
                         szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                        DXRectF txtrect = new DXRectF(x + (w * 0.5f) - (szTextSize.Width / 2f), y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                        Rect txtrect = new Rect(x + (w * 0.5f) - (szTextSize.Width / 2f), y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                         _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, getDXBrushForColour(scale.FontColourType, 255));
                     }
 
@@ -34145,7 +34146,7 @@ namespace Thetis
                                     // text
                                     string sText = powerList[i - 1];
                                     szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                    DXRectF txtrect = new DXRectF(startPoint.X - (szTextSize.Width * 0.5f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                    Rect txtrect = new Rect(startPoint.X - (szTextSize.Width * 0.5f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, lowColour);
                                 }
 
@@ -34169,7 +34170,7 @@ namespace Thetis
                                 // text
                                 string sText2 = powerList[4];
                                 szTextSize = measureString(sText2, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                DXRectF txtrect2 = new DXRectF(startPoint.X - szTextSize.Width, endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                Rect txtrect2 = new Rect(startPoint.X - szTextSize.Width, endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                 _renderTarget.DrawText(sText2, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect2, highColour);
                             }
                             break;
@@ -34226,7 +34227,7 @@ namespace Thetis
                                     // text
                                     string sText = swr_list[i - 1];
                                     szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                    DXRectF txtrect = new DXRectF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                    Rect txtrect = new Rect(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, lowColour);
                                 }
 
@@ -34255,7 +34256,7 @@ namespace Thetis
                                     // text
                                     string sText = swr_hi_list[i - 1];
                                     szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                    DXRectF txtrect = new DXRectF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                    Rect txtrect = new Rect(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, highColour);
                                 }
                             }
@@ -34295,7 +34296,7 @@ namespace Thetis
                                 float high_start = startPoint.X;
                                 float val;
                                 string sText;
-                                DXRectF txtrect;
+                                Rect txtrect;
                                 for (int i = 1; i < (int)markers; i++)
                                 {
                                     startPoint.X = x + (i * spacing);
@@ -34316,7 +34317,7 @@ namespace Thetis
 
                                         sText = val.ToString(val % 1 == 0 || val < -100 || val > 100 ? "F0" : "F1");
                                         szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                        txtrect = new DXRectF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                        txtrect = new Rect(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                         _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, col);
                                     }
 
@@ -34332,7 +34333,7 @@ namespace Thetis
                                 val = scale.CustomMax;
                                 sText = val.ToString(val % 1 == 0 || val < -100 || val > 100 ? "F0" : "F1");
                                 szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, fontSizeEmScaled);
-                                txtrect = new DXRectF(x + w - szTextSize.Width, endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                                txtrect = new Rect(x + w - szTextSize.Width, endPoint.Y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                                 _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, fontSizeEmScaled, scale.FntStyle), txtrect, col);
                             }
                             break;
@@ -34351,7 +34352,7 @@ namespace Thetis
                     {
                         string sText = scale.ReadingName;//MeterManager.ReadingName(scale.ReadingSource);
                         adjustedFontSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                        DXRectF txtrect = new DXRectF(x, y - (adjustedFontSize.Height * 1.1f), adjustedFontSize.Width, adjustedFontSize.Height);
+                        Rect txtrect = new Rect(x, y - (adjustedFontSize.Height * 1.1f), adjustedFontSize.Width, adjustedFontSize.Height);
                         _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, getDXBrushForColour(scale.FontColourType, 255));
                     }
 
@@ -34408,7 +34409,7 @@ namespace Thetis
                                     // text
                                     string sText = (-1 + i * 2).ToString();
                                     adjustedFontSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                                    DXRectF txtrect = new DXRectF(endPoint.X + (w * 0.08f), endPoint.Y - (adjustedFontSize.Height / 2f), adjustedFontSize.Width, adjustedFontSize.Height);
+                                    Rect txtrect = new Rect(endPoint.X + (w * 0.08f), endPoint.Y - (adjustedFontSize.Height / 2f), adjustedFontSize.Width, adjustedFontSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, getDXBrushForColour(scale.FontColourLow, 255));
                                 }
 
@@ -34439,7 +34440,7 @@ namespace Thetis
                                     // text
                                     string sText = "+" + (i * 20).ToString();
                                     adjustedFontSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                                    DXRectF txtrect = new DXRectF(endPoint.X - (w * 0.2f), endPoint.Y - (adjustedFontSize.Height / 2f) + (h * 0.01f), adjustedFontSize.Width, adjustedFontSize.Height);
+                                    Rect txtrect = new Rect(endPoint.X - (w * 0.2f), endPoint.Y - (adjustedFontSize.Height / 2f) + (h * 0.01f), adjustedFontSize.Width, adjustedFontSize.Height);
                                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, getDXBrushForColour(scale.FontColourHigh, 255));
                                 }
                             }
@@ -34499,7 +34500,7 @@ namespace Thetis
                     // text
                     string sText = (lowStartNumber + i * lowIncrement).ToString();
                     SizeF szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                    DXRectF txtrect = new DXRectF(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height, szTextSize.Width, szTextSize.Height);
+                    Rect txtrect = new Rect(startPoint.X - (szTextSize.Width / 2f), endPoint.Y - szTextSize.Height, szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, fontLowColour);
                 }
                 
@@ -34530,11 +34531,11 @@ namespace Thetis
                     string sText = ((highEndNumber - (highLongTicks * highIngrement)) + i * highIngrement).ToString();
                     if (addAllTrailingPlus || (i == highLongTicks && addTrailingPlus)) sText += "+";
                     SizeF szTextSize = measureString(sText, scale.FontFamily, scale.FntStyle, newSize);
-                    DXRectF txtrect = new DXRectF(i == highLongTicks ? x + w - szTextSize.Width : startPoint.X - szTextSize.Width / 2f, endPoint.Y - szTextSize.Height, szTextSize.Width, szTextSize.Height);
+                    Rect txtrect = new Rect(i == highLongTicks ? x + w - szTextSize.Width : startPoint.X - szTextSize.Width / 2f, endPoint.Y - szTextSize.Height, szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(scale.FontFamily, newSize, scale.FntStyle), txtrect, fontHighColour);
                 }
             }
-            private void renderGroup(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderGroup(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsItemGroup ig = (clsItemGroup)mi;
 
@@ -34543,13 +34544,13 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                DXRectF igrect = new DXRectF(x, y, w, h);
+                Rect igrect = new Rect(x, y, w, h);
                 _renderTarget.DrawRectangle(igrect, getDXBrushForColour(System.Drawing.Color.Green));
 
                 float newSize = 16f;
                 string sText = ig.Order.ToString();
                 SizeF szTextSize = measureString(sText, "Trebuchet MS", FontStyle.Regular, newSize);
-                DXRectF txtrect = new DXRectF(x, y, szTextSize.Width, szTextSize.Height);
+                Rect txtrect = new Rect(x, y, szTextSize.Width, szTextSize.Height);
                 _renderTarget.DrawText(sText, getDXTextFormatForFont("Trebuchet MS", newSize, FontStyle.Regular), txtrect, getDXBrushForColour(System.Drawing.Color.White));
             }
             private void slits(Vector2 centre, float radiusX, float radiusY, float w, float h, ID2D1Brush closedSectionBrush)
@@ -34585,7 +34586,7 @@ namespace Thetis
                 sharpGeometry?.Dispose();
                 sharpGeometry = null;
             }
-            private void renderLed(DXRectF rect, clsMeterItem mi, clsMeter m, bool draw_led)
+            private void renderLed(Rect rect, clsMeterItem mi, clsMeter m, bool draw_led)
             {
                 clsLed led = (clsLed)mi;
 
@@ -34619,7 +34620,7 @@ namespace Thetis
                 {
                     if (led.ShowBackPanel)
                     {
-                        DXRectF rectSC = new DXRectF(x, y, w, h);
+                        Rect rectSC = new Rect(x, y, w, h);
                         _renderTarget.FillRectangle(rectSC, getDXBrushForColour(m.MOX ? led.PanelBackColour2 : led.PanelBackColour1, mi.FadeValue));
                     }
                 }
@@ -34704,13 +34705,13 @@ namespace Thetis
                         float ySize = targetWidth * led.SizeY;
                         float posX = x + led.OffsetX * (targetWidth * m.XRatio);
                         float posY = y + led.OffsetY * (targetWidth * m.YRatio);
-                        DXRectF igrect = new DXRectF(posX - (xSize / 2f), posY - (ySize / 2f), xSize, ySize);
+                        Rect igrect = new Rect(posX - (xSize / 2f), posY - (ySize / 2f), xSize, ySize);
 
                         _renderTarget.FillRectangle(igrect, getDXBrushForColour(c, 255));
                     }
                 }
             }
-            private bool renderTextOverlay(DXRectF rect, clsMeterItem mi, clsMeter m, bool render_text)
+            private bool renderTextOverlay(Rect rect, clsMeterItem mi, clsMeter m, bool render_text)
             {
                 clsTextOverlay text_overlay = (clsTextOverlay)mi;
 
@@ -34746,7 +34747,7 @@ namespace Thetis
                 {
                     if (text_overlay.ShowBackPanel)
                     {
-                        DXRectF rectSC = new DXRectF(x, y, w, h);
+                        Rect rectSC = new Rect(x, y, w, h);
                         _renderTarget.FillRectangle(rectSC, getDXBrushForColour(m.MOX ? text_overlay.PanelBackColour2 : text_overlay.PanelBackColour1, mi.FadeValue));
                     }
                 }
@@ -35859,7 +35860,7 @@ namespace Thetis
 
                 return (row_rx, row_tx, true);
             }
-            private void renderDialDisplay(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderDialDisplay(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsDialDisplay dial = (clsDialDisplay)mi;
 
@@ -35868,7 +35869,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //DXRectF rectSC = new DXRectF(x, y, w, h);
+                //Rect rectSC = new Rect(x, y, w, h);
                 //_renderTarget.FillRectangle(rectSC, getDXBrushForColour(dial.Colour, mi.FadeValue));
 
                 bool enabled = (!dial.FadeOnRx && !m.MOX) | (!dial.FadeOnTx && m.MOX);
@@ -35916,10 +35917,10 @@ namespace Thetis
                     hightlight3 = !dial.Pressed && outside_main_circle && zone3.Contains(mouse_raw_x, mouse_raw_y); // lock
                 }
 
-                _renderTarget.FillRectangle(new DXRectF(zone0.X, zone0.Y, zone0.Width, zone0.Height), dial.VFOA ? button_on : (hightlight0 ? button_highlight : button_off) );
-                _renderTarget.FillRectangle(new DXRectF(zone1.X, zone1.Y, zone1.Width, zone1.Height), !dial.VFOA ? button_on : (hightlight1 ? button_highlight : button_off));
-                _renderTarget.FillRectangle(new DXRectF(zone2.X, zone2.Y, zone2.Width, zone2.Height), dial.Accelerate ? button_on : (hightlight2 ? button_highlight : button_off));
-                _renderTarget.FillRectangle(new DXRectF(zone3.X, zone3.Y, zone3.Width, zone3.Height), dial.Lock ? button_on : (hightlight3 ? button_highlight : button_off));
+                _renderTarget.FillRectangle(new Rect(zone0.X, zone0.Y, zone0.Width, zone0.Height), dial.VFOA ? button_on : (hightlight0 ? button_highlight : button_off) );
+                _renderTarget.FillRectangle(new Rect(zone1.X, zone1.Y, zone1.Width, zone1.Height), !dial.VFOA ? button_on : (hightlight1 ? button_highlight : button_off));
+                _renderTarget.FillRectangle(new Rect(zone2.X, zone2.Y, zone2.Width, zone2.Height), dial.Accelerate ? button_on : (hightlight2 ? button_highlight : button_off));
+                _renderTarget.FillRectangle(new Rect(zone3.X, zone3.Y, zone3.Width, zone3.Height), dial.Lock ? button_on : (hightlight3 ? button_highlight : button_off));
 
                 dial.VFOAHighlighted = hightlight0 && !hightlight1;
                 dial.VFOBHighlighted = hightlight1 && !hightlight0;
@@ -36041,7 +36042,7 @@ namespace Thetis
                 //plotText(dial.DegreesTotal.ToString("f0"), 0, 0 + 60, rect.Width, 36f, System.Drawing.Color.White, 255, "Trebuchet MS", FontStyle.Regular);
                 //plotText($"{mouse_x.ToString("f2")},{mouse_y.ToString("f2")},{distance_from_centre.ToString("f2")}", 0, x + h / 2f, rect.Width, 36f, System.Drawing.Color.White, 255, "Trebuchet MS", FontStyle.Regular);
             }
-            private void renderFilterDisplay(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderFilterDisplay(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsFilterItem filter = (clsFilterItem)mi;
 
@@ -36067,7 +36068,7 @@ namespace Thetis
                         break;
                 }
 
-                DXRectF rectSC = new DXRectF(x, y, w, h);
+                Rect rectSC = new Rect(x, y, w, h);
                 _renderTarget.FillRectangle(rectSC, getDXBrushForColour(filter.Colour, mi.FadeValue));
 
                 if (filter.DispMode == clsFilterItem.FIDisplayMode.WATERFALL || filter.DispMode == clsFilterItem.FIDisplayMode.PANAFALL)
@@ -36211,7 +36212,7 @@ namespace Thetis
                             Vector2 fill_bot_pos = new Vector2(0, 0);
                             Vector2 old_pos = new Vector2(extent_l, top_pos + py);                            
 
-                            DXRectF clip_rect = new DXRectF(extent_l, y + line_width_half + tsl.Height, width_between_slopes, spectrum_height);
+                            Rect clip_rect = new Rect(extent_l, y + line_width_half + tsl.Height, width_between_slopes, spectrum_height);
                             _renderTarget.PushAxisAlignedClip(clip_rect, AntialiasMode.Aliased);
                             _renderTarget.FillRectangle(clip_rect, getDXBrushForColour(meter_back_colour));
 
@@ -36310,11 +36311,11 @@ namespace Thetis
 
                             //render waterfall
                             float top_y = y + line_width_half + tsl.Height + (filter.DispMode == clsFilterItem.FIDisplayMode.PANAFALL ? spectrum_height : 0);
-                            DXRectF clip_rect = new DXRectF(extent_l, top_y, width_between_slopes, spectrum_height);
+                            Rect clip_rect = new Rect(extent_l, top_y, width_between_slopes, spectrum_height);
                             float bitmap_height = Math.Max(_filter_display_waterfall_bmp.Size.Height, spectrum_height);
 
-                            DXRectF dest_rect_rx = new DXRectF(clip_rect.Left, top_y, clip_rect.Width, bitmap_height);
-                            DXRectF dest_rect_tx = new DXRectF(clip_rect.Left, top_y, clip_rect.Width, bitmap_height);
+                            Rect dest_rect_rx = new Rect(clip_rect.Left, top_y, clip_rect.Width, bitmap_height);
+                            Rect dest_rect_tx = new Rect(clip_rect.Left, top_y, clip_rect.Width, bitmap_height);
                             
                             if (filter.MOX)
                             {
@@ -36338,8 +36339,8 @@ namespace Thetis
                             _renderTarget.PushAxisAlignedClip(clip_rect, AntialiasMode.Aliased);
                             _renderTarget.FillRectangle(clip_rect, getDXBrushForColour(meter_back_colour));
 
-                            _renderTarget.DrawBitmap(_filter_display_waterfall_bmp_tx, dest_rect_tx, 1f, BitmapInterpolationMode.Linear);
-                            _renderTarget.DrawBitmap(_filter_display_waterfall_bmp, dest_rect_rx, 1f, BitmapInterpolationMode.Linear);
+                            _renderTarget.DrawBitmap(_filter_display_waterfall_bmp_tx, dest_rect_tx, 1f, BitmapInterpolationMode.Linear, null);
+                            _renderTarget.DrawBitmap(_filter_display_waterfall_bmp, dest_rect_rx, 1f, BitmapInterpolationMode.Linear, null);
 
                             _renderTarget.PopAxisAlignedClip();
                         }
@@ -36524,7 +36525,7 @@ namespace Thetis
                     
                     //simulated plot
                     float cp_height = bot_line_y - top_line_y;
-                    DXRectF clip_rect = new DXRectF(extent_l, y + line_width_half + tsl.Height, width_between_slopes, cp_height);
+                    Rect clip_rect = new Rect(extent_l, y + line_width_half + tsl.Height, width_between_slopes, cp_height);
                     _renderTarget.PushAxisAlignedClip(clip_rect, AntialiasMode.Aliased);
                     lock (MiniSpec.FilterCharacteristicsLocker)
                     {
@@ -36890,7 +36891,7 @@ namespace Thetis
                 return (float)Math.Sqrt((p1.X - p2.X) * (p1.X - p2.X) + (p1.Y - p2.Y) * (p1.Y - p2.Y));
             }
             //
-            private void renderHistory(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderHistory(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsHistoryItem his = (clsHistoryItem)mi;
 
@@ -36920,7 +36921,7 @@ namespace Thetis
                     }
                 }
 
-                DXRectF rectHis = new DXRectF(x, y, w, h);
+                Rect rectHis = new Rect(x, y, w, h);
 
                 _renderTarget.FillRectangle(rectHis, getDXBrushForColour(his.BackColour));
 
@@ -36960,11 +36961,11 @@ namespace Thetis
                 float start_x = x + spacer;
                 float base_y = y + h - spacer;
                 float last_x;
-                DXRectF clip_rect;
+                Rect clip_rect;
                 if(his.ShowScale1)
-                    clip_rect = new DXRectF(x + spacer, y + quarter_spacer, w - spacer * 2f, h - quarter_spacer - spacer);
+                    clip_rect = new Rect(x + spacer, y + quarter_spacer, w - spacer * 2f, h - quarter_spacer - spacer);
                 else
-                    clip_rect = new DXRectF(x + spacer, y + quarter_spacer, w - spacer - quarter_spacer, h - quarter_spacer - spacer);
+                    clip_rect = new Rect(x + spacer, y + quarter_spacer, w - spacer - quarter_spacer, h - quarter_spacer - spacer);
 
                 lock (his.DataLock1)
                 {
@@ -37119,7 +37120,7 @@ namespace Thetis
                     }
                 }               
             }
-            private void renderSpacer(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderSpacer(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsSpacerItem spacer = (clsSpacerItem)mi;
 
@@ -37149,11 +37150,11 @@ namespace Thetis
                     }
                 }
 
-                DXRectF rectSC = new DXRectF(x, y, w, h);
+                Rect rectSC = new Rect(x, y, w, h);
 
                 _renderTarget.FillRectangle(rectSC, getDXBrushForColour(m.MOX ? spacer.Colour2 : spacer.Colour1, mi.FadeValue));
             }
-            private void renderWebImage(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderWebImage(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsWebImage webimg = (clsWebImage)mi;
 
@@ -37183,7 +37184,7 @@ namespace Thetis
                     }
                 }
 
-                DXRectF rectSC = new DXRectF(x, y, w, h);
+                Rect rectSC = new Rect(x, y, w, h);
 
                 if(webimg.Bitmap != null)
                 {
@@ -37225,7 +37226,7 @@ namespace Thetis
 
                     if (_images.ContainsKey(key))
                     {
-                        DXRectF imgRect = new DXRectF(x, y, w, h);
+                        Rect imgRect = new Rect(x, y, w, h);
 
                         ID2D1Bitmap b = _images[key];
 
@@ -37238,7 +37239,7 @@ namespace Thetis
                         else
                             imgRect.Width = imgRect.Height * (im_w / im_h);
 
-                        _renderTarget.DrawBitmap(b, imgRect, 1f, BitmapInterpolationMode.Linear);
+                        _renderTarget.DrawBitmap(b, imgRect, 1f, BitmapInterpolationMode.Linear, null);
                     }
                 }
                 else
@@ -37279,7 +37280,7 @@ namespace Thetis
             private int _dragging_old_update_rate = -1;
             private float _rotator_az_angle_deg = -999;
             private float _rotator_ele_angle_deg = -999;
-            private void renderRotator(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderRotator(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsRotatorItem rotator = (clsRotatorItem)mi;
 
@@ -37288,7 +37289,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //DXRectF mirect = new DXRectF(x, y, w, h);
+                //Rect mirect = new Rect(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Green));
 
                 ID2D1Brush line_br = getDXBrushForColour(rotator.ArrowColour, 255);
@@ -37808,7 +37809,7 @@ namespace Thetis
                 float deltaY = point2.Y - point1.Y;
                 return (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
             }
-            private void renderEye(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderEye(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsMagicEyeItem magicEye = (clsMagicEyeItem)mi;
 
@@ -37817,7 +37818,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //DXRectF mirect = new DXRectF(x, y, w, h);
+                //Rect mirect = new Rect(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Green));
 
                 Vector2 centre = new Vector2(x + w / 2f, y + h / 2f);
@@ -37932,7 +37933,7 @@ namespace Thetis
                 eyeElipse.RadiusY = w / 6f;
                 _renderTarget.FillEllipse(eyeElipse, getDXBrushForColour(System.Drawing.Color.FromArgb(32, 32, 32)));
             }
-            private void renderText(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderText(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsText txt = (clsText)mi;
 
@@ -37941,7 +37942,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //DXRectF mirect = new DXRectF(x, y, w, h);
+                //Rect mirect = new Rect(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Red));
 
                 string sText;
@@ -37963,7 +37964,7 @@ namespace Thetis
 
                 plotText(sText, xx, yy, rect.Width, txt.FontSize, txt.Colour, 255, txt.FontFamily, txt.Style, false, txt.Centre, w, false, 0, 0, false, null, true);
             }
-            private void renderHBarMarkersOnly(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderHBarMarkersOnly(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 // similar to renderHBar, but only renders the marker
                 clsBarItem cbi = (clsBarItem)mi;
@@ -37999,7 +38000,7 @@ namespace Thetis
                 if (cbi.ShowMarker)
                     _renderTarget.DrawLine(new Vector2(xPos, y), new Vector2(xPos, y + h), markerColour, cbi.StrokeWidth);
             }
-            private clsMeterItem renderHBar(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private clsMeterItem renderHBar(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsBarItem cbi = (clsBarItem)mi;
                 
@@ -38008,7 +38009,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                //DXRectF mirect = new DXRectF(x, y, w, h);
+                //Rect mirect = new Rect(x, y, w, h);
                 //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Red));
 
                 PointF min, max;
@@ -38076,7 +38077,7 @@ namespace Thetis
                         case clsBarItem.BarStyle.SolidFilled:
                         case clsBarItem.BarStyle.Line:
                             {
-                                DXRectF history = new DXRectF(minHistory_x, y, maxHistory_x - minHistory_x, fBarHeight);
+                                Rect history = new Rect(minHistory_x, y, maxHistory_x - minHistory_x, fBarHeight);
                                 _renderTarget.FillRectangle(history, historyColour);
                             }
                             break;
@@ -38086,18 +38087,18 @@ namespace Thetis
 
                                 float i;
                                 float startX = (numValueBlocks * segmentStep) + x;
-                                DXRectF barRect;
+                                Rect barRect;
 
                                 for (i = startX; i < maxHistory_x - segmentStep; i += segmentStep)
                                 {
-                                    barRect = new DXRectF(i, y, segmentBlockSize, fBarHeight);
+                                    barRect = new Rect(i, y, segmentBlockSize, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, historyColour);
                                 }
 
                                 // complete the end sliver
                                 if (i < maxHistory_x)
                                 {
-                                    barRect = new DXRectF(i, y, maxHistory_x - i, fBarHeight);
+                                    barRect = new Rect(i, y, maxHistory_x - i, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, historyColour);
                                 }
                             }
@@ -38111,14 +38112,14 @@ namespace Thetis
                         {
                             float fEnd = xPos < fHighXPosTransition ? xPos : fHighXPosTransition;
 
-                            DXRectF barRect = new DXRectF(x, y, fEnd - x, fBarHeight);
+                            Rect barRect = new Rect(x, y, fEnd - x, fBarHeight);
 
                             _renderTarget.FillRectangle(barRect, colour);
 
                             if (fEnd < xPos) // the area in the high range
                             {
                                 // complete the bar
-                                barRect = new DXRectF(fEnd, y, xPos - fEnd, fBarHeight);
+                                barRect = new Rect(fEnd, y, xPos - fEnd, fBarHeight);
                                 _renderTarget.FillRectangle(barRect, colourHigh);
                             }
                         }
@@ -38131,20 +38132,20 @@ namespace Thetis
                     case clsBarItem.BarStyle.Segments:
                         {
                             float i;
-                            DXRectF barRect;
+                            Rect barRect;
 
                             float fEnd = xPos < fHighXPosTransition ? xPos : fHighXPosTransition;
 
                             for (i = x; i < fEnd - segmentStep; i += segmentStep)
                             {
-                                barRect = new DXRectF(i, y, segmentBlockSize, fBarHeight);
+                                barRect = new Rect(i, y, segmentBlockSize, fBarHeight);
                                 _renderTarget.FillRectangle(barRect, colour);
                             }
 
                             // complete the end sliver up to the high transition
                             if (i < fEnd)
                             {
-                                barRect = new DXRectF(i, y, fEnd - i, fBarHeight);
+                                barRect = new Rect(i, y, fEnd - i, fBarHeight);
                                 _renderTarget.FillRectangle(barRect, colour);
                             }
 
@@ -38153,21 +38154,21 @@ namespace Thetis
                                 // sliver to complete block at high transition
                                 if (i < fEnd)
                                 {
-                                    barRect = new DXRectF(fEnd, y, i + segmentBlockSize - fEnd, fBarHeight);
+                                    barRect = new Rect(fEnd, y, i + segmentBlockSize - fEnd, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, colourHigh);
                                 }
 
                                 float j;
                                 for (j = i + segmentStep; j < xPos - segmentStep; j += segmentStep)
                                 {
-                                    barRect = new DXRectF(j, y, segmentBlockSize, fBarHeight);
+                                    barRect = new Rect(j, y, segmentBlockSize, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, colourHigh);
                                 }
 
                                 // complete the end sliver
                                 if (j < xPos)
                                 {
-                                    barRect = new DXRectF(j, y, xPos - j, fBarHeight);
+                                    barRect = new Rect(j, y, xPos - j, fBarHeight);
                                     _renderTarget.FillRectangle(barRect, colourHigh);
                                 }
                             }
@@ -38213,7 +38214,7 @@ namespace Thetis
                     }
 
                     SizeF szTextSize = measureString(sText, cbi.FontFamily, cbi.FntStyle, fontSizeEmScaled);
-                    DXRectF txtrect = new DXRectF(x, y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                    Rect txtrect = new Rect(x, y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(cbi.FontFamily, fontSizeEmScaled, cbi.FntStyle), txtrect, markerColour);
                 }
                 if (cbi.ShowPeakValue)
@@ -38244,13 +38245,13 @@ namespace Thetis
                             break;
                     }
                     SizeF szTextSize = measureString(sText, cbi.FontFamily, cbi.FntStyle, fontSizeEmScaled);
-                    DXRectF txtrect = new DXRectF(x + w - szTextSize.Width, y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
+                    Rect txtrect = new Rect(x + w - szTextSize.Width, y - szTextSize.Height - (h * 0.1f), szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(cbi.FontFamily, fontSizeEmScaled, cbi.FntStyle, true), txtrect, peakValueColour);
                 }
 
                 return cbi.PostDrawItem;
             }
-            //private void renderVBar(DXRectF rect, clsMeterItem mi, clsMeter m)
+            //private void renderVBar(Rect rect, clsMeterItem mi, clsMeter m)
             //{
             //    clsBarItem cbi = (clsBarItem)mi;
 
@@ -38259,7 +38260,7 @@ namespace Thetis
             //    float w = rect.Width * (mi.Size.Width / m.XRatio);
             //    float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-            //    //DXRectF mirect = new DXRectF(x, y, w, h);
+            //    //Rect mirect = new Rect(x, y, w, h);
             //    //_renderTarget.DrawRectangle(mirect, getDXBrushForColour(System.Drawing.Color.Green));
 
             //    PointF min, max;
@@ -38301,7 +38302,7 @@ namespace Thetis
             //            case clsBarItem.BarStyle.SolidFilled:
             //            case clsBarItem.BarStyle.Line:
             //                {
-            //                    DXRectF history = new DXRectF(x, maxHistory_y, w, minHistory_y - maxHistory_y); // drawn TL to BR
+            //                    Rect history = new Rect(x, maxHistory_y, w, minHistory_y - maxHistory_y); // drawn TL to BR
             //                    _renderTarget.FillRectangle(history, getDXBrushForColour(cbi.HistoryColour));
             //                }
             //                break;
@@ -38311,17 +38312,17 @@ namespace Thetis
 
             //            //        float i;
             //            //        float startX = (numValueBlocks * segmentStep) + x;
-            //            //        DXRectF barrect;
+            //            //        Rect barrect;
             //            //        for (i = startX; i < maxHistory_x - segmentStep; i += segmentStep)
             //            //        {
-            //            //            barrect = new DXRectF(i, y, segmentBlockSize, h);
+            //            //            barrect = new Rect(i, y, segmentBlockSize, h);
             //            //            _renderTarget.FillRectangle(barrect, getDXBrushForColour(cbi.HistoryColour));
             //            //        }
 
             //            //        // complete the sliver
             //            //        if (i < maxHistory_x)
             //            //        {
-            //            //            barrect = new DXRectF(i, y, maxHistory_x - i, h);
+            //            //            barrect = new Rect(i, y, maxHistory_x - i, h);
             //            //            _renderTarget.FillRectangle(barrect, getDXBrushForColour(cbi.HistoryColour));
             //            //        }
             //            //    }
@@ -38333,7 +38334,7 @@ namespace Thetis
             //    {
             //        case clsBarItem.BarStyle.SolidFilled:
             //            {
-            //                DXRectF barrect = new DXRectF(x, yPos, w, yBottom - yPos);
+            //                Rect barrect = new Rect(x, yPos, w, yBottom - yPos);
 
             //                if (cbi.PeakHold)
             //                    _renderTarget.DrawLine(new Vector2(x, maxHistory_y), new Vector2(x + w, maxHistory_y), getDXBrushForColour(cbi.PeakHoldMarkerColour), cbi.StrokeWidth);
@@ -38352,17 +38353,17 @@ namespace Thetis
             //        //case clsBarItem.BarStyle.Segments:
             //        //    {
             //        //        float i;
-            //        //        DXRectF barrect;
+            //        //        Rect barrect;
             //        //        for (i = x; i < xPos - segmentStep; i += segmentStep)
             //        //        {
-            //        //            barrect = new DXRectF(i, y, segmentBlockSize, h);
+            //        //            barrect = new Rect(i, y, segmentBlockSize, h);
             //        //            _renderTarget.FillRectangle(barrect, getDXBrushForColour(cbi.Colour));
             //        //        }
 
             //        //        // complete the sliver
             //        //        if (i < xPos)
             //        //        {
-            //        //            barrect = new DXRectF(i, y, xPos - i, h);
+            //        //            barrect = new Rect(i, y, xPos - i, h);
             //        //            _renderTarget.FillRectangle(barrect, getDXBrushForColour(cbi.Colour));
             //        //        }
 
@@ -38384,11 +38385,11 @@ namespace Thetis
             //        float ratio = h / adjustedFontSize.Height;
             //        float newSize = (float)Math.Round((fontSize * ratio) * (fontSize / _dpiScale_width), 1);
 
-            //        DXRectF txtrect = new DXRectF(x, y + (h * 0.2f), w, h);
+            //        Rect txtrect = new Rect(x, y + (h * 0.2f), w, h);
             //        _renderTarget.DrawText(sText, getDXTextFormatForFont(cbi.FontFamily, newSize, cbi.FntStyle), txtrect, getDXBrushForColour(cbi.FontColour));
             //    }
             //}
-            private void renderSolidColour(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderSolidColour(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsSolidColour sc = (clsSolidColour)mi;
                 if (!sc.Visible) return;
@@ -38398,10 +38399,10 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                DXRectF rectSC = new DXRectF(x, y, w, h);
+                Rect rectSC = new Rect(x, y, w, h);
                 _renderTarget.FillRectangle(rectSC, getDXBrushForColour(sc.Colour, sc.Colour.A));
             }
-            private void renderFadeCover(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderFadeCover(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 //clsFadeCover fc = (clsFadeCover)mi;
 
@@ -38417,7 +38418,7 @@ namespace Thetis
                 wi = Math.Max(2f, wi);
                 hi = Math.Max(2f, hi);
 
-                DXRectF rectFC = new DXRectF(x, y, w, h);
+                Rect rectFC = new Rect(x, y, w, h);
                 rectFC.Inflate(wi, hi); // increase size slightly as indictator lines stroke width of 3 will be outside bounds
                 _renderTarget.FillRectangle(rectFC, getDXBrushForColour(this.BackgroundColour, nFade));
                 //_renderTarget.DrawRectangle(rectFC, getDXBrushForColour(System.Drawing.Color.YellowGreen, nFade));
@@ -38474,7 +38475,7 @@ namespace Thetis
 
                 if (fontSizeEm <= 0f || sz.Width <= 0f || sz.Height <= 0f) return (0f, 0f);
 
-                DXRectF rect = new DXRectF(left, top, sz.Width, sz.Height);
+                Rect rect = new Rect(left, top, sz.Width, sz.Height);
 
                 if (rotateDeg != 0f)
                 {
@@ -38522,7 +38523,7 @@ namespace Thetis
 
             //    float left = bAlignRight ? x - sz.Width : bAlignCentre ? x - sz.Width * 0.5f : x;
             //    float top = bAlignCentre ? y - sz.Height * 0.5f : y;
-            //    DXRectF rect = new DXRectF(left, top, sz.Width, sz.Height);
+            //    Rect rect = new Rect(left, top, sz.Width, sz.Height);
 
             //    if (fontSizeEm <= 0 || rect.Width <= 0 || rect.Height <= 0) return (0f, 0f);
 
@@ -38590,22 +38591,22 @@ namespace Thetis
             //    }
 
 
-            //    DXRectF txtrect;
+            //    Rect txtrect;
             //    if (!bAlignRight)
             //    {
             //        if (bAlignCentre)
             //        {
-            //            txtrect = new DXRectF(x - szTextSize.Width / 2f, y - szTextSize.Height / 2f, szTextSize.Width, szTextSize.Height);
+            //            txtrect = new Rect(x - szTextSize.Width / 2f, y - szTextSize.Height / 2f, szTextSize.Width, szTextSize.Height);
             //        }
             //        else
             //        {
-            //            txtrect = new DXRectF(x, y, szTextSize.Width, szTextSize.Height);
+            //            txtrect = new Rect(x, y, szTextSize.Width, szTextSize.Height);
             //        }
             //    }
             //    else
             //    {
             //        // use x is now right edge
-            //        txtrect = new DXRectF(x - szTextSize.Width, y, szTextSize.Width, szTextSize.Height);
+            //        txtrect = new Rect(x - szTextSize.Width, y, szTextSize.Width, szTextSize.Height);
             //    }
 
             //    Matrix3x2 originalTransform = Matrix3x2.Identity;
@@ -38627,24 +38628,24 @@ namespace Thetis
 
             //    return (szTextSize.Width, szTextSize.Height);
             //}
-            private void highlightBox(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, int bx, int by, float gap, clsMeter m, float shift)
+            private void highlightBox(float x, float y, float w, float h, Rect rect, clsVfoDisplay vfo, int bx, int by, float gap, clsMeter m, float shift)
             {
-                DXRectF rct;
+                Rect rct;
                 float wB = gap;
                 float hB = h / 2f;
                 float xB = x + (w * shift) + (bx * gap);
                 float yB = y + (by * hB);
 
-                rct = new DXRectF(xB, yB, wB, hB);
+                rct = new Rect(xB, yB, wB, hB);
                 _renderTarget.FillRectangle(rct, getDXBrushForColour(vfo.DigitHighlightColour));
             }
-            private clsVfoDisplay.buttonState drawTuneStep(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
+            private clsVfoDisplay.buttonState drawTuneStep(float x, float y, float w, float h, Rect rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
             {
                 bool vfoB = shift != 0 || vfo.VFODispMode == clsVfoDisplay.VFODisplayMode.VFO_B;
 
                 // draw grid
                 ID2D1Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
-                DXRectF rct;
+                Rect rct;
                 float xB = 0;
                 float yB = y;
 
@@ -38679,7 +38680,7 @@ namespace Thetis
                 }
 
                 xB = x + (w * shift);
-                rct = new DXRectF(xB, yB, wB, hB);
+                rct = new Rect(xB, yB, wB, hB);
                 _renderTarget.DrawRectangle(rct, lineBrush);
                 _renderTarget.DrawLine(new Vector2(xB, yB + hB / 2f), new Vector2(xB + wB, yB + hB / 2f), lineBrush);
                 for (int i = 1; i < 8; i++)
@@ -38745,13 +38746,13 @@ namespace Thetis
 
                 return button_state;
             }
-            private clsVfoDisplay.buttonState drawBand(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
+            private clsVfoDisplay.buttonState drawBand(float x, float y, float w, float h, Rect rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
             {
                 bool vfoB = shift != 0 || vfo.VFODispMode == clsVfoDisplay.VFODisplayMode.VFO_B;
 
                 // draw grid
                 ID2D1Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
-                DXRectF rct;
+                Rect rct;
                 float xB = 0;
                 float yB = y;
 
@@ -38786,7 +38787,7 @@ namespace Thetis
                 }
 
                 xB = x + (w * shift);
-                rct = new DXRectF(xB, yB, wB, hB);
+                rct = new Rect(xB, yB, wB, hB);
                 _renderTarget.DrawRectangle(rct, lineBrush);
                 _renderTarget.DrawLine(new Vector2(xB, yB + hB / 2f), new Vector2(xB + wB, yB + hB / 2f), lineBrush);
                 for (int i = 1; i < 8; i++)
@@ -38918,13 +38919,13 @@ namespace Thetis
 
                 return button_state;
             }
-            private clsVfoDisplay.buttonState drawMode(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
+            private clsVfoDisplay.buttonState drawMode(float x, float y, float w, float h, Rect rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
             {
                 bool vfoB = shift != 0 || vfo.VFODispMode == clsVfoDisplay.VFODisplayMode.VFO_B;
 
                 // draw grid
                 ID2D1Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
-                DXRectF rct;
+                Rect rct;
                 float xB = 0;
                 float yB = y;
 
@@ -38960,7 +38961,7 @@ namespace Thetis
                 }
 
                 xB = x + (w * shift);
-                rct = new DXRectF(xB, yB, wB, hB);
+                rct = new Rect(xB, yB, wB, hB);
                 _renderTarget.DrawRectangle(rct, lineBrush);
                 _renderTarget.DrawLine(new Vector2(xB, yB + hB / 2f), new Vector2(xB + wB, yB + hB / 2f), lineBrush);
                 for (int i = 1; i < 6; i++)
@@ -39013,13 +39014,13 @@ namespace Thetis
 
                 return button_state;
             }
-            private clsVfoDisplay.buttonState drawFilter(float x, float y, float w, float h, DXRectF rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
+            private clsVfoDisplay.buttonState drawFilter(float x, float y, float w, float h, Rect rect, clsVfoDisplay vfo, clsMeter m, float shift, float x_multy)
             {
                 bool vfoB = shift != 0 || vfo.VFODispMode == clsVfoDisplay.VFODisplayMode.VFO_B;
 
                 // draw grid
                 ID2D1Brush lineBrush = getDXBrushForColour(System.Drawing.Color.White, 255);
-                DXRectF rct;
+                Rect rct;
                 float xB = 0;
                 float yB = y;
 
@@ -39055,7 +39056,7 @@ namespace Thetis
                 }
 
                 xB = x + (w * shift);
-                rct = new DXRectF(xB, yB, wB, hB);
+                rct = new Rect(xB, yB, wB, hB);
                 _renderTarget.DrawRectangle(rct, lineBrush);
                 _renderTarget.DrawLine(new Vector2(xB, yB + hB / 2f), new Vector2(xB + wB, yB + hB / 2f), lineBrush);
                 for (int i = 1; i < 6; i++)
@@ -39127,7 +39128,7 @@ namespace Thetis
 
                 return button_state;
             }
-            private void shrinkRectangle(DXRectF original, float ratio, ref DXRectF shrunk, float absolute = 0f)
+            private void shrinkRectangle(Rect original, float ratio, ref Rect shrunk, float absolute = 0f)
             {
                 float newWidth = original.Width * ratio;
                 float newHeight = original.Height * ratio;
@@ -39186,7 +39187,7 @@ namespace Thetis
 
                 return System.Drawing.Color.FromArgb(R, G, B);
             }
-            private void renderWaveRecord(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderWaveRecord(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsWaveRecord wave = mi as clsWaveRecord;
                 if (wave == null) return;
@@ -39200,7 +39201,7 @@ namespace Thetis
 
                 if (w <= 4f || h <= 4f)
                 {
-                    wave.SetRenderLayout(new DXRectF(), new DXRectF(), new DXRectF(), 0f, 0f, false, null);
+                    wave.SetRenderLayout(default, default, default, 0f, 0f, false, null);
                     return;
                 }
 
@@ -39228,15 +39229,15 @@ namespace Thetis
 
                 RoundedRectangle dragging_rr = new RoundedRectangle();
                 RoundedRectangle rr = new RoundedRectangle();
-                rr.Rect = new DXRectF(x, y, w, h);
+                rr.Rect = new Rect(x, y, w, h);
                 rr.RadiusX = 0f;
                 rr.RadiusY = 0f;
                 fillRoundedRectangle(rr, getDXBrushForColour(panelColour, nFade));
 
-                DXRectF contentRect = new DXRectF(x + panelPadding, y + panelPadding, w - panelPadding * 2f, h - panelPadding * 2f);
+                Rect contentRect = new Rect(x + panelPadding, y + panelPadding, w - panelPadding * 2f, h - panelPadding * 2f);
                 if (contentRect.Width <= 6f || contentRect.Height <= 6f)
                 {
-                    wave.SetRenderLayout(new DXRectF(), new DXRectF(), new DXRectF(), rowPitch, 0f, false, null);
+                    wave.SetRenderLayout(default, default, default, rowPitch, 0f, false, null);
                     return;
                 }
 
@@ -39247,7 +39248,7 @@ namespace Thetis
                     plotText("This list can not be used whilst Thetis", contentRect.Left + (contentRect.Width / 2f), contentRect.Top + (contentRect.Height * 0.42f), rect.Width, wave.FontSize * 0.80f, textColour, nFade, wave.FontFamily, wave.FontStyle, false, true, contentRect.Width * 0.80f, false, emptyHeight);
                     plotText("   is being run in Administrator mode  ", contentRect.Left + (contentRect.Width / 2f), contentRect.Top + (contentRect.Height * 0.52f), rect.Width, wave.FontSize * 0.80f, textColour, nFade, wave.FontFamily, wave.FontStyle, false, true, contentRect.Width * 0.80f, false, emptyHeight);
                     _renderTarget.PopAxisAlignedClip();
-                    wave.SetRenderLayout(contentRect, new DXRectF(), new DXRectF(), rowPitch, 0f, false, new List<clsWaveRecord.WaveRecordHitRegion>());
+                    wave.SetRenderLayout(contentRect, default, default, rowPitch, 0f, false, new List<clsWaveRecord.WaveRecordHitRegion>());
                     return;
                 }
 
@@ -39263,14 +39264,14 @@ namespace Thetis
                 float totalContentHeight = entries.Length > 0 ? (entries.Length * rowPitch) - rowGap : rowHeight;
                 bool showScrollbar = totalContentHeight > contentRect.Height + 0.5f;
 
-                DXRectF scrollTrackRect = new DXRectF();
-                DXRectF scrollThumbRect = new DXRectF();
+                Rect scrollTrackRect = default;
+                Rect scrollThumbRect = default;
                 float scrollbarWidth = 0f;
                 if (showScrollbar)
                 {
                     scrollbarWidth = w * 0.03f;
                     contentRect.Width -= scrollbarWidth + (panelPadding * 0.35f);
-                    scrollTrackRect = new DXRectF(contentRect.Right + (panelPadding * 0.35f), contentRect.Top, scrollbarWidth, contentRect.Height);
+                    scrollTrackRect = new Rect(contentRect.Right + (panelPadding * 0.35f), contentRect.Top, scrollbarWidth, contentRect.Height);
                 }
 
                 if (contentRect.Width <= 6f || contentRect.Height <= 6f)
@@ -39310,7 +39311,7 @@ namespace Thetis
                         float rowBorderStroke = Math.Max(1f, rowHeight * 0.035f);
                         float rowInsetX = Math.Max(contentRect.Width * 0.0005f, rowBorderStroke * 0.70f);
                         float rowInsetY = Math.Max(rowHeight * 0.020f, rowBorderStroke * 0.70f);
-                        DXRectF rowRect = new DXRectF(contentRect.Left + rowInsetX, rowTop + rowInsetY, Math.Max(0f, contentRect.Width - rowInsetX * 2f), Math.Max(0f, rowHeight - rowInsetY * 2f));
+                        Rect rowRect = new Rect(contentRect.Left + rowInsetX, rowTop + rowInsetY, Math.Max(0f, contentRect.Width - rowInsetX * 2f), Math.Max(0f, rowHeight - rowInsetY * 2f));
                         if (rowRect.Width <= 0f || rowRect.Height <= 0f) continue;
 
                         bool isPlaying = samePath(activePlayFilename, entry.FilePath) && globalPlaying;
@@ -39338,8 +39339,8 @@ namespace Thetis
                         float actionX = deleteX - buttonGap - buttonSize;
                         float buttonY = rowRect.Top + (rowRect.Height * 0.17f);
 
-                        DXRectF deleteRect = new DXRectF(deleteX, buttonY, buttonSize, buttonSize);
-                        DXRectF actionRect = new DXRectF(actionX, buttonY, buttonSize, buttonSize);
+                        Rect deleteRect = new Rect(deleteX, buttonY, buttonSize, buttonSize);
+                        Rect actionRect = new Rect(actionX, buttonY, buttonSize, buttonSize);
 
                         float textLeft = rowRect.Left + innerPadX;
                         float textWidth = Math.Max(0f, actionRect.Left - buttonGap - textLeft);
@@ -39446,7 +39447,7 @@ namespace Thetis
 
                         if (canPlay || canStop)
                         {
-                            DXRectF clippedActionRect = clipRect(actionRect, contentRect);
+                            Rect clippedActionRect = clipRect(actionRect, contentRect);
                             if (!rectEmpty(clippedActionRect))
                             {
                                 hitRegions.Add(new clsWaveRecord.WaveRecordHitRegion()
@@ -39460,7 +39461,7 @@ namespace Thetis
 
                         if (canDelete)
                         {
-                            DXRectF clippedDeleteRect = clipRect(deleteRect, contentRect);
+                            Rect clippedDeleteRect = clipRect(deleteRect, contentRect);
                             if (!rectEmpty(clippedDeleteRect))
                             {
                                 hitRegions.Add(new clsWaveRecord.WaveRecordHitRegion()
@@ -39480,7 +39481,7 @@ namespace Thetis
                     float thumbHeight = Math.Max(24f, (contentRect.Height / Math.Max(totalContentHeight, 1f)) * scrollTrackRect.Height);
                     float trackTravel = Math.Max(0f, scrollTrackRect.Height - thumbHeight);
                     float thumbTop = scrollTrackRect.Top + (maxScroll <= 0f ? 0f : (scrollOffset / maxScroll) * trackTravel);
-                    scrollThumbRect = new DXRectF(scrollTrackRect.Left, thumbTop, scrollTrackRect.Width, thumbHeight);
+                    scrollThumbRect = new Rect(scrollTrackRect.Left, thumbTop, scrollTrackRect.Width, thumbHeight);
 
                     rr.Rect = scrollTrackRect;
                     rr.RadiusX = Math.Max(3f, scrollTrackRect.Width * 0.45f);
@@ -39522,7 +39523,7 @@ namespace Thetis
 
                 wave.SetRenderLayout(contentRect, scrollTrackRect, scrollThumbRect, rowPitch, maxScroll, showScrollbar, hitRegions);
             }
-            private void drawWaveRecordButton(DXRectF buttonRect, bool hovered, System.Drawing.Color fillColour, System.Drawing.Color borderColour, System.Drawing.Color hoverColour, int fade, float cornerRadius)
+            private void drawWaveRecordButton(Rect buttonRect, bool hovered, System.Drawing.Color fillColour, System.Drawing.Color borderColour, System.Drawing.Color hoverColour, int fade, float cornerRadius)
             {
                 RoundedRectangle rr = new RoundedRectangle();
                 rr.Rect = buttonRect;
@@ -39536,14 +39537,14 @@ namespace Thetis
                 }
                 drawRoundedRectangle(rr, getDXBrushForColour(borderColour, fade), Math.Max(1f, buttonRect.Width * 0.08f));
             }
-            private void drawWaveRecordIcon(string icon, DXRectF buttonRect, System.Drawing.Color iconColour, int fade)
+            private void drawWaveRecordIcon(string icon, Rect buttonRect, System.Drawing.Color iconColour, int fade)
             {
                 convertImageToDX(icon);
                 if (!_images.ContainsKey(icon)) return;
 
                 ID2D1Bitmap b = _images[icon];
                 float iconSize = Math.Min(buttonRect.Width, buttonRect.Height) * 0.58f;
-                DXRectF iconRect = new DXRectF(
+                Rect iconRect = new Rect(
                     buttonRect.Left + ((buttonRect.Width - iconSize) / 2f),
                     buttonRect.Top + ((buttonRect.Height - iconSize) / 2f),
                     iconSize,
@@ -39564,17 +39565,17 @@ namespace Thetis
                     _renderTarget.Transform = originalTransform;
                 }
             }
-            private DXRectF clipRect(DXRectF value, DXRectF clip)
+            private Rect clipRect(Rect value, Rect clip)
             {
                 float left = Math.Max(value.Left, clip.Left);
                 float top = Math.Max(value.Top, clip.Top);
                 float right = Math.Min(value.Right, clip.Right);
                 float bottom = Math.Min(value.Bottom, clip.Bottom);
 
-                if (right <= left || bottom <= top) return new DXRectF();
-                return new DXRectF(left, top, right - left, bottom - top);
+                if (right <= left || bottom <= top) return default;
+                return new Rect(left, top, right - left, bottom - top);
             }
-            private bool rectEmpty(DXRectF value)
+            private bool rectEmpty(Rect value)
             {
                 return value.Width <= 0f || value.Height <= 0f;
             }
@@ -39583,7 +39584,7 @@ namespace Thetis
                 if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
                 return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
             }
-            private void renderButtonBox(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderButtonBox(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsButtonBox bb = mi as clsButtonBox;
                 if (bb.Columns <= 0) return;
@@ -39599,7 +39600,7 @@ namespace Thetis
                 float y = ((mi.DisplayTopLeft.Y / m.YRatio) * rect.Height) + ((offset / m.YRatio) * rect.Height);
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio) - (rect.Height * (offset / m.YRatio));
-                //DXRectF rectSC = new DXRectF(x, y, w, h);
+                //Rect rectSC = new Rect(x, y, w, h);
                 //_renderTarget.FillRectangle(rectSC, getDXBrushForColour(System.Drawing.Color.Green));
 
                 int total_buttons = bb.TotalButtonsVisible;
@@ -39626,7 +39627,7 @@ namespace Thetis
                 {
                     // header row above the plugin buttons
                     vst_header_height = rect.Height * 0.075f;
-                    DXRectF header_rect = new DXRectF(x, y, w, vst_header_height);
+                    Rect header_rect = new Rect(x, y, w, vst_header_height);
                     RoundedRectangle header_rr = new RoundedRectangle();
                     header_rr.Rect = header_rect;
                     header_rr.RadiusX = vst_header_height * 0.25f;
@@ -39653,9 +39654,9 @@ namespace Thetis
 
                 RoundedRectangle dragging_rr = new RoundedRectangle();
                 RoundedRectangle rr = new RoundedRectangle();
-                DXRectF indicator_adjust = new DXRectF();
-                DXRectF rectBB = new DXRectF();
-                DXRectF shrunk_rect = new DXRectF();
+                Rect indicator_adjust = default;
+                Rect rectBB = default;
+                Rect shrunk_rect = default;
                 Vector2 start = new Vector2();
                 Vector2 end = new Vector2();
 
@@ -40062,10 +40063,10 @@ namespace Thetis
 
                                         ID2D1Bitmap b = _images[icon];
 
-                                        float smallest_dim = rectBB.Size.Width <= rectBB.Height ? rectBB.Size.Width : rectBB.Size.Height;
+                                        float smallest_dim = rectBB.Width <= rectBB.Height ? rectBB.Width : rectBB.Height;
                                         float icon_size = smallest_dim * bb.FontScale * 0.7f;
 
-                                        DXRectF rct = new DXRectF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
+                                        Rect rct = new Rect(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
 
                                         _renderTarget.FillOpacityMask(b, getDXBrushForColour(text_icon_is_indicator ? text_icon_indicator_colour : text_colour, 255), 
                                             OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
@@ -40160,7 +40161,7 @@ namespace Thetis
                                 if (plot)
                                 {
                                     text = (duration > 9.9f ? duration.ToString("F0") : duration.ToString("F1")) + "s";
-                                    DXRectF tmpRect = new DXRectF(rectBB.X, rectBB.Y, rectBB.Width, rectBB.Height);
+                                    Rect tmpRect = new Rect(rectBB.X, rectBB.Y, rectBB.Width, rectBB.Height);
                                     tmpRect.X += half_border - (radius * 0.75f);
                                     tmpRect.Y += half_border;
                                     tmpRect.Width -= border;
@@ -40170,7 +40171,7 @@ namespace Thetis
                                         255, bb.GetFontFamily(1, button), bb.GetFontStyle(1, button), true, false, text_box_width * 0.75f, false, text_box_height * 0.75f, 0, false, null, false, true);
                                 }
 
-                                float smallest_dim = rectBB.Size.Width <= rectBB.Height ? rectBB.Size.Width : rectBB.Size.Height;
+                                float smallest_dim = rectBB.Width <= rectBB.Height ? rectBB.Width : rectBB.Height;
                                 float icon_size = smallest_dim * bb.FontScale * 0.38f;
 
                                 //draw button icon based on play state
@@ -40202,7 +40203,7 @@ namespace Thetis
                                     transform_modified = true;
 
                                     ID2D1Bitmap b = _images[icon];
-                                    DXRectF rct = new DXRectF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
+                                    Rect rct = new Rect(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
                                     System.Drawing.Color icon_c = text_icon_is_indicator ? text_icon_indicator_colour : text_colour;
 
                                     //dim?
@@ -40237,7 +40238,7 @@ namespace Thetis
                                         }
 
                                         ID2D1Bitmap b = _images[icon];
-                                        DXRectF rct = new DXRectF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
+                                        Rect rct = new Rect(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
                                         System.Drawing.Color icon_c = text_icon_is_indicator ? text_icon_indicator_colour : text_colour;
 
                                         //dim?
@@ -40354,7 +40355,7 @@ namespace Thetis
                                 //        }
 
                                 //        ID2D1Bitmap b = _images[icon];
-                                //        DXRectF rct = new DXRectF(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
+                                //        Rect rct = new Rect(cx - (icon_size / 2f), cy - (icon_size / 2f), icon_size, icon_size);
                                 //        System.Drawing.Color icon_c = text_icon_is_indicator ? text_icon_indicator_colour : text_colour;
 
                                 //        //dim?
@@ -40454,7 +40455,7 @@ namespace Thetis
                 return (lighter + 0.05) / (darker + 0.05);
             }
 
-            private void renderVfoDisplay(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderVfoDisplay(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsVfoDisplay vfo = (clsVfoDisplay)mi;
 
@@ -40503,7 +40504,7 @@ namespace Thetis
                 float hB = 0;
                 float mx = 0;
                 float my = 0;
-                DXRectF rct;
+                Rect rct;
                 bool mouse_over_good = false;
 
                 clsVfoDisplay.buttonState button_state_vfoA = clsVfoDisplay.buttonState.NONE;
@@ -40819,7 +40820,7 @@ namespace Thetis
 
                 if (draw_box || button_back_box)
                 {
-                    DXRectF rctB = new DXRectF(x + (w * xB) * x_multy, y + (h * yB), w * wB * x_multy, h * hB);
+                    Rect rctB = new Rect(x + (w * xB) * x_multy, y + (h * yB), w * wB * x_multy, h * hB);
                     _renderTarget.FillRectangle(rctB, getDXBrushForColour(vfo.DigitHighlightColour));
                 }
 
@@ -40929,7 +40930,7 @@ namespace Thetis
                 if (disp_a)
                 {
                     //split only on VFOA
-                    DXRectF rectSplit = new DXRectF(x + (w * 0.1f) * x_multy, y + (h * 0.03f), w * 0.1f * x_multy, h * 0.4f);
+                    Rect rectSplit = new Rect(x + (w * 0.1f) * x_multy, y + (h * 0.03f), w * 0.1f * x_multy, h * 0.4f);
                     if(!(button_back_box && button_state_vfoA == clsVfoDisplay.buttonState.SPLIT)) _renderTarget.FillRectangle(rectSplit, getDXBrushForColour(vfo.SplitBackColour, nVfoAFade));
                     System.Drawing.Color splitColor = m.Split ? vfo.SplitColour : System.Drawing.Color.Black;
                     plotText(m.QuickSplitEnabled ? "QSPLT" : "SPLIT", rectSplit.X + (w * (m.QuickSplitEnabled ? 0.01f : 0.015f)) * x_multy, rectSplit.Y, rect.Width, vfo.FontSize * 1f, splitColor, nVfoAFade, vfo.FontFamily, vfo.Style);
@@ -40958,14 +40959,14 @@ namespace Thetis
                 if (disp_a)
                 {
                     //rx box VFOA
-                    rct = new DXRectF(x + (w * 0.1f) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new Rect(x + (w * 0.1f) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
                     boxColour = bRxVFOA ? cDimRx : cDimerRx;
                     _renderTarget.FillRectangle(rct, getDXBrushForColour(boxColour, nVfoAFade));
                     txtColour = bRxVFOA ? cRx : System.Drawing.Color.Black;
                     plotText("RX", rct.X + (w * 0.005f) * x_multy, rct.Y, rect.Width, vfo.FontSize * 1f, txtColour, nVfoAFade, vfo.FontFamily, vfo.Style);
 
                     //tx box VFOA
-                    rct = new DXRectF(x + (w * 0.152f) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new Rect(x + (w * 0.152f) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
                     boxColour = bCanVfoATx ? cDimTx : cDimerTx;
                     if (!(button_back_box && button_state_vfoA == clsVfoDisplay.buttonState.TX)) _renderTarget.FillRectangle(rct, getDXBrushForColour(boxColour, nVfoAFade));
                     txtColour = bTxVFOA ? cTx : System.Drawing.Color.Black;
@@ -40974,14 +40975,14 @@ namespace Thetis
                 if (disp_b)
                 {
                     //rx box VFOB
-                    rct = new DXRectF(x + (w * 0.1f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new Rect(x + (w * 0.1f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
                     boxColour = bRxVFOB ? cDimRx : cDimerRx;
                     _renderTarget.FillRectangle(rct, getDXBrushForColour(boxColour, nVfoBFade));
                     txtColour = bRxVFOB ? cRx : System.Drawing.Color.Black;
                     plotText("RX", rct.X + (w * 0.005f) * x_multy, rct.Y, rect.Width, vfo.FontSize * 1f, txtColour, nVfoBFade, vfo.FontFamily, vfo.Style);
 
                     //tx box VFOB
-                    rct = new DXRectF(x + (w * 0.152f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new Rect(x + (w * 0.152f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.52f), w * 0.048f * x_multy, h * 0.4f);
                     boxColour = bCanVfoBTx ? cDimTx : cDimerTx;
                     if(!(button_back_box && button_state_vfoB == clsVfoDisplay.buttonState.TX)) _renderTarget.FillRectangle(rct, getDXBrushForColour(boxColour, nVfoBFade));
                     txtColour = bTxVFOB ? cTx : System.Drawing.Color.Black;
@@ -40991,13 +40992,13 @@ namespace Thetis
                 if (disp_a)
                 {
                     //filter VFOA
-                    rct = new DXRectF(x + (w * 0.25f) * x_multy, y + (h * 0.54f), w * 0.048f, h * 0.4f);
+                    rct = new Rect(x + (w * 0.25f) * x_multy, y + (h * 0.54f), w * 0.048f, h * 0.4f);
                     plotText(m.FilterVfoAName, rct.X + (w * 0.005f) * x_multy, rct.Y, rect.Width, vfo.FontSize * 1f, vfo.FilterColour, nVfoAFade, vfo.FontFamily, vfo.Style);
                 }
                 if (disp_b)
                 {
                     //filter VFOB
-                    rct = new DXRectF(x + (w * 0.25f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.54f), w * 0.048f * x_multy, h * 0.4f);
+                    rct = new Rect(x + (w * 0.25f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.54f), w * 0.048f * x_multy, h * 0.4f);
                     plotText(tmpVfoBFilterName, rct.X + (w * 0.005f) * x_multy, rct.Y, rect.Width, vfo.FontSize * 1f, vfo.FilterColour, nVfoBFade, vfo.FontFamily, vfo.Style);
                 }
 
@@ -41008,12 +41009,12 @@ namespace Thetis
 
                     if (disp_a)
                     {
-                        rct = new DXRectF(x + (w * 0.250f) * x_multy, y + (bt_h * 0.85f), w * 0.08f, bt_h * 0.03f);
+                        rct = new Rect(x + (w * 0.250f) * x_multy, y + (bt_h * 0.85f), w * 0.08f, bt_h * 0.03f);
                         plotText(m.VFOABandText, rct.X, rct.Y, rect.Width, vfo.FontSize * 1f, vfo.BandTextColour, nVfoAFade, vfo.FontFamily, vfo.Style, false, true);
                     }
                     if (disp_b && !m.IsVfoASub) // no band text for vfo_sub
                     {
-                        rct = new DXRectF(x + (w * 0.250f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (bt_h * 0.85f), w * 0.08f, bt_h * 0.03f);
+                        rct = new Rect(x + (w * 0.250f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (bt_h * 0.85f), w * 0.08f, bt_h * 0.03f);
                         plotText(m.VFOBBandText, rct.X, rct.Y, rect.Width, vfo.FontSize * 1f, vfo.BandTextColour, nVfoBFade, vfo.FontFamily, vfo.Style, false, true);
                     }
                 }
@@ -41031,13 +41032,13 @@ namespace Thetis
                 {                    
                     if (_images.ContainsKey("lock")/* && _bitmap_brushes.ContainsKey("lock")*/)
                     {
-                        rct = new DXRectF(x + (w * 0.199f) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
+                        rct = new Rect(x + (w * 0.199f) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
                         ID2D1Bitmap b = _images["lock"];
                         _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.LockColour, m.VFOALock ? nVfoAFade : Math.Min(64, nVfoAFade)), OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                     }
                     if (_images.ContainsKey("vfo_sync")/* && _bitmap_brushes.ContainsKey("vfo_sync")*/)
                     {
-                        rct = new DXRectF(x + (w * 0.224f) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
+                        rct = new Rect(x + (w * 0.224f) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
                         ID2D1Bitmap b = _images["vfo_sync"];
                         _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.SyncColour, m.VFOSync ? nVfoAFade : Math.Min(64, nVfoAFade)), OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                     }
@@ -41046,13 +41047,13 @@ namespace Thetis
                 {
                     if (_images.ContainsKey("lock")/* && _bitmap_brushes.ContainsKey("lock")*/)
                     {
-                        rct = new DXRectF(x + (w * 0.199f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
+                        rct = new Rect(x + (w * 0.199f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
                         ID2D1Bitmap b = _images["lock"];
                         _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.LockColour, m.VFOBLock ? nVfoBFade : Math.Min(64, nVfoBFade)), OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                     }
                     if (_images.ContainsKey("vfo_sync")/* && _bitmap_brushes.ContainsKey("vfo_sync")*/)
                     {
-                        rct = new DXRectF(x + (w * 0.224f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
+                        rct = new Rect(x + (w * 0.224f) * x_multy + (w * (0.50f - x_shift)) * x_multy, y + (h * 0.58f), w * 0.026f * x_multy, w * 0.026f * x_multy);
                         ID2D1Bitmap b = _images["vfo_sync"];
                         _renderTarget.FillOpacityMask(b, getDXBrushForColour(vfo.SyncColour, m.VFOSync ? nVfoBFade : Math.Min(64, nVfoBFade)), OpacityMaskContent.Graphics, rct, new RawRectF(0, 0, b.Size.Width, b.Size.Height));
                     }
@@ -41071,7 +41072,7 @@ namespace Thetis
                 //plotText($"a button state = {vfo.VFOAButtonState}", x, y + 40, rect.Width, 12, System.Drawing.Color.White, 255, vfo.FontFamily, vfo.Style);
                 //plotText($"b button state = {vfo.VFOBButtonState}", x, y + 60, rect.Width, 12, System.Drawing.Color.White, 255, vfo.FontFamily, vfo.Style);
             }
-            private void renderClock(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderClock(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsClock clk = (clsClock)mi;
 
@@ -41116,26 +41117,26 @@ namespace Thetis
                     plotText("utc", x + (w * 0.52f), y + (h * 0.03f), rect.Width, clk.FontSize, clk.TypeTitleColour, 255, clk.FontFamily, clk.Style);
                 }
 
-                DXRectF rct;
+                Rect rct;
 
                 //time
-                rct = new DXRectF(x + (w * 0.12f), y + (h * 0.02f), w, h);
+                rct = new Rect(x + (w * 0.12f), y + (h * 0.02f), w, h);
                 plotText(sLoc, rct.X + fPadLoc, rct.Y, rect.Width, clk.FontSize * 1.9f, clk.TimeColour, 255, clk.FontFamily, clk.Style);
                 if (!clk.Show24HourCLock)
                     plotText(sLocAmPm, rct.X + (w * 0.228f), rct.Y + (h * 0.285f), rect.Width, clk.FontSize * 0.8f, clk.TimeColour, 255, clk.FontFamily, clk.Style);
 
-                rct = new DXRectF(x + (w * 0.12f) + (w * 0.52f), y + (h * 0.02f), w, h);
+                rct = new Rect(x + (w * 0.12f) + (w * 0.52f), y + (h * 0.02f), w, h);
                 plotText(sUtc, rct.X + fPadUtc, rct.Y, rect.Width, clk.FontSize * 1.9f, clk.TimeColour, 255, clk.FontFamily, clk.Style);
                 if (!clk.Show24HourCLock)
                     plotText(sUtcAmPm, rct.X + (w * 0.228f), rct.Y + (h * 0.285f), rect.Width, clk.FontSize * 0.8f, clk.TimeColour, 255, clk.FontFamily, clk.Style);
 
                 //date
-                rct = new DXRectF(x + (w * 0.132f), y + (h * 0.6f), w, h);
+                rct = new Rect(x + (w * 0.132f), y + (h * 0.6f), w, h);
                 plotText(sLocDate, rct.X, rct.Y, rect.Width, clk.FontSize * 0.9f, clk.DateColour, 255, clk.FontFamily, clk.Style);
-                rct = new DXRectF(x + (w * 0.132f) + (w * 0.52f), y + (h * 0.6f), w, h);
+                rct = new Rect(x + (w * 0.132f) + (w * 0.52f), y + (h * 0.6f), w, h);
                 plotText(sUtcDate, rct.X, rct.Y, rect.Width, clk.FontSize * 0.9f, clk.DateColour, 255, clk.FontFamily, clk.Style);
             }
-            private void renderSignalTextDisplay(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderSignalTextDisplay(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsSignalText st = (clsSignalText)mi;
 
@@ -41182,7 +41183,7 @@ namespace Thetis
                 Common.SMeterFromDBM2(st.Value, MeterManager.IsAboveS9Frequency(_rx), out int S, out int dBmOver);
                 string sText = "S " + S.ToString();
                 szTextSize = measureString(sText, st.FontFamily, st.FntStyle, fontSizeEmScaled);
-                DXRectF txtrect = new DXRectF(x + (w * 0.5f) - (szTextSize.Width * 0.5f), y, szTextSize.Width, szTextSize.Height);
+                Rect txtrect = new Rect(x + (w * 0.5f) - (szTextSize.Width * 0.5f), y, szTextSize.Width, szTextSize.Height);
                 _renderTarget.DrawText(sText, getDXTextFormatForFont(st.FontFamily, fontSizeEmScaled, st.FntStyle), txtrect, getDXBrushForColour(st.FontColour, 255));
                 if (dBmOver > 0)
                 {
@@ -41207,7 +41208,7 @@ namespace Thetis
                     Common.SMeterFromDBM2(st.MaxHistory, MeterManager.IsAboveS9Frequency(_rx), out S, out dBmOver);
                     sText = "S " + S.ToString();
                     szTextSize = measureString(sText, st.FontFamily, st.FntStyle, fontSizeEmScaled);
-                    txtrect = new DXRectF(x + (w * 0.5f) - (szTextSize.Width * 0.5f), y + (h * 0.62f), szTextSize.Width, szTextSize.Height);
+                    txtrect = new Rect(x + (w * 0.5f) - (szTextSize.Width * 0.5f), y + (h * 0.62f), szTextSize.Width, szTextSize.Height);
                     _renderTarget.DrawText(sText, getDXTextFormatForFont(st.FontFamily, fontSizeEmScaled, st.FntStyle), txtrect, getDXBrushForColour(st.PeakValueColour, 255));
                     if (dBmOver > 0)
                     {
@@ -41226,7 +41227,7 @@ namespace Thetis
                     }
                 }
             }
-            private void renderImage(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderImage(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsImage img = (clsImage)mi;
 
@@ -41251,7 +41252,7 @@ namespace Thetis
 
                 if (MeterManager.ContainsBitmap(sImage))
                 {
-                    DXRectF imgRect = new DXRectF(x, y, w, h);
+                    Rect imgRect = new Rect(x, y, w, h);
 
                     if (!img.Clipped)
                     {
@@ -41264,7 +41265,7 @@ namespace Thetis
                         float cw = rect.Width * (img.ClipSize.Width / m.XRatio);
                         float ch = rect.Height * (img.ClipSize.Height / m.YRatio);
 
-                        DXRectF clipRect = new DXRectF(cx, cy, cw, ch);
+                        Rect clipRect = new Rect(cx, cy, cw, ch);
                         _renderTarget.PushAxisAlignedClip(clipRect, AntialiasMode.Aliased); // prevent anything drawing from outside the rectangle, no nee to cut the image
                     }
 
@@ -41311,7 +41312,7 @@ namespace Thetis
                         else
                             imgRect.Width = imgRect.Height * (im_w / im_h);
 
-                        _renderTarget.DrawBitmap(b, imgRect, 1f, BitmapInterpolationMode.Linear);
+                        _renderTarget.DrawBitmap(b, imgRect, 1f, BitmapInterpolationMode.Linear, null);
 
                         if (img.ClippedEllipse)
                         {
@@ -41336,7 +41337,7 @@ namespace Thetis
                     _renderTarget.PopAxisAlignedClip();
                 }
             }
-            private void renderNeedle(DXRectF rect, clsMeterItem mi, clsMeter m)
+            private void renderNeedle(Rect rect, clsMeterItem mi, clsMeter m)
             {
                 clsNeedleItem ni = (clsNeedleItem)mi;
 
@@ -41345,7 +41346,7 @@ namespace Thetis
                 float w = rect.Width * (mi.Size.Width / m.XRatio);
                 float h = rect.Height * (mi.Size.Height / m.YRatio);
 
-                DXRectF nirect = new DXRectF(x, y, w, h);
+                Rect nirect = new Rect(x, y, w, h);
                 //_renderTarget.DrawRectangle(nirect, getDXBrushForColour(System.Drawing.Color.Red));
 
                 _renderTarget.PushAxisAlignedClip(nirect, AntialiasMode.Aliased); // prevent anything drawing from outside the rectangle
