@@ -12361,7 +12361,7 @@
             this.groupBoxTS49.Controls.Add(this.txtFilter_other_frequencies);
             this.groupBoxTS49.Controls.Add(this.txtFilter_cw_frequencies);
             this.groupBoxTS49.Controls.Add(this.txtFilter_sideband_frequencies);
-            this.groupBoxTS49.Location = new System.Drawing.Point(8, 210);
+            this.groupBoxTS49.Location = new System.Drawing.Point(8, 226);
             this.groupBoxTS49.Name = "groupBoxTS49";
             this.groupBoxTS49.Size = new System.Drawing.Size(411, 109);
             this.groupBoxTS49.TabIndex = 32;
@@ -12465,7 +12465,7 @@
             // 
             this.chkLimitFilterEdgesToSidebands.AutoSize = true;
             this.chkLimitFilterEdgesToSidebands.Image = null;
-            this.chkLimitFilterEdgesToSidebands.Location = new System.Drawing.Point(19, 176);
+            this.chkLimitFilterEdgesToSidebands.Location = new System.Drawing.Point(19, 198);
             this.chkLimitFilterEdgesToSidebands.Name = "chkLimitFilterEdgesToSidebands";
             this.chkLimitFilterEdgesToSidebands.Size = new System.Drawing.Size(164, 17);
             this.chkLimitFilterEdgesToSidebands.TabIndex = 31;
@@ -12662,7 +12662,7 @@
             this.grpOptFilterControls.Controls.Add(this.chkOptFilterSaveChanges);
             this.grpOptFilterControls.Location = new System.Drawing.Point(8, 8);
             this.grpOptFilterControls.Name = "grpOptFilterControls";
-            this.grpOptFilterControls.Size = new System.Drawing.Size(200, 152);
+            this.grpOptFilterControls.Size = new System.Drawing.Size(232, 172);
             this.grpOptFilterControls.TabIndex = 29;
             this.grpOptFilterControls.TabStop = false;
             this.grpOptFilterControls.Text = "RX1 Filter Controls";
@@ -12674,7 +12674,7 @@
             0,
             0,
             0});
-            this.udFilterDefaultLowCut.Location = new System.Drawing.Point(128, 118);
+            this.udFilterDefaultLowCut.Location = new System.Drawing.Point(160, 133);
             this.udFilterDefaultLowCut.Maximum = new decimal(new int[] {
             500,
             0,
@@ -12701,9 +12701,9 @@
             // lblDefaultLowCut
             // 
             this.lblDefaultLowCut.Image = null;
-            this.lblDefaultLowCut.Location = new System.Drawing.Point(8, 119);
+            this.lblDefaultLowCut.Location = new System.Drawing.Point(8, 134);
             this.lblDefaultLowCut.Name = "lblDefaultLowCut";
-            this.lblDefaultLowCut.Size = new System.Drawing.Size(120, 23);
+            this.lblDefaultLowCut.Size = new System.Drawing.Size(150, 23);
             this.lblDefaultLowCut.TabIndex = 16;
             this.lblDefaultLowCut.Text = "Default Low Cut (Hz):";
             // 
@@ -12714,7 +12714,7 @@
             0,
             0,
             0});
-            this.udOptMaxFilterShift.Location = new System.Drawing.Point(128, 70);
+            this.udOptMaxFilterShift.Location = new System.Drawing.Point(160, 79);
             this.udOptMaxFilterShift.Maximum = new decimal(new int[] {
             20000,
             0,
@@ -12742,9 +12742,9 @@
             // lblOptMaxFilterShift
             // 
             this.lblOptMaxFilterShift.Image = null;
-            this.lblOptMaxFilterShift.Location = new System.Drawing.Point(8, 71);
+            this.lblOptMaxFilterShift.Location = new System.Drawing.Point(8, 80);
             this.lblOptMaxFilterShift.Name = "lblOptMaxFilterShift";
-            this.lblOptMaxFilterShift.Size = new System.Drawing.Size(120, 23);
+            this.lblOptMaxFilterShift.Size = new System.Drawing.Size(150, 23);
             this.lblOptMaxFilterShift.TabIndex = 14;
             this.lblOptMaxFilterShift.Text = "Max Filter Shift (Hz):";
             // 
@@ -12756,7 +12756,7 @@
             "Linear",
             "Log",
             "Log10"});
-            this.comboOptFilterWidthMode.Location = new System.Drawing.Point(128, 44);
+            this.comboOptFilterWidthMode.Location = new System.Drawing.Point(160, 49);
             this.comboOptFilterWidthMode.Name = "comboOptFilterWidthMode";
             this.comboOptFilterWidthMode.Size = new System.Drawing.Size(59, 21);
             this.comboOptFilterWidthMode.TabIndex = 12;
@@ -12766,9 +12766,9 @@
             // lblOptWidthSliderMode
             // 
             this.lblOptWidthSliderMode.Image = null;
-            this.lblOptWidthSliderMode.Location = new System.Drawing.Point(8, 47);
+            this.lblOptWidthSliderMode.Location = new System.Drawing.Point(8, 52);
             this.lblOptWidthSliderMode.Name = "lblOptWidthSliderMode";
-            this.lblOptWidthSliderMode.Size = new System.Drawing.Size(104, 16);
+            this.lblOptWidthSliderMode.Size = new System.Drawing.Size(120, 16);
             this.lblOptWidthSliderMode.TabIndex = 11;
             this.lblOptWidthSliderMode.Text = "Width Slider Mode:";
             // 
@@ -12779,7 +12779,7 @@
             0,
             0,
             0});
-            this.udOptMaxFilterWidth.Location = new System.Drawing.Point(128, 22);
+            this.udOptMaxFilterWidth.Location = new System.Drawing.Point(160, 23);
             this.udOptMaxFilterWidth.Maximum = new decimal(new int[] {
             20000,
             0,
@@ -12806,16 +12806,16 @@
             // lblOptMaxFilter
             // 
             this.lblOptMaxFilter.Image = null;
-            this.lblOptMaxFilter.Location = new System.Drawing.Point(8, 23);
+            this.lblOptMaxFilter.Location = new System.Drawing.Point(8, 24);
             this.lblOptMaxFilter.Name = "lblOptMaxFilter";
-            this.lblOptMaxFilter.Size = new System.Drawing.Size(120, 23);
+            this.lblOptMaxFilter.Size = new System.Drawing.Size(150, 23);
             this.lblOptMaxFilter.TabIndex = 10;
             this.lblOptMaxFilter.Text = "Max Filter Width (Hz):";
             // 
             // chkOptFilterSaveChanges
             // 
             this.chkOptFilterSaveChanges.Image = null;
-            this.chkOptFilterSaveChanges.Location = new System.Drawing.Point(11, 95);
+            this.chkOptFilterSaveChanges.Location = new System.Drawing.Point(11, 107);
             this.chkOptFilterSaveChanges.Name = "chkOptFilterSaveChanges";
             this.chkOptFilterSaveChanges.Size = new System.Drawing.Size(176, 16);
             this.chkOptFilterSaveChanges.TabIndex = 15;
