@@ -1933,6 +1933,28 @@
             this.comboASIODevicesAvailable = new System.Windows.Forms.ComboBoxTS();
             this.labelTS282 = new System.Windows.Forms.LabelTS();
             this.tpAudioRecording = new System.Windows.Forms.TabPage();
+            this.tpStreaming = new System.Windows.Forms.TabPage();
+            this.groupBoxStreamOut = new System.Windows.Forms.GroupBoxTS();
+            this.chkStreamOutRxEnable = new System.Windows.Forms.CheckBoxTS();
+            this.comboStreamOutRxDevice = new System.Windows.Forms.ComboBoxTS();
+            this.chkStreamOutTxEnable = new System.Windows.Forms.CheckBoxTS();
+            this.comboStreamOutTxDevice = new System.Windows.Forms.ComboBoxTS();
+            this.btnStreamOutRefresh = new System.Windows.Forms.ButtonTS();
+            this.labelStreamOutHint = new System.Windows.Forms.LabelTS();
+            this.labelStreamOutStatus = new System.Windows.Forms.LabelTS();
+            this.groupBoxStreamStatus = new System.Windows.Forms.GroupBoxTS();
+            this.labelStreamOutRxCaption = new System.Windows.Forms.LabelTS();
+            this.trkStreamOutRxVolume = new System.Windows.Forms.TrackBarTS();
+            this.labelStreamOutRxVol = new System.Windows.Forms.LabelTS();
+            this.labelStreamOutTxCaption = new System.Windows.Forms.LabelTS();
+            this.trkStreamOutTxVolume = new System.Windows.Forms.TrackBarTS();
+            this.labelStreamOutTxVol = new System.Windows.Forms.LabelTS();
+            this.progressStreamOutRx = new System.Windows.Forms.ProgressBar();
+            this.labelStreamOutRxBarCaption = new System.Windows.Forms.LabelTS();
+            this.labelStreamOutRxBarTxt = new System.Windows.Forms.LabelTS();
+            this.progressStreamOutTx = new System.Windows.Forms.ProgressBar();
+            this.labelStreamOutTxBarCaption = new System.Windows.Forms.LabelTS();
+            this.labelStreamOutTxBarTxt = new System.Windows.Forms.LabelTS();
             this.btnRecording_openWaverecordFolder = new System.Windows.Forms.ButtonTS();
             this.groupBoxTS66 = new System.Windows.Forms.GroupBoxTS();
             this.labelTS649 = new System.Windows.Forms.LabelTS();
@@ -4876,6 +4898,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCMasio_InOut_Info)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudAsioBlockNum)).BeginInit();
             this.tpAudioRecording.SuspendLayout();
+            this.tpStreaming.SuspendLayout();
             this.groupBoxTS66.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudRecording_txGain)).BeginInit();
             this.groupBoxTS64.SuspendLayout();
@@ -27782,6 +27805,7 @@
             this.tcAudio.Controls.Add(this.tpAdvancedAudio);
             this.tcAudio.Controls.Add(this.tpCMAsio);
             this.tcAudio.Controls.Add(this.tpAudioRecording);
+            this.tcAudio.Controls.Add(this.tpStreaming);
             this.tcAudio.Location = new System.Drawing.Point(0, 0);
             this.tcAudio.Name = "tcAudio";
             this.tcAudio.SelectedIndex = 0;
@@ -32176,6 +32200,244 @@
             this.tpAudioRecording.Size = new System.Drawing.Size(712, 404);
             this.tpAudioRecording.TabIndex = 6;
             this.tpAudioRecording.Text = "Recording";
+            // 
+            // tpStreaming
+            // 
+            this.tpStreaming.BackColor = System.Drawing.SystemColors.Control;
+            this.tpStreaming.Controls.Add(this.groupBoxStreamStatus);
+            this.tpStreaming.Controls.Add(this.groupBoxStreamOut);
+            this.tpStreaming.Location = new System.Drawing.Point(4, 22);
+            this.tpStreaming.Name = "tpStreaming";
+            this.tpStreaming.Size = new System.Drawing.Size(712, 404);
+            this.tpStreaming.TabIndex = 7;
+            this.tpStreaming.Text = "Streaming";
+            // 
+            // groupBoxStreamOut
+            // 
+            this.groupBoxStreamOut.Controls.Add(this.labelStreamOutTxCaption);
+            this.groupBoxStreamOut.Controls.Add(this.trkStreamOutTxVolume);
+            this.groupBoxStreamOut.Controls.Add(this.labelStreamOutTxVol);
+            this.groupBoxStreamOut.Controls.Add(this.labelStreamOutRxCaption);
+            this.groupBoxStreamOut.Controls.Add(this.trkStreamOutRxVolume);
+            this.groupBoxStreamOut.Controls.Add(this.labelStreamOutRxVol);
+            this.groupBoxStreamOut.Controls.Add(this.labelStreamOutHint);
+            this.groupBoxStreamOut.Controls.Add(this.btnStreamOutRefresh);
+            this.groupBoxStreamOut.Controls.Add(this.comboStreamOutTxDevice);
+            this.groupBoxStreamOut.Controls.Add(this.chkStreamOutTxEnable);
+            this.groupBoxStreamOut.Controls.Add(this.comboStreamOutRxDevice);
+            this.groupBoxStreamOut.Controls.Add(this.chkStreamOutRxEnable);
+            this.groupBoxStreamOut.Location = new System.Drawing.Point(12, 12);
+            this.groupBoxStreamOut.Name = "groupBoxStreamOut";
+            this.groupBoxStreamOut.Size = new System.Drawing.Size(688, 210);
+            this.groupBoxStreamOut.TabIndex = 0;
+            this.groupBoxStreamOut.TabStop = false;
+            this.groupBoxStreamOut.Text = "Streaming Output";
+            // 
+            // chkStreamOutRxEnable
+            // 
+            this.chkStreamOutRxEnable.AutoSize = true;
+            this.chkStreamOutRxEnable.Location = new System.Drawing.Point(14, 28);
+            this.chkStreamOutRxEnable.Name = "chkStreamOutRxEnable";
+            this.chkStreamOutRxEnable.Size = new System.Drawing.Size(264, 17);
+            this.chkStreamOutRxEnable.TabIndex = 0;
+            this.chkStreamOutRxEnable.Text = "RX: stream receiver audio (after VST chain)";
+            this.chkStreamOutRxEnable.UseVisualStyleBackColor = true;
+            this.chkStreamOutRxEnable.CheckedChanged += new System.EventHandler(this.chkStreamOutRxEnable_CheckedChanged);
+            // 
+            // comboStreamOutRxDevice
+            // 
+            this.comboStreamOutRxDevice.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.comboStreamOutRxDevice.FormattingEnabled = true;
+            this.comboStreamOutRxDevice.Location = new System.Drawing.Point(288, 25);
+            this.comboStreamOutRxDevice.Name = "comboStreamOutRxDevice";
+            this.comboStreamOutRxDevice.Size = new System.Drawing.Size(384, 21);
+            this.comboStreamOutRxDevice.TabIndex = 1;
+            this.comboStreamOutRxDevice.SelectedIndexChanged += new System.EventHandler(this.comboStreamOutRxDevice_SelectedIndexChanged);
+            // 
+            // labelStreamOutRxCaption
+            // 
+            this.labelStreamOutRxCaption.AutoSize = true;
+            this.labelStreamOutRxCaption.Image = null;
+            this.labelStreamOutRxCaption.Location = new System.Drawing.Point(14, 52);
+            this.labelStreamOutRxCaption.Name = "labelStreamOutRxCaption";
+            this.labelStreamOutRxCaption.Size = new System.Drawing.Size(26, 13);
+            this.labelStreamOutRxCaption.TabIndex = 6;
+            this.labelStreamOutRxCaption.Text = "Gain";
+            // 
+            // trkStreamOutRxVolume
+            // 
+            this.trkStreamOutRxVolume.Location = new System.Drawing.Point(48, 48);
+            this.trkStreamOutRxVolume.Maximum = 40;
+            this.trkStreamOutRxVolume.Minimum = -20;
+            this.trkStreamOutRxVolume.Name = "trkStreamOutRxVolume";
+            this.trkStreamOutRxVolume.Size = new System.Drawing.Size(350, 45);
+            this.trkStreamOutRxVolume.TabIndex = 7;
+            this.trkStreamOutRxVolume.Value = 0;
+            this.trkStreamOutRxVolume.ValueChanged += new System.EventHandler(this.trkStreamOutRxVolume_ValueChanged);
+            // 
+            // labelStreamOutRxVol
+            // 
+            this.labelStreamOutRxVol.AutoSize = true;
+            this.labelStreamOutRxVol.Image = null;
+            this.labelStreamOutRxVol.Location = new System.Drawing.Point(404, 52);
+            this.labelStreamOutRxVol.Name = "labelStreamOutRxVol";
+            this.labelStreamOutRxVol.Size = new System.Drawing.Size(29, 13);
+            this.labelStreamOutRxVol.TabIndex = 8;
+            this.labelStreamOutRxVol.Text = "0 dB";
+            // 
+            // chkStreamOutTxEnable
+            // 
+            this.chkStreamOutTxEnable.AutoSize = true;
+            this.chkStreamOutTxEnable.Location = new System.Drawing.Point(14, 100);
+            this.chkStreamOutTxEnable.Name = "chkStreamOutTxEnable";
+            this.chkStreamOutTxEnable.Size = new System.Drawing.Size(268, 17);
+            this.chkStreamOutTxEnable.TabIndex = 2;
+            this.chkStreamOutTxEnable.Text = "TX: stream transmitter audio (after VST chain)";
+            this.chkStreamOutTxEnable.UseVisualStyleBackColor = true;
+            this.chkStreamOutTxEnable.CheckedChanged += new System.EventHandler(this.chkStreamOutTxEnable_CheckedChanged);
+            // 
+            // comboStreamOutTxDevice
+            // 
+            this.comboStreamOutTxDevice.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.comboStreamOutTxDevice.FormattingEnabled = true;
+            this.comboStreamOutTxDevice.Location = new System.Drawing.Point(288, 97);
+            this.comboStreamOutTxDevice.Name = "comboStreamOutTxDevice";
+            this.comboStreamOutTxDevice.Size = new System.Drawing.Size(384, 21);
+            this.comboStreamOutTxDevice.TabIndex = 3;
+            this.comboStreamOutTxDevice.SelectedIndexChanged += new System.EventHandler(this.comboStreamOutTxDevice_SelectedIndexChanged);
+            // 
+            // labelStreamOutTxCaption
+            // 
+            this.labelStreamOutTxCaption.AutoSize = true;
+            this.labelStreamOutTxCaption.Image = null;
+            this.labelStreamOutTxCaption.Location = new System.Drawing.Point(14, 124);
+            this.labelStreamOutTxCaption.Name = "labelStreamOutTxCaption";
+            this.labelStreamOutTxCaption.Size = new System.Drawing.Size(26, 13);
+            this.labelStreamOutTxCaption.TabIndex = 9;
+            this.labelStreamOutTxCaption.Text = "Gain";
+            // 
+            // trkStreamOutTxVolume
+            // 
+            this.trkStreamOutTxVolume.Location = new System.Drawing.Point(48, 120);
+            this.trkStreamOutTxVolume.Maximum = 40;
+            this.trkStreamOutTxVolume.Minimum = -20;
+            this.trkStreamOutTxVolume.Name = "trkStreamOutTxVolume";
+            this.trkStreamOutTxVolume.Size = new System.Drawing.Size(350, 45);
+            this.trkStreamOutTxVolume.TabIndex = 10;
+            this.trkStreamOutTxVolume.Value = 0;
+            this.trkStreamOutTxVolume.ValueChanged += new System.EventHandler(this.trkStreamOutTxVolume_ValueChanged);
+            // 
+            // labelStreamOutTxVol
+            // 
+            this.labelStreamOutTxVol.AutoSize = true;
+            this.labelStreamOutTxVol.Image = null;
+            this.labelStreamOutTxVol.Location = new System.Drawing.Point(404, 124);
+            this.labelStreamOutTxVol.Name = "labelStreamOutTxVol";
+            this.labelStreamOutTxVol.Size = new System.Drawing.Size(29, 13);
+            this.labelStreamOutTxVol.TabIndex = 11;
+            this.labelStreamOutTxVol.Text = "0 dB";
+            // 
+            // btnStreamOutRefresh
+            // 
+            this.btnStreamOutRefresh.Image = null;
+            this.btnStreamOutRefresh.Location = new System.Drawing.Point(564, 168);
+            this.btnStreamOutRefresh.Name = "btnStreamOutRefresh";
+            this.btnStreamOutRefresh.Selectable = true;
+            this.btnStreamOutRefresh.Size = new System.Drawing.Size(100, 25);
+            this.btnStreamOutRefresh.TabIndex = 12;
+            this.btnStreamOutRefresh.Text = "Refresh Devices";
+            this.btnStreamOutRefresh.UseVisualStyleBackColor = true;
+            this.btnStreamOutRefresh.Click += new System.EventHandler(this.btnStreamOutRefresh_Click);
+            // 
+            // labelStreamOutHint
+            // 
+            this.labelStreamOutHint.AutoSize = false;
+            this.labelStreamOutHint.Image = null;
+            this.labelStreamOutHint.Location = new System.Drawing.Point(14, 176);
+            this.labelStreamOutHint.Name = "labelStreamOutHint";
+            this.labelStreamOutHint.Size = new System.Drawing.Size(540, 30);
+            this.labelStreamOutHint.TabIndex = 13;
+            this.labelStreamOutHint.Text = "Sends a copy of the radio audio to the selected Windows output device. Pick a virtual audio cable (e.g. VB-CABLE) or your sound card and capture it in OBS Studio with an Audio Output Capture (WASAPI) source.";
+            // 
+            // labelStreamOutStatus
+            // 
+            this.labelStreamOutStatus.AutoSize = false;
+            this.labelStreamOutStatus.Image = null;
+            this.labelStreamOutStatus.Location = new System.Drawing.Point(12, 24);
+            this.labelStreamOutStatus.Name = "labelStreamOutStatus";
+            this.labelStreamOutStatus.Size = new System.Drawing.Size(660, 16);
+            this.labelStreamOutStatus.TabIndex = 0;
+            this.labelStreamOutStatus.Text = "RX: OFF   |   TX: OFF";
+            // 
+            // labelStreamOutRxBarCaption
+            // 
+            this.labelStreamOutRxBarCaption.AutoSize = true;
+            this.labelStreamOutRxBarCaption.Image = null;
+            this.labelStreamOutRxBarCaption.Location = new System.Drawing.Point(12, 46);
+            this.labelStreamOutRxBarCaption.Name = "labelStreamOutRxBarCaption";
+            this.labelStreamOutRxBarCaption.Size = new System.Drawing.Size(23, 13);
+            this.labelStreamOutRxBarCaption.TabIndex = 1;
+            this.labelStreamOutRxBarCaption.Text = "RX";
+            // 
+            // progressStreamOutRx
+            // 
+            this.progressStreamOutRx.Location = new System.Drawing.Point(42, 46);
+            this.progressStreamOutRx.Name = "progressStreamOutRx";
+            this.progressStreamOutRx.Size = new System.Drawing.Size(500, 14);
+            this.progressStreamOutRx.TabIndex = 2;
+            // 
+            // labelStreamOutRxBarTxt
+            // 
+            this.labelStreamOutRxBarTxt.AutoSize = true;
+            this.labelStreamOutRxBarTxt.Image = null;
+            this.labelStreamOutRxBarTxt.Location = new System.Drawing.Point(550, 48);
+            this.labelStreamOutRxBarTxt.Name = "labelStreamOutRxBarTxt";
+            this.labelStreamOutRxBarTxt.Size = new System.Drawing.Size(21, 13);
+            this.labelStreamOutRxBarTxt.TabIndex = 3;
+            this.labelStreamOutRxBarTxt.Text = "0%";
+            // 
+            // labelStreamOutTxBarCaption
+            // 
+            this.labelStreamOutTxBarCaption.AutoSize = true;
+            this.labelStreamOutTxBarCaption.Image = null;
+            this.labelStreamOutTxBarCaption.Location = new System.Drawing.Point(12, 70);
+            this.labelStreamOutTxBarCaption.Name = "labelStreamOutTxBarCaption";
+            this.labelStreamOutTxBarCaption.Size = new System.Drawing.Size(23, 13);
+            this.labelStreamOutTxBarCaption.TabIndex = 4;
+            this.labelStreamOutTxBarCaption.Text = "TX";
+            // 
+            // progressStreamOutTx
+            // 
+            this.progressStreamOutTx.Location = new System.Drawing.Point(42, 70);
+            this.progressStreamOutTx.Name = "progressStreamOutTx";
+            this.progressStreamOutTx.Size = new System.Drawing.Size(500, 14);
+            this.progressStreamOutTx.TabIndex = 5;
+            // 
+            // labelStreamOutTxBarTxt
+            // 
+            this.labelStreamOutTxBarTxt.AutoSize = true;
+            this.labelStreamOutTxBarTxt.Image = null;
+            this.labelStreamOutTxBarTxt.Location = new System.Drawing.Point(550, 72);
+            this.labelStreamOutTxBarTxt.Name = "labelStreamOutTxBarTxt";
+            this.labelStreamOutTxBarTxt.Size = new System.Drawing.Size(21, 13);
+            this.labelStreamOutTxBarTxt.TabIndex = 6;
+            this.labelStreamOutTxBarTxt.Text = "0%";
+            // 
+            // groupBoxStreamStatus
+            // 
+            this.groupBoxStreamStatus.Controls.Add(this.labelStreamOutRxBarCaption);
+            this.groupBoxStreamStatus.Controls.Add(this.progressStreamOutRx);
+            this.groupBoxStreamStatus.Controls.Add(this.labelStreamOutRxBarTxt);
+            this.groupBoxStreamStatus.Controls.Add(this.labelStreamOutTxBarCaption);
+            this.groupBoxStreamStatus.Controls.Add(this.progressStreamOutTx);
+            this.groupBoxStreamStatus.Controls.Add(this.labelStreamOutTxBarTxt);
+            this.groupBoxStreamStatus.Controls.Add(this.labelStreamOutStatus);
+            this.groupBoxStreamStatus.Location = new System.Drawing.Point(12, 240);
+            this.groupBoxStreamStatus.Name = "groupBoxStreamStatus";
+            this.groupBoxStreamStatus.Size = new System.Drawing.Size(688, 88);
+            this.groupBoxStreamStatus.TabIndex = 1;
+            this.groupBoxStreamStatus.TabStop = false;
+            this.groupBoxStreamStatus.Text = "Status";
             // 
             // btnRecording_openWaverecordFolder
             // 
@@ -72057,6 +72319,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.pbCMasio_InOut_Info)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudAsioBlockNum)).EndInit();
             this.tpAudioRecording.ResumeLayout(false);
+            this.tpStreaming.ResumeLayout(false);
             this.groupBoxTS66.ResumeLayout(false);
             this.groupBoxTS66.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudRecording_txGain)).EndInit();
@@ -77445,6 +77708,28 @@
         private ComboBoxTS comboPCAudioDevices_IN;
         private LabelTS labelTS88;
         private LabelTS labelTS16;
+        private GroupBoxTS groupBoxStreamOut;
+        private CheckBoxTS chkStreamOutRxEnable;
+        private ComboBoxTS comboStreamOutRxDevice;
+        private CheckBoxTS chkStreamOutTxEnable;
+        private ComboBoxTS comboStreamOutTxDevice;
+        private ButtonTS btnStreamOutRefresh;
+        private LabelTS labelStreamOutHint;
+        private LabelTS labelStreamOutStatus;
+        private GroupBoxTS groupBoxStreamStatus;
+        private LabelTS labelStreamOutRxCaption;
+        private TrackBarTS trkStreamOutRxVolume;
+        private LabelTS labelStreamOutRxVol;
+        private LabelTS labelStreamOutTxCaption;
+        private TrackBarTS trkStreamOutTxVolume;
+        private LabelTS labelStreamOutTxVol;
+        private System.Windows.Forms.ProgressBar progressStreamOutRx;
+        private LabelTS labelStreamOutRxBarCaption;
+        private LabelTS labelStreamOutRxBarTxt;
+        private System.Windows.Forms.ProgressBar progressStreamOutTx;
+        private LabelTS labelStreamOutTxBarCaption;
+        private LabelTS labelStreamOutTxBarTxt;
+        private TabPage tpStreaming;
         private CheckBoxTS chkRecording_generateMP3s;
         private NumericUpDownTS nudRecording_gainOutput;
         private LabelTS labelTS647;

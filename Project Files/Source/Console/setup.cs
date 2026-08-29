@@ -535,6 +535,8 @@ namespace Thetis
 
             initRecordingPlaybackAudio(); //prior to getOptions setup audio recording/playback options
 
+            initStreamOutTab(); //prior to getOptions setup streaming output options
+
             // Yurij_eu2av: hardware-specific defaults for PureSignal advanced settings.
             // Done before getOptions() so a saved user override takes precedence.
             PSTargetFeedbackLevel = HardwareSpecific.PSTargetFeedbackLevel;
@@ -2041,7 +2043,10 @@ namespace Thetis
                         else if (cc.GetType() == typeof(TrackBarTS))     // the control is a TrackBar (slider)
                         {
                             TrackBarTS c = (TrackBarTS)cc;
-                            c.Value = Int32.Parse(val);
+                            int value = Int32.Parse(val);
+                            if (value < c.Minimum) value = c.Minimum;
+                            if (value > c.Maximum) value = c.Maximum;
+                            c.Value = value;
                         }
                         else if (cc.GetType() == typeof(ColorButton))
                         {
@@ -2499,6 +2504,14 @@ namespace Thetis
             // 
             chkRecording_disable_during_playback(this, e);
             radRecording_storage_CheckedChanged(this, e);
+
+            // Streaming tab
+            chkStreamOutRxEnable_CheckedChanged(this, e);
+            comboStreamOutRxDevice_SelectedIndexChanged(this, e);
+            chkStreamOutTxEnable_CheckedChanged(this, e);
+            comboStreamOutTxDevice_SelectedIndexChanged(this, e);
+            trkStreamOutRxVolume_ValueChanged(this, e);
+            trkStreamOutTxVolume_ValueChanged(this, e);
 
             // Calibration Tab
             udTXDisplayCalOffset_ValueChanged(this, e);
@@ -36969,6 +36982,174 @@ namespace Thetis
             initPCAudioDevicesComobs();
 
             if (comboRecording_samplerate.SelectedIndex < 0) comboRecording_samplerate.SelectedIndex = 3; // 48k
+        }
+        // Streaming Output - taps post-VST RX/TX audio and plays it on Windows output devices
+        private System.Windows.Forms.Timer _streamOutStatusTimer;
+        private float _streamOutRxHold;
+        private float _streamOutTxHold;
+
+        private void initStreamOutTab()
+        {
+            populateStreamOutDeviceCombos();
+
+            if (comboStreamOutRxDevice.SelectedIndex < 0 && comboStreamOutRxDevice.Items.Count > 0)
+                comboStreamOutRxDevice.SelectedIndex = 0;
+            if (comboStreamOutTxDevice.SelectedIndex < 0 && comboStreamOutTxDevice.Items.Count > 0)
+                comboStreamOutTxDevice.SelectedIndex = 0;
+
+            if (trkStreamOutRxVolume.Value < trkStreamOutRxVolume.Minimum || trkStreamOutRxVolume.Value > trkStreamOutRxVolume.Maximum)
+                trkStreamOutRxVolume.Value = 0;
+            if (trkStreamOutTxVolume.Value < trkStreamOutTxVolume.Minimum || trkStreamOutTxVolume.Value > trkStreamOutTxVolume.Maximum)
+                trkStreamOutTxVolume.Value = 0;
+            labelStreamOutRxVol.Text = trkStreamOutRxVolume.Value + " dB";
+            labelStreamOutTxVol.Text = trkStreamOutTxVolume.Value + " dB";
+
+            if (_streamOutStatusTimer == null)
+            {
+                _streamOutStatusTimer = new System.Windows.Forms.Timer();
+                _streamOutStatusTimer.Interval = 250;
+                _streamOutStatusTimer.Tick += updateStreamOutStatus;
+                _streamOutStatusTimer.Start();
+            }
+            updateStreamOutStatus(null, EventArgs.Empty);
+        }
+        private void updateStreamOutStatus(object sender, EventArgs e)
+        {
+            if (labelStreamOutStatus == null) return;
+
+            labelStreamOutStatus.Text =
+                "RX: " + AudioStreamOut.StreamStatus(AudioStreamOut.StreamId.Rx) +
+                "   |   TX: " + AudioStreamOut.StreamStatus(AudioStreamOut.StreamId.Tx);
+
+            float rx = AudioStreamOut.GetLevel(AudioStreamOut.StreamId.Rx);
+            updateStreamOutHold(ref _streamOutRxHold, rx);
+            updateStreamOutMeter(progressStreamOutRx, labelStreamOutRxBarTxt, _streamOutRxHold);
+
+            float tx = AudioStreamOut.GetLevel(AudioStreamOut.StreamId.Tx);
+            updateStreamOutHold(ref _streamOutTxHold, tx);
+            updateStreamOutMeter(progressStreamOutTx, labelStreamOutTxBarTxt, _streamOutTxHold);
+        }
+        // simple peak-hold: rise instantly, decay back at ~-10 dB/s so the bar stays readable
+        private void updateStreamOutHold(ref float hold, float level)
+        {
+            if (level > hold) hold = level;
+            else hold *= 0.97f;
+            if (hold < 0.00001f) hold = 0f;
+        }
+        // meter spans a 40 dB window from -40 dBFS (bottom) to 0 dBFS (full scale)
+        private void updateStreamOutMeter(ProgressBar bar, LabelTS txt, float level)
+        {
+            if (bar == null || txt == null) return;
+
+            float dB = level > 0.0001f ? (float)(20.0 * Math.Log10(level)) : -99f;
+
+            int pct = (int)((dB + 40f) / 40f * 100f);
+            if (pct < 0) pct = 0;
+            if (pct > 100) pct = 100;
+
+            if (bar.Value != pct) bar.Value = pct;
+            txt.Text = dB <= -40f ? "<-40 dB" : dB.ToString("0") + " dB";
+        }
+        private void populateStreamOutDeviceCombos()
+        {
+            Cursor c = Cursor;
+            Cursor = Cursors.WaitCursor;
+
+            try
+            {
+                bindStreamOutDeviceCombo(comboStreamOutRxDevice);
+                bindStreamOutDeviceCombo(comboStreamOutTxDevice);
+            }
+            finally
+            {
+                Cursor = c;
+            }
+        }
+        private void bindStreamOutDeviceCombo(ComboBoxTS combo)
+        {
+            BindingSource bs = new BindingSource();
+
+            string selected = combo.SelectedIndex > -1 ? combo.Text : null;
+
+            List<AudioDeviceInfo> devices = console.ARP.GetPcOutputDevices();
+            if (devices == null) devices = new List<AudioDeviceInfo>();
+
+            devices.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
+            bs.DataSource = devices;
+
+            combo.DataSource = null;
+            combo.DisplayMember = "DisplayName";
+            combo.ValueMember = "DeviceId";
+            combo.DataSource = bs;
+
+            if (!string.IsNullOrEmpty(selected))
+            {
+                for (int n = 0; n < combo.Items.Count; n++)
+                {
+                    AudioDeviceInfo device = combo.Items[n] as AudioDeviceInfo;
+                    if (device != null && device.DisplayName == selected)
+                    {
+                        combo.SelectedIndex = n;
+                        return;
+                    }
+                }
+            }
+            if (combo.Items.Count > 0) combo.SelectedIndex = 0;
+        }
+        private void ApplyStreamOutConfig()
+        {
+            AudioDeviceInfo rx = comboStreamOutRxDevice.SelectedItem as AudioDeviceInfo;
+            AudioDeviceInfo tx = comboStreamOutTxDevice.SelectedItem as AudioDeviceInfo;
+
+            int rxId = rx != null ? rx.DeviceId : -1;
+            int txId = tx != null ? tx.DeviceId : -1;
+
+            float rxVol = DbToLinear(trkStreamOutRxVolume.Value);
+            float txVol = DbToLinear(trkStreamOutTxVolume.Value);
+
+            AudioStreamOut.ApplyConfig(chkStreamOutRxEnable.Checked, rxId, rxVol, chkStreamOutTxEnable.Checked, txId, txVol);
+        }
+        // dB (as shown by the gain sliders) -> linear amplitude multiply
+        private static float DbToLinear(float db)
+        {
+            return (float)Math.Pow(10.0, db / 20.0);
+        }
+        private void chkStreamOutRxEnable_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            ApplyStreamOutConfig();
+        }
+        private void chkStreamOutTxEnable_CheckedChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            ApplyStreamOutConfig();
+        }
+        private void comboStreamOutRxDevice_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            ApplyStreamOutConfig();
+        }
+        private void comboStreamOutTxDevice_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            ApplyStreamOutConfig();
+        }
+        private void trkStreamOutRxVolume_ValueChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            labelStreamOutRxVol.Text = trkStreamOutRxVolume.Value + " dB";
+            ApplyStreamOutConfig();
+        }
+        private void trkStreamOutTxVolume_ValueChanged(object sender, EventArgs e)
+        {
+            if (initializing) return;
+            labelStreamOutTxVol.Text = trkStreamOutTxVolume.Value + " dB";
+            ApplyStreamOutConfig();
+        }
+        private void btnStreamOutRefresh_Click(object sender, EventArgs e)
+        {
+            populateStreamOutDeviceCombos();
+            ApplyStreamOutConfig();
         }
         private void initPCAudioDevicesComobs()
         {

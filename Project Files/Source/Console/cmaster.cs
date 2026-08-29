@@ -1218,11 +1218,21 @@ namespace Thetis
             VstHost.ProcessRxAudio(buffer, frames);
             NativeFeedIVACPostRxAudio(frames, buffer);
             NativeFeedTCIPostRxAudio(frames, buffer);
+            try
+            {
+                AudioStreamOut.FeedRx(buffer, frames, Audio.OutRate);
+            }
+            catch { }
         }
 
         private static unsafe void OnVstTxProcess(double* buffer, int frames)
         {
             VstHost.ProcessTxAudio(buffer, frames);
+            try
+            {
+                AudioStreamOut.FeedTx(buffer, frames, cmaster.GetInputRate(1, 0));
+            }
+            catch { }
         }
         #endregion
 

@@ -104,6 +104,7 @@
     <Compile Include="Andromeda\BandButtonsPopup.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="AudioStreamOut.cs" />
     <Compile Include="BasicAudio.cs" />
     <Compile Include="CAT\TCPIPcatServer.cs" />
     <Compile Include="CAT\UsbBCDCable.cs" />

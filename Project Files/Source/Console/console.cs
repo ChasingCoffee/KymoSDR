@@ -28503,6 +28503,9 @@ namespace Thetis
 
             ThetisSkinService.Shutdown();
 
+            shutdownLogStringToPath("Before AudioStreamOut.Shutdown()");
+            AudioStreamOut.Shutdown();
+
             if (m_tcpTCIServer != null)
             {
                 shutdownLogStringToPath("Before m_tcpTCIServer.StopServer()");
