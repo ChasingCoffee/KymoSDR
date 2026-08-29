@@ -509,6 +509,12 @@ namespace Thetis
 
             console.QSOTimerAudioPlayer.LoadCompletedEvent += audioFileLoaded;
 
+            // courtesy tone default: pre-fill the TX release-tone wav with the value bundled
+            // next to the executable, so a fresh install works out of the box. getOptions()
+            // will overwrite this with any previously saved user value.
+            if (string.IsNullOrEmpty(txtCourtesyToneEndWav.Text))
+                txtCourtesyToneEndWav.Text = Path.Combine(Application.StartupPath, "courtesy_tone_default.wav");
+
             RefreshSkinList(); //moved down the initialisation order, so we at least know if we are gdi or dx, only build the list
 
             //display defaults

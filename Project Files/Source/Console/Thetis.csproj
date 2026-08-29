@@ -1007,6 +1007,7 @@ echo } &gt;&gt; "$(ProjectDir)VersionInfo.cs"
     <Copy SourceFiles="$(ProjectDir)..\..\lib\NR_Algorithms_$(PlatformName)\rnnoise_avx2.dll" DestinationFolder="$(ProjectDir)$(OutDir)" />
     <Copy SourceFiles="$(ProjectDir)..\..\lib\NR_Algorithms_$(PlatformName)\specbleach.dll" DestinationFolder="$(ProjectDir)$(OutDir)" />
     <Copy SourceFiles="$(ProjectDir)CAT\CATStructs.xml" DestinationFolder="$(ProjectDir)$(OutDir)" />
+    <Copy SourceFiles="$(ProjectDir)courtesy_tone_default.wav" DestinationFolder="$(ProjectDir)$(OutDir)" />
     <Copy SourceFiles="$(ProjectDir)..\..\lib\Thetis-resources\calculus" DestinationFolder="$(ProjectDir)$(OutDir)" />
     <!-- <Copy SourceFiles="$(ProjectDir)..\..\lib\Thetis-resources\zetaHat.bin" DestinationFolder="$(ProjectDir)$(OutDir)" /> -->
     <Copy SourceFiles="$(ProjectDir)..\..\lib\NR_Algorithms_x64\rnnoise_weights_small.bin" DestinationFolder="$(ProjectDir)$(OutDir)" />

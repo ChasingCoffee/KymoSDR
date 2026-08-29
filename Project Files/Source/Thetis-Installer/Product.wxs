@@ -488,6 +488,14 @@
               />
       </Component>
 
+      <Component Guid="*">
+        <File Id="CourtesyToneDefaultWav"
+              Source="$(var.FilesPath)courtesy_tone_default.wav"
+              KeyPath="yes"
+              Checksum="yes"
+              />
+      </Component>
+
 		<Component Guid="*">
         <File Id="wdspDLL"
               Source="$(var.FilesPath)wdsp.dll"
