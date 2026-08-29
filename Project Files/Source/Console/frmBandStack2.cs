@@ -85,6 +85,8 @@ namespace Thetis
         private Console _console;
         private bool _mox;
 
+        private const int CollapsedWidth = 300;
+
         public frmBandStack2()
         {
             InitializeComponent();
@@ -103,7 +105,7 @@ namespace Thetis
 
             Common.RestoreForm(this, "BandStack2Form", true);
 
-            this.Width = 256;
+            this.Width = CollapsedWidth;
             btnOptions.Text = "Options >>";
 
             btnLockSelected.Enabled = false;
@@ -266,14 +268,20 @@ namespace Thetis
 
         private void btnOptions_Click(object sender, EventArgs e)
         {
-            if (this.Width > 256)
+            if (this.Width > CollapsedWidth)
             {
-                this.Width = 256;
+                this.Width = CollapsedWidth;
                 btnOptions.Text = "Options >>";
             }
             else
             {
-                this.Width = 512;
+                int nMaxRight = 0;
+                foreach (Control c in Controls)
+                {
+                    if (!c.Visible) continue;
+                    if (c.Left + c.Width > nMaxRight) nMaxRight = c.Left + c.Width;
+                }
+                this.Width = nMaxRight + (this.Width - this.ClientSize.Width) + 24;
                 btnOptions.Text = "Options <<";
             }
         }
