@@ -412,8 +412,10 @@ HANDOFF.md
 MIGRATION_HANDOFF.md
 WDSP2_CONVERSION_PLAN.md
 
-# Release change-log PDFs are published via releases, not kept in the repo
+# Release change-log PDFs/docs are published via releases, not kept in the repo
 /*.pdf
+/*.docx
+/*.odt
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/build
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/old.git
 Project Files/lib/NR_Algorithms_x64/src/libspecbleach/build
