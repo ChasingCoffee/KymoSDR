@@ -406,6 +406,10 @@ Project Files/lib/NR_Algorithms_x64/src/rnnoise/autom4te.cache
 
 # [4.7] Bundled .NET Desktop Runtime - downloaded at build time, never committed
 Project Files/Source/Thetis-Installer/redist/*.exe
+
+# Handoff/migration notes are local-only - never publish to GitHub
+HANDOFF.md
+MIGRATION_HANDOFF.md
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/build
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/old.git
 Project Files/lib/NR_Algorithms_x64/src/libspecbleach/build
