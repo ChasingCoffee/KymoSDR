@@ -411,6 +411,9 @@ Project Files/Source/Thetis-Installer/redist/*.exe
 HANDOFF.md
 MIGRATION_HANDOFF.md
 WDSP2_CONVERSION_PLAN.md
+
+# Release change-log PDFs are published via releases, not kept in the repo
+/*.pdf
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/build
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/old.git
 Project Files/lib/NR_Algorithms_x64/src/libspecbleach/build
