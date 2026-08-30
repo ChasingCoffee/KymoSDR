@@ -403,6 +403,9 @@ FodyWeavers.xsd
 !Project Files/Source/Thetis-Installer/Microsoft_VC*.msm
 Project Files/Source/Thetis-Installer/**/Thumbs.db
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/autom4te.cache
+
+# [4.7] Bundled .NET Desktop Runtime - downloaded at build time, never committed
+Project Files/Source/Thetis-Installer/redist/*.exe
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/build
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/old.git
 Project Files/lib/NR_Algorithms_x64/src/libspecbleach/build
