@@ -410,6 +410,7 @@ Project Files/Source/Thetis-Installer/redist/*.exe
 # Handoff/migration notes are local-only - never publish to GitHub
 HANDOFF.md
 MIGRATION_HANDOFF.md
+WDSP2_CONVERSION_PLAN.md
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/build
 Project Files/lib/NR_Algorithms_x64/src/rnnoise/old.git
 Project Files/lib/NR_Algorithms_x64/src/libspecbleach/build
