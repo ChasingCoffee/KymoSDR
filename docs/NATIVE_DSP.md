@@ -1,8 +1,9 @@
 # Native WDSP build and offline checks
 
 This builds the project's modified WDSP 2.00 source in place, plus the
-[M3a offline ChannelMaster core](CHANNELMASTER_OFFLINE.md). It does not build
-the native radio transport, contact a radio, open an audio device, or transmit.
+[M3a offline ChannelMaster core](CHANNELMASTER_OFFLINE.md) and a separate
+[RNet/socket loopback probe](TRANSPORT_LOOPBACK.md). It does not build the radio
+packet engines, contact a radio, open an audio device, or transmit.
 See the [baseline review](WDSP_BASELINE_REVIEW.md) before substituting upstream
 WDSP APIs or source files.
 
@@ -92,7 +93,8 @@ appropriate sanitizer runtime setup.
 ## Build boundaries
 
 - `native/CMakeLists.txt` derives its DSP translation-unit list from the existing
-  `wdsp.vcxproj`. The legacy Windows project/build configuration is unchanged.
+  `wdsp.vcxproj`. That source list is unchanged; the legacy ChannelMaster project
+  lists now include the extracted RNet/socket lifecycle files.
 - `native/platform/` provides recursive mutexes, count-limited semaphores,
   auto/manual reset events, asynchronous work, atomics and aligned allocation.
   Wait deadlines use a monotonic clock; handles are process-local, not named IPC.
@@ -104,7 +106,7 @@ appropriate sanitizer runtime setup.
 - Windows-sized atomic fields use `LONG` (32 bits on every target); cache hash
   width follows pointer width. Cache persistence is disabled in the new harness.
 - `Thetis.Engine` exposes explicit loading, synchronous offline diagnostics and
-  a disposable `OfflineRadioSession`. Internal bindings serialize configuration
+  disposable `OfflineRadioSession` / `LoopbackTransportSession` owners. Internal bindings serialize configuration
   and planning, and keep buffers/callbacks alive for their native lifetime.
   A production transport/streaming session remains deferred to M3b/M4.
 - `BUILD_TESTING=OFF` omits native test executables and the test-only helper

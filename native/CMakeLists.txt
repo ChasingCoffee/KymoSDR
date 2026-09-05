@@ -31,7 +31,7 @@ add_library(wdsp SHARED ${wdsp_sources} interop/wdsp_abi.c)
 target_include_directories(wdsp PRIVATE "${WDSP_SOURCE_DIR}" platform)
 target_link_libraries(wdsp PRIVATE thetis_fftw3 thetis_rnnoise thetis_specbleach Threads::Threads)
 if(WIN32)
-  target_link_libraries(wdsp PRIVATE avrt)
+  target_link_libraries(wdsp PRIVATE avrt ws2_32)
   target_compile_definitions(wdsp PRIVATE _CRT_SECURE_NO_WARNINGS _USE_MATH_DEFINES)
 else()
   target_sources(wdsp PRIVATE platform/wdsp_posix.c)
@@ -44,21 +44,43 @@ set_target_properties(wdsp PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
 
 # M3 offline ChannelMaster core shares the existing WDSP module and its global
-# channel/cache ownership. Socket transport, ASIO, PortAudio device backends and
-# diagnostic file writers are intentionally NOT in this source list.
+# channel/cache ownership. Only the socket lifecycle (loopback-restricted) is
+# linked; packet engines, ASIO, PortAudio devices and file writers are excluded.
 set(CM_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/Source/ChannelMaster")
 set(cm_units aamix amix analyzers cmaster cmbuffs cmsetup ilv ivac pipe ring
-  router sidetone sync tci txgain vox znob znobII)
+  router sidetone sync tci txgain vox znob znobII rnet radio_init radio_socket)
 foreach(unit IN LISTS cm_units)
   target_sources(wdsp PRIVATE "${CM_SOURCE_DIR}/${unit}.c")
   set_source_files_properties("${CM_SOURCE_DIR}/${unit}.c" PROPERTIES COMPILE_DEFINITIONS THETIS_CM_HEADLESS)
 endforeach()
-target_sources(wdsp PRIVATE platform/cm_thread.c platform/cm_no_audio.c interop/cm_session.c)
-set_source_files_properties(platform/cm_no_audio.c interop/cm_session.c PROPERTIES COMPILE_DEFINITIONS THETIS_CM_HEADLESS)
+target_sources(wdsp PRIVATE platform/cm_thread.c platform/cm_no_audio.c interop/cm_session.c interop/cm_transport.c)
+set_source_files_properties(platform/cm_no_audio.c interop/cm_session.c interop/cm_transport.c PROPERTIES COMPILE_DEFINITIONS THETIS_CM_HEADLESS)
 target_include_directories(wdsp PRIVATE "${CM_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/lib/portaudio-19.7.0/include")
 
 if(BUILD_TESTING)
+  set_property(SOURCE interop/cm_transport.c APPEND PROPERTY COMPILE_DEFINITIONS THETIS_TESTING)
+  add_executable(rnet_tests tests/rnet_tests.c "${CM_SOURCE_DIR}/rnet.c"
+    "${CM_SOURCE_DIR}/radio_init.c" "${CM_SOURCE_DIR}/radio_socket.c")
+  target_include_directories(rnet_tests PRIVATE "${CM_SOURCE_DIR}" platform)
+  target_compile_definitions(rnet_tests PRIVATE THETIS_TESTING THETIS_CM_HEADLESS)
+  target_link_libraries(rnet_tests PRIVATE Threads::Threads)
+  if(NOT WIN32)
+    target_sources(rnet_tests PRIVATE platform/wdsp_posix.c)
+  endif()
+  add_executable(cm_transport_tests tests/cm_transport_tests.c tests/loopback_peer.c
+    tests/process_resources.c "${CM_SOURCE_DIR}/radio_socket.c")
+  target_include_directories(cm_transport_tests PRIVATE interop "${CM_SOURCE_DIR}")
+  target_compile_definitions(cm_transport_tests PRIVATE THETIS_TESTING)
+  target_link_libraries(cm_transport_tests PRIVATE wdsp)
+  if(WIN32)
+    target_link_libraries(rnet_tests PRIVATE ws2_32)
+    target_link_libraries(cm_transport_tests PRIVATE ws2_32 psapi)
+  endif()
+  set_target_properties(rnet_tests cm_transport_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
+  add_test(NAME rnet_allocation_and_socket_init COMMAND rnet_tests)
+  add_test(NAME channelmaster_loopback_transport COMMAND cm_transport_tests)
+  set_tests_properties(rnet_allocation_and_socket_init channelmaster_loopback_transport PROPERTIES TIMEOUT 60)
   add_executable(cm_session_tests tests/cm_session_tests.c tests/process_resources.c)
   target_include_directories(cm_session_tests PRIVATE interop)
   target_link_libraries(cm_session_tests PRIVATE wdsp)

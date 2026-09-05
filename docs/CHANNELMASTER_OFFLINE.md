@@ -51,9 +51,10 @@ VAC/TCI resamplers and mixers are real objects even though their run flags are o
 The explicit no-device backend applies on Windows too. PortAudio headers provide
 types only: no PortAudio library, initialization or enumeration is linked. ASIO
 construction is a no-op, starting ASIO fails, and starting VAC device audio returns
-`paDeviceUnavailable`. Outbound samples are discarded. Socket translation units,
-RNet, protocol loops and diagnostic file-writing helpers are excluded from this
-target; the inherited sources remain available for the next part of the port.
+`paDeviceUnavailable`. Outbound samples are discarded. The original radio packet
+engines and diagnostic file-writing helpers are excluded from the portable
+target. The module now also contains a separate [RNet/loopback probe](TRANSPORT_LOOPBACK.md);
+`OfflineRadioSession` itself still opens no socket.
 
 CM input producers are joined before pipe/DSP consumers are freed. Mixers are
 joined before callback targets, resamplers and semaphores are released. Mixer
@@ -85,8 +86,9 @@ The legacy radio initializer now receives its missing seventh argument from the
 existing “Inform hardware of ports to use” checkbox. The extracted, shared P2
 port-selection rule has native and managed tests: 1024 maps to 1025 in either
 mode; discovery at 5000 maps to 1025 normally or 5001 only with relocation enabled.
-The portable harness does **not** call `nativeInitMetis` yet. Full seven-argument
-socket-start integration and the legacy Windows UI build remain unverified.
+M3a itself does **not** call `nativeInitMetis`. The subsequent separate loopback
+probe now exercises the actual seven-argument initializer; the legacy Windows
+UI build remains unverified.
 
 Full-topology tests exposed ownership defects not covered by M2's RX-only tests:
 
@@ -112,11 +114,14 @@ offline lifecycle checkpoint, not completion of the full M3 gate.
 
 ## Remaining M3 / before M4
 
-- Port RNet creation, sockets/events/timers and packet-worker shutdown, preserving
-  the P1/P2 algorithms. Test without contacting hardware first.
-- Integrate the corrected radio-init ABI with validated endpoint/model/port
-  options; exercise default/custom P2 ports through the actual socket initializer.
-- Extend rollback into transport startup, including partial socket/worker failure.
+- Hardware restriction: the user's G2 currently has a receive-only antenna on
+  ANT1. No transmit testing, PTT/MOX, tune, CW keying or transmit-enabling commands
+  are authorized. Keep M3 transport tests offline/loopback; future live RX work
+  must preserve this restriction until the user explicitly approves a change.
+- [RNet/socket allocation and loopback probe](TRANSPORT_LOOPBACK.md) now cover the
+  actual radio-init ABI and partial startup rollback. Qualify on all three OSes.
+- Port the real P1/P2 packet workers and audit their shutdown, preserving the
+  algorithms. The loopback reader/timer are not production radio workers.
 - Audit active streaming, advanced WDSP background work and shutdown races;
   these tests send no samples through a live radio pipeline.
 - Legacy allocation/thread constructors remain fail-fast. Startup rollback here

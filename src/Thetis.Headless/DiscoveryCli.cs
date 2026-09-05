@@ -34,6 +34,8 @@ internal static class DiscoveryCli
                      Run offline DSP checks; JSON output. No radio or audio devices.
           session-selftest --native-dir ABSOLUTE_PATH
                      Run 100 offline ChannelMaster lifecycles. No network or devices.
+          transport-selftest --native-dir ABSOLUTE_PATH
+                     Run 100 loopback-only RNet/socket lifecycles. No radio commands.
           --help     Show this help. No command also shows help.
 
         Options:

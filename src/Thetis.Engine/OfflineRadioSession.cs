@@ -105,6 +105,7 @@ public sealed class OfflineRadioSession : IDisposable
     internal static void RequireIdle()
     {
         if (active) throw new InvalidOperationException("An offline radio session already owns the WDSP channels. Dispose it first.");
+        LoopbackTransportSession.RequireIdle();
     }
 
     public void Dispose() => handle.Dispose();

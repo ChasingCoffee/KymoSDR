@@ -7,6 +7,7 @@ typedef HANDLE cm_thread;
 typedef pthread_t cm_thread;
 #endif
 cm_thread cm_start_thread(void (*function)(void *), void *argument);
+int cm_try_start_thread(cm_thread *thread, void (*function)(void *), void *argument);
 void cm_join_thread(cm_thread thread);
 void cm_exit_thread(void);
 int cm_owned_threads(void);

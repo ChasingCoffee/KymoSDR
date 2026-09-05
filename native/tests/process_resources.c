@@ -12,6 +12,29 @@
 #else
 #include <string.h>
 #endif
+#ifndef _WIN32
+#include <dirent.h>
+#endif
+
+int test_process_descriptors(void)
+{
+#ifdef _WIN32
+    DWORD count;
+    return GetProcessHandleCount(GetCurrentProcess(), &count) ? (int)count : -1;
+#else
+#ifdef __APPLE__
+    DIR *directory = opendir("/dev/fd");
+#else
+    DIR *directory = opendir("/proc/self/fd");
+#endif
+    if (!directory) return -1;
+    int count = 0;
+    struct dirent *entry;
+    while ((entry = readdir(directory))) if (entry->d_name[0] != '.') ++count;
+    closedir(directory);
+    return count - 1; // exclude this observer's directory descriptor
+#endif
+}
 
 int test_process_threads(void)
 {

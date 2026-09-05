@@ -13,6 +13,7 @@ simulator coverage without any hardware validation. Last updated 2026-09-04.
 | Native WDSP / .NET offline DSP | Initial offline gate passed | 11 signal checks, native ABI/NR3/NR4/lifecycle tests and sanitizer checks pass | 11 signal checks and 51 managed tests pass on both; Linux sanitizer/leak checks pass | Full DSP/mode parity and longer-run qualification; see CI results. |
 | ChannelMaster lifecycle | M3a offline checks pass cross-platform | 100-cycle native/CLI tests, 58 managed tests, sanitizer checks and separate zero-leak scan | 100-cycle native/CLI tests and 58 managed tests pass; Linux sanitizer/leak checks pass | [M3a boundary](CHANNELMASTER_OFFLINE.md); RNet/socket lifecycle still M3b, resource/performance budgets not yet qualified. |
 | Radio streams / RX1 spectrum | Not started | None | None in new app | M4. |
+| RNet / socket lifecycle probe | Implemented, loopback-only | Native/managed cycles, rollback, sanitizer and zero-leak scan pass | Hosted checks pending for this checkpoint | [Probe boundary](TRANSPORT_LOOPBACK.md); real P1/P2 packet-worker shutdown still pending. |
 | Audio / shared desktop UI | Not started | None | None in new app | M5. |
 | TX / PTT / CW | Not started | None | None in new app | M6 and mode-specific hardware checks. |
 | VST3 processing / editors | Not started | Audit findings recorded | Legacy source only | M7/M8 and defect regression tests. |

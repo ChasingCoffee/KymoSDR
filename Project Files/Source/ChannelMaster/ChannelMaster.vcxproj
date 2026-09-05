@@ -127,6 +127,10 @@
     <ClInclude Include="ivac.h" />
     <ClInclude Include="nanotimer.h" />
     <ClInclude Include="network.h" />
+    <ClInclude Include="rnet.h" />
+    <ClInclude Include="radio_init.h" />
+    <ClInclude Include="radio_socket.h" />
+    <ClInclude Include="radio_ports.h" />
     <ClInclude Include="obbuffs.h" />
     <ClInclude Include="pipe.h" />
     <ClInclude Include="pro.h" />
@@ -158,6 +162,9 @@
     <ClCompile Include="nanotime.c" />
     <ClCompile Include="netInterface.c" />
     <ClCompile Include="network.c" />
+    <ClCompile Include="rnet.c" />
+    <ClCompile Include="radio_init.c" />
+    <ClCompile Include="radio_socket.c" />
     <ClCompile Include="networkproto1.c" />
     <ClCompile Include="obbuffs.c" />
     <ClCompile Include="pipe.c" />

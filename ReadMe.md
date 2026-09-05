@@ -20,8 +20,9 @@ Nereid of Thetis.
   The cross-platform UI, rendering and VST3 hosting are still planned work.
 - ChannelMaster's [offline DSP/pipe lifecycle](docs/CHANNELMASTER_OFFLINE.md)
   now has a .NET session owner and 100-cycle tests passing on all three OSes.
-  Native radio transport is
-  still being ported; this is not yet a usable radio receiver.
+  A separate [RNet/socket loopback probe](docs/TRANSPORT_LOOPBACK.md) now tests
+  allocation, binding and joined shutdown. Radio packet streaming is still being
+  ported; this is not yet a usable radio receiver.
 - The inherited Windows application remains in the tree as the source/reference
   implementation. Its features are not a claim of portable feature parity.
 

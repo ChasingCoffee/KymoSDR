@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "cm_session.h"
+#include "cm_transport.h"
 #include <stdio.h>
 #include <stdlib.h>
 extern void init_impulse_cache(int);
@@ -70,6 +71,14 @@ int main(void)
         CHECK(state[7] == 192000 && state[8] == 48000 && state[9] == 192000);
         CHECK(state[10] == 18 && state[11] == 1 && state[12] == 5 && state[13] == 5);
         CHECK(state[14] == 0 && state[15] == 0);
+        if (cycle == 0)
+        {
+            // Combined ownership smoke check. No packet callbacks are wired.
+            CHECK(ThetisTransportOpen(1, "127.0.0.1", 1024, "127.0.0.1", 0, 1, 11, 0, NULL, NULL) == 0);
+            CHECK(ThetisCmGetState(state, 16) == 16 && state[10] == 20);
+            CHECK(ThetisTransportClose() == 0);
+            CHECK(ThetisCmGetState(state, 16) == 16 && state[10] == 18);
+        }
         CHECK(StartAudioIVAC(0) < 0);
         /* ASIO entry point is private in the combined module; managed audio
          * mode rejection and StartAudioIVAC verify the no-device contract. */

@@ -76,7 +76,10 @@ jobs:
       - name: Offline ChannelMaster CLI (100 lifecycles, no devices)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- session-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Managed and native integration regressions
+        # All transport fixture traffic is hard-restricted to IPv4 loopback.
         run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger trx --results-directory artifacts/test-results
+      - name: Loopback transport CLI (100 socket lifecycles, no radio commands)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- transport-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: macOS dependency inspection
         if: runner.os == 'macOS'
         run: |

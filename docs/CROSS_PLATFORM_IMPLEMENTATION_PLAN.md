@@ -28,6 +28,14 @@ The audits are static evidence, not proof of successful builds or operation. Mil
 
 The available live radio is the user's **ANAN G2 headless, Protocol 2**. P1 development uses a pinned `hpsdrsim` version with its Hermes Lite 2 profile. Simulator coverage is not a claim of full P1 hardware support.
 
+**Current hardware constraint (2026-09-04):** the G2 has a receive-only antenna
+connected to **ANT1**. The user has explicitly prohibited transmit testing for
+now. Do not assert PTT/MOX, tune, key CW, or send transmit-enabling commands.
+M3 transport lifecycle checks must use offline/loopback fixtures, not the G2.
+Later live G2 work is receive-only; transmit testing requires fresh explicit
+user approval and confirmation of a suitable transmit test setup. Reaching M6
+does not itself authorize transmission.
+
 Exact minimum OS versions, Linux distribution and package versions will be pinned during implementation. Avalonia documents Windows, macOS and Linux desktop support, with version-specific support tiers; our support promise must also account for .NET, native dependencies and our own tests. [Avalonia platform documentation](https://docs.avaloniaui.net/docs/supported-platforms).
 
 ### What the first usable release is not
@@ -133,7 +141,9 @@ The default order prioritizes proving the engine before expanding UI work. FreeD
 
 Implementation is split into **M3a: offline DSP/pipe lifecycle** and **M3b: RNet/
 socket lifecycle** so native transport is not accidentally qualified by a
-no-packet test. See [the M3a boundary and tests](CHANNELMASTER_OFFLINE.md).
+no-packet test. See [the M3a boundary and tests](CHANNELMASTER_OFFLINE.md) and the
+[M3b loopback checkpoint](TRANSPORT_LOOPBACK.md). The latter exercises RNet and
+the socket initializer, not yet the real P1/P2 packet workers.
 
 - Correct PORT-1's radio-init ABI on both managed and native sides, covering default and custom P2 port selection with focused tests before invoking it in the harness.
 - Adapt ChannelMaster's native sockets, workers, synchronization and allocation; retain packet-processing/routing algorithms. Define a non-Windows no-ASIO path and explicit no-device audio behavior.

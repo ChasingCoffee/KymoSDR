@@ -23,19 +23,24 @@ static void *run(void *argument)
     start.function(start.argument);
     return 0;
 }
-cm_thread cm_start_thread(void (*function)(void *), void *argument)
+int cm_try_start_thread(cm_thread *thread, void (*function)(void *), void *argument)
 {
     cm_start *start = malloc(sizeof(*start));
-    if (!start) abort();
+    if (!start) return -1;
     *start = (cm_start){function, argument};
-    cm_thread thread;
 #ifdef _WIN32
-    thread = (HANDLE)_beginthreadex(NULL, 0, run, start, 0, NULL);
-    if (!thread) abort();
+    *thread = (HANDLE)_beginthreadex(NULL, 0, run, start, 0, NULL);
+    if (!*thread) { free(start); return -1; }
 #else
-    if (pthread_create(&thread, NULL, run, start)) abort();
+    if (pthread_create(thread, NULL, run, start)) { free(start); return -1; }
 #endif
     InterlockedIncrement(&owned);
+    return 0;
+}
+cm_thread cm_start_thread(void (*function)(void *), void *argument)
+{
+    cm_thread thread;
+    if (cm_try_start_thread(&thread, function, argument)) abort();
     return thread;
 }
 void cm_join_thread(cm_thread thread)

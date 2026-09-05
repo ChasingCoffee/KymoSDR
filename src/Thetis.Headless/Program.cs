@@ -11,5 +11,6 @@ return args.FirstOrDefault() switch
 {
     "dsp-selftest" => DspCli.Run(args, Console.Out, Console.Error, cancellation.Token),
     "session-selftest" => SessionCli.Run(args, Console.Out, Console.Error, cancellation.Token),
+    "transport-selftest" => TransportCli.Run(args, Console.Out, Console.Error, cancellation.Token),
     _ => DiscoveryCli.Run(args, Console.Out, Console.Error, new DiscoveryBackend(), cancellation.Token)
 };
