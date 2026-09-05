@@ -30,9 +30,12 @@ warren@wpratt.com
 
 struct _ch
 {
+#ifndef _WIN32
+	pthread_t dsp_thread;
+#endif
 	int type;
-	volatile long run;			// when 1, thread loops; when 0, thread terminates
-	volatile long exchange;		// when 1, fexchange() operates; when 0, it just returns
+	volatile LONG run;			// when 1, thread loops; when 0, thread terminates
+	volatile LONG exchange;		// when 1, fexchange() operates; when 0, it just returns
 	int in_rate;				// input samplerate
 	int out_rate;				// output samplerate
 	int in_size;				// input buffsize (complex samples) in a fexchange() operation
@@ -49,11 +52,11 @@ struct _ch
 	double tdelaydown;
 	double tslewdown;
 	int bfo;					// 'block_for_output', block fexchange until output is available
-	volatile long flushflag;
+	volatile LONG flushflag;
 	struct	//io buffers
 	{
 		IOB pc, pd, pe, pf;		// copies for console calls, dsp, exchange, and flush thread
-		volatile long ch_upslew;
+		volatile LONG ch_upslew;
 	} iob;
 };
 

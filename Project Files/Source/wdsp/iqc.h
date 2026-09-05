@@ -29,8 +29,8 @@ warren@wpratt.com
 
 typedef struct _iqc
 {
-	volatile long run;
-	volatile long busy;
+	volatile LONG run;
+	volatile LONG busy;
 	int size;
 	double* in;
 	double* out;

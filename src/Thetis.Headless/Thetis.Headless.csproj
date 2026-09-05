@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Thetis.Core/Thetis.Core.csproj" />
+    <ProjectReference Include="../Thetis.Engine/Thetis.Engine.csproj" />
     <InternalsVisibleTo Include="Thetis.Core.Tests" />
   </ItemGroup>
 </Project>

@@ -45,11 +45,14 @@ typedef struct _syncb
 	int   r1_inidx;								// in 'double', actual index into the buffer is 2 times this
 	int   r1_outidx;							// in 'double', actual index into the buffer is 2 times this
 	int   r1_unqueuedsamps;						// number of input samples not yet queued/released for execution
-	volatile long run;							// when 1, thread loops; when 0, thread terminates
-	volatile long accept;						// flag indicating whether accepting input data
+	volatile LONG run;							// when 1, thread loops; when 0, thread terminates
+	volatile LONG accept;						// flag indicating whether accepting input data
 	HANDLE Sem_BuffReady;						// count = number of output-sized buffers queued for processing
 	CRITICAL_SECTION csOUT;						// used to block output while parameters are updated or buffers flushed
 	CRITICAL_SECTION csIN;						// used to block input while parameters are updated or buffers flushed
+#ifndef _WIN32
+	pthread_t thread;
+#endif
 } syncb, *SYNCB;
 
 extern SYNCB create_syncbuffs (int accept, int nstreams, int max_insize, int max_outsize, int outsize, double** out, void (*exf)(void));

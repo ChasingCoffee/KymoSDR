@@ -33,8 +33,8 @@ typedef struct _calcc
 	int channel;
 	int runcal;
 	int size;
-	volatile long mox;
-	volatile long solidmox;
+	volatile LONG mox;
+	volatile LONG solidmox;
 	int rate;
 	int ints;
 	int spi;
@@ -72,13 +72,13 @@ typedef struct _calcc
 	int* binfo;
 	double txdel;
 	BLDR ccbld;
-	volatile long savecorr_bypass;
+	volatile LONG savecorr_bypass;
 	HANDLE Sem_SaveCorr;
-	volatile long restcorr_bypass;
+	volatile LONG restcorr_bypass;
 	HANDLE Sem_RestCorr;
-	volatile long calccorr_bypass;
+	volatile LONG calccorr_bypass;
 	HANDLE Sem_CalcCorr;
-	volatile long turnoff_bypass;
+	volatile LONG turnoff_bypass;
 	HANDLE Sem_TurnOff;
 	struct _ctrl
 	{
@@ -101,9 +101,9 @@ typedef struct _calcc
 		int waitsamps;
 		int waitcount;
 		double env_maxtx;
-		volatile long running;
+		volatile LONG running;
 		int bs_count;
-		volatile long current_state;
+		volatile LONG current_state;
 		CRITICAL_SECTION cs_SafeToEnd;
 	} ctrl;
 	struct _disp

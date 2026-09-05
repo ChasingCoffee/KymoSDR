@@ -54,8 +54,8 @@ typedef struct _iobf
 	int bfo;									// block_for_output, wait until output is available before proceeding
 	HANDLE Sem_OutReady;						// count = number of 'out_size' buffers processed and available for output
 	HANDLE Sem_BuffReady;						// count = number of 'dsp_size' buffers queued for processing
-	volatile long exec_bypass;
-	volatile long flush_bypass;
+	volatile LONG exec_bypass;
+	volatile LONG flush_bypass;
 	HANDLE Sem_Flush;
 	struct
 	{
@@ -69,8 +69,8 @@ typedef struct _iobf
 		int ndeldown;
 		int ntdown;
 		double* cdown;
-		volatile long upflag;
-		volatile long downflag;
+		volatile LONG upflag;
+		volatile LONG downflag;
 	} slew;
 } iob, *IOB;
 

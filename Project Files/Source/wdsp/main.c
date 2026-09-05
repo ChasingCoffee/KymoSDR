@@ -28,10 +28,12 @@ warren@wpratt.com
 
 void wdspmain (void *pargs)
 {
+#ifdef _WIN32
 	DWORD taskIndex = 0;
 	HANDLE hTask = AvSetMmThreadCharacteristics(TEXT("Pro Audio"), &taskIndex);
 	if (hTask != 0) AvSetMmThreadPriority(hTask, 2);
 	else SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+#endif
 
 	int channel = (int)(uintptr_t)pargs;
 	while (_InterlockedAnd (&ch[channel].run, 1))
@@ -57,7 +59,9 @@ void wdspmain (void *pargs)
 		}
 		LeaveCriticalSection (&ch[channel].csDSP);
 	}
+#ifdef _WIN32
 	if (hTask != 0) AvRevertMmThreadCharacteristics (hTask);
+#endif
 }
 
 void create_main (int channel)

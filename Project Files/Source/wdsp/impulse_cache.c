@@ -48,7 +48,7 @@ mw0lge@grange-lane.co.uk
 *																										*
 ********************************************************************************************************/
 
-#if defined(_WIN64)
+#if UINTPTR_MAX == UINT64_MAX
 	static const uint64_t FNV_OFFSET_BASIS_64 = 14695981039346656037ULL;  // 0xcbf29ce484222325
 	static const uint64_t FNV_PRIME_64 = 1099511628211ULL;				  // 0x100000001b3
 

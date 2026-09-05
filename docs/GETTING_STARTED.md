@@ -1,7 +1,11 @@
-# Cross-platform discovery harness
+# KymoSDR headless harness
 
-This is the first implementation slice of the [port plan](CROSS_PLATFORM_IMPLEMENTATION_PLAN.md).
-It discovers HPSDR radios but does **not** open radio streams, play audio or transmit.
+KymoSDR is the public project name. The initial solution, project namespaces and
+native library names still use `Thetis`; commands below intentionally retain
+those names.
+
+This implements discovery and offline DSP checks from the [port plan](CROSS_PLATFORM_IMPLEMENTATION_PLAN.md).
+It does **not** open radio streams, play audio or transmit.
 The legacy Windows solution remains separate.
 
 ## Prerequisites and build
@@ -26,6 +30,10 @@ Offline tests use synthetic packets and an injected transport: they send no
 discovery packets and do not require a radio or simulator. Test packages are
 pinned in the project and `packages.lock.json` files; ordinary restores must not
 silently update those locks.
+
+The three native integration tests are explicitly skipped unless
+`THETIS_NATIVE_DIR` is set. Managed discovery/help still work without a native
+library. To build and test WDSP, follow [native DSP instructions](NATIVE_DSP.md).
 
 ## List interfaces without sending discovery traffic
 
@@ -94,7 +102,7 @@ verify network reachability and broadcast delivery; record the VM's architecture
 and emulation status. A Windows ARM VM does not constitute native Windows x64
 qualification merely because an x64 executable runs there.
 
-## CLI results and deadlines
+## Discovery CLI results and deadlines
 
 | Exit code | Meaning |
 | --- | --- |

@@ -10,7 +10,8 @@ simulator coverage without any hardware validation. Last updated 2026-09-04.
 | P1 discovery | Implemented/reused | Synthetic fixtures and pinned HL2-profile simulator discovery pass | Not executed locally | Windows-reference simulator comparison and eventual real P1 hardware. |
 | P2 discovery | Implemented/reused | Synthetic Saturn fixtures and real G2 broadcast/targeted discovery pass | Not executed locally | Windows G2 check; separately record installed G2 server/FPGA versions. |
 | Deadline/cancellation/errors | Implemented | Offline tests, empty loopback deadline and actual SIGINT smoke | Not executed locally | Repeat on CI/Windows. |
-| Native WDSP and ChannelMaster | Not started | Static audit only | Existing legacy source remains | M2/M3; correct radio-init ABI before use. |
+| Native WDSP / .NET offline DSP | Initial implementation | 11 signal checks, native ABI/NR3/NR4/lifecycle tests and sanitizer checks pass | Native CI added; execution pending | Windows/Linux parity and longer-run qualification; see M2 results. |
+| ChannelMaster lifecycle | Not started | Static audit only | Existing legacy source remains | M3; correct radio-init ABI before use. |
 | Radio streams / RX1 spectrum | Not started | None | None in new app | M4. |
 | Audio / shared desktop UI | Not started | None | None in new app | M5. |
 | TX / PTT / CW | Not started | None | None in new app | M6 and mode-specific hardware checks. |

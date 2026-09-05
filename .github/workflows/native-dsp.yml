@@ -1,0 +1,100 @@
+name: Native DSP
+
+on:
+  push:
+    paths:
+      - 'native/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'Project Files/Source/wdsp/**'
+      - 'Project Files/lib/NR_Algorithms_x64/src/**'
+      - 'global.json'
+      - 'Thetis.CrossPlatform.slnx'
+      - '.github/workflows/native-dsp.yml'
+  pull_request:
+    paths:
+      - 'native/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'Project Files/Source/wdsp/**'
+      - 'Project Files/lib/NR_Algorithms_x64/src/**'
+      - 'global.json'
+      - 'Thetis.CrossPlatform.slnx'
+      - '.github/workflows/native-dsp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: '1'
+  THETIS_NATIVE_DIR: '${{ github.workspace }}/artifacts/native/stage/Release'
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            cmake_args: '-A x64'
+          - os: macos-latest
+            cmake_args: ''
+          - os: ubuntu-latest
+            cmake_args: ''
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - name: Record tools and host architecture
+        run: |
+          cmake --version
+          dotnet --info
+      - name: Configure source-built dependencies and WDSP
+        run: cmake -S native -B artifacts/native -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
+      - name: Build native library and tests
+        run: cmake --build artifacts/native --config Release --parallel 4
+      - name: Offline native ABI, DSP and lifecycle tests
+        run: ctest --test-dir artifacts/native -C Release --output-on-failure
+      - name: Restore pinned managed dependencies
+        run: dotnet restore Thetis.CrossPlatform.slnx --locked-mode
+      - name: Build managed harness
+        run: dotnet build Thetis.CrossPlatform.slnx -c Release --no-restore
+      - name: Offline CLI self-test (native library required)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- dsp-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: Managed and native integration regressions
+        run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger trx --results-directory artifacts/test-results
+      - name: macOS dependency inspection
+        if: runner.os == 'macOS'
+        run: |
+          file artifacts/native/stage/Release/libthetis_wdsp.dylib
+          otool -L artifacts/native/stage/Release/libthetis_wdsp.dylib
+      - name: Linux dependency inspection
+        if: runner.os == 'Linux'
+        run: |
+          file artifacts/native/stage/Release/libthetis_wdsp.so
+          ldd artifacts/native/stage/Release/libthetis_wdsp.so
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Configure AddressSanitizer and UndefinedBehaviorSanitizer
+        run: cmake -S native -B artifacts/native-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DTHETIS_SANITIZE=ON
+      - name: Build instrumented native code
+        run: cmake --build artifacts/native-asan --parallel 4
+      - name: Run instrumented tests
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+        run: ctest --test-dir artifacts/native-asan --output-on-failure

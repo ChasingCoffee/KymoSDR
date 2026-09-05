@@ -28,8 +28,12 @@ warren@pratt.one
 
 void start_syncbthread (SYNCB a)
 {
+#ifdef _WIN32
 	HANDLE handle = (HANDLE) _beginthread(syncb_main, 0, (void *)a);
 	SetThreadPriority (handle, THREAD_PRIORITY_HIGHEST);
+#else
+	a->thread = wdsp_start_joinable(syncb_main, a);
+#endif
 }
 
 SYNCB create_syncbuffs (int accept, int nstreams, int max_insize, int max_outsize, int outsize, double** out, void (*exf)(void))
@@ -73,7 +77,11 @@ void destroy_syncbuffs (SYNCB a)
 	ReleaseSemaphore(a->Sem_BuffReady, 1, 0);		// be sure the syncb thread can pass WaitForSingleObject in syncb_main()									// 
 	LeaveCriticalSection (&a->csOUT);				// let the thread pass to the trap in syncbdata()
 	LeaveCriticalSection (&a->csIN);				
+#ifdef _WIN32
 	Sleep (2);										// wait for the syncb thread to die
+#else
+	wdsp_join(a->thread);
+#endif
 	DeleteCriticalSection (&a->csOUT);
 	DeleteCriticalSection (&a->csIN);
 	CloseHandle (a->Sem_BuffReady);
@@ -181,7 +189,11 @@ void SetSYNCBRingOutsize (SYNCB a, int size)
 	InterlockedBitTestAndReset(&a->run, 0);			// set a trap for the syncb thread
 	ReleaseSemaphore(a->Sem_BuffReady, 1, 0);		// be sure the syncb thread can pass WaitForSingleObject in syncb_main()									// 
 	LeaveCriticalSection (&a->csOUT);				// let the thread pass to the trap in syncbdata()
+#ifdef _WIN32
 	Sleep (2);										// wait for the syncb thread to die
+#else
+	wdsp_join(a->thread);
+#endif
 	flush_syncbuffs(a);								// restore ring to pristine condition
 	a->r1_outsize = size;							// set its new outsize
 	InterlockedBitTestAndSet(&a->run,0);			// remove the syncb thread trap

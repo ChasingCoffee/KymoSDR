@@ -1,6 +1,6 @@
 # Thetis cross-platform implementation plan
 
-Date: 2026-09-04. Status: proposed implementation sequence; application implementation has not started.
+Date: 2026-09-04. Status: discovery and initial macOS native DSP implemented; cross-platform qualification and desktop work pending.
 
 ## Outcome and scope
 
@@ -13,6 +13,7 @@ Planning inputs:
 - [Portability audit](MACOS_PORTABILITY_AUDIT.md): source boundaries, native dependencies, radio-init ABI defect and simulator options.
 - [VST divergence audit](VST_DIVERGENCE_AUDIT.md): behavior to preserve and catalog/lifecycle defects to correct.
 - [Upstream/FreeDV review](UPSTREAM_BASELINE_REVIEW.md): assessment of the 18 newer commits and dependency/TX-routing findings.
+- [WDSP baseline review](WDSP_BASELINE_REVIEW.md): authoritative TAPR 2.00 reference, local extensions and the retained older PureSignal implementation.
 
 The audits are static evidence, not proof of successful builds or operation. Milestone acceptance below requires new test results.
 
@@ -122,6 +123,7 @@ The default order prioritizes proving the engine before expanding UI work. FreeD
 
 - Build FFTW and the required RNNoise/libspecbleach sources for the target architectures; verify ARM-specific code paths. Use the sources already present where complete, recovering/pinning missing source inputs rather than linking Windows artifacts on Mac.
 - Add WDSP CMake targets and narrow portability adaptations for locks, atomics, allocation, threads and scheduling. Check existing cross-platform WDSP implementations as references before inventing equivalents, but compare versions/APIs before importing code.
+- Use pinned TAPR/OpenHPSDR-wdsp 2.00 as the authoritative reference, while building this project's modified source in place. Match local ABI extensions (including five-argument `GetPixels`); do not conflate its `200` version value with stock TAPR feature parity. Adopting full TAPR PureSignal 3.0 is a separate integration decision, not part of M2 portability.
 - Introduce `Thetis.Engine` interop and a small native ABI test target. Check exported signatures, representative struct sizes, buffer ownership, and library resolution on each OS. Keep dependency loading out of discovery-only execution.
 - Exercise known tones, impulse/noise fixtures, filtering, rates and analyzer output. Define numerical tolerances and fixture metadata before comparing platforms; do not require bit-identical floating-point output or call uncalibrated values dBm.
 
@@ -261,4 +263,6 @@ Re-estimate effort after M4. The largest uncertainty is native dependency/lifecy
 
 Repository setup and the three static audits are complete. The first implementation batch has now advanced the baseline to `3518930b` and added the discovery CLI, shared projects, tests and CI definitions. The macOS arm64 Release build and 43 offline tests pass; P1 simulator discovery, real Ctrl-C behavior, and live G2 P2 broadcast/targeted discovery also pass locally. See [M1 results](M1_DISCOVERY_RESULTS.md) and [Getting started](GETTING_STARTED.md).
 
-M0/M1 acceptance is still partial: Windows/legacy-reference and Linux execution remain unverified. The G2's raw discovery fields are recorded; installed server/FPGA release versions still need separate recording. M2–M11 implementation has not started. No streaming or live TX capability has been implemented or tested.
+M0/M1 acceptance is still partial: Windows/legacy-reference and Linux execution remain unverified. The G2's raw discovery fields are recorded; installed server/FPGA release versions still need separate recording. Discovery is checkpointed at `77792260`.
+
+M2 now has source-built native dependencies/WDSP, POSIX adaptations, .NET interop and an offline CLI self-test. On macOS arm64, 11 signal checks, 51 managed tests and the native ABI/NR/lifecycle tests pass; the native tests also pass ASan/UBSan. Windows/Linux jobs are defined but not executed, so M2 acceptance remains partial. See [M2 results](M2_NATIVE_RESULTS.md) and [native build instructions](NATIVE_DSP.md). M3–M11 remain pending. No radio streaming or live TX capability has been implemented or tested.

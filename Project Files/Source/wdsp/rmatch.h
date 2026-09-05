@@ -56,7 +56,7 @@ typedef struct _aamav
 
 typedef struct _rmatch
 {
-	volatile long run;
+	volatile LONG run;
 	double* in;
 	double* out;
 	int insize;
@@ -108,8 +108,8 @@ typedef struct _rmatch
 	unsigned int write_startup;
 	int control_flag;
 	// diagnostics
-	volatile long underflows;
-	volatile long overflows;
+	volatile LONG underflows;
+	volatile LONG overflows;
 	int force;
 	double fvar;
 } rmatch, *RMATCH;

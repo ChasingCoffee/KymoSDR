@@ -45,7 +45,7 @@ mw0lge@grange-lane.co.uk
 #include <stdint.h>
 #include <stddef.h>
 
-#if defined(_WIN64)
+#if UINTPTR_MAX == UINT64_MAX
 	// 64-bit build
 	extern uint64_t fnv1a_hash64(const void* data, size_t len);
 	#define GOLDEN_RATIO_64 0x9E3779B97F4A7C15ULL

@@ -95,10 +95,14 @@
       "thetis.core": {
         "type": "Project"
       },
+      "thetis.engine": {
+        "type": "Project"
+      },
       "thetis.headless": {
         "type": "Project",
         "dependencies": {
-          "Thetis.Core": "[1.0.0, )"
+          "Thetis.Core": "[1.0.0, )",
+          "Thetis.Engine": "[1.0.0, )"
         }
       }
     }

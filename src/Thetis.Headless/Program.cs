@@ -7,4 +7,6 @@ Console.CancelKeyPress += (_, args) =>
     cancellation.Cancel();
 };
 
-return DiscoveryCli.Run(args, Console.Out, Console.Error, new DiscoveryBackend(), cancellation.Token);
+return args.FirstOrDefault() == "dsp-selftest"
+    ? DspCli.Run(args, Console.Out, Console.Error, cancellation.Token)
+    : DiscoveryCli.Run(args, Console.Out, Console.Error, new DiscoveryBackend(), cancellation.Token);

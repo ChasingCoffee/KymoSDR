@@ -1,3 +1,45 @@
+# KymoSDR
+
+Cross-platform port of Thetis on .NET 10 with WDSP 2.0, targeting modern rendering
+and VST3 support. In active development.
+
+KymoSDR is an independent port built from
+[SDR-VST3](https://github.com/nubbyless/SDR-VST3), with credit to Thetis,
+OpenHPSDR, WDSP and the upstream VST3 contributors. It is not an official Thetis
+release. The name comes from Kymo, a sea nymph associated with waves and a fellow
+Nereid of Thetis.
+
+## Current status
+
+- .NET 10 headless discovery harness with Protocol 1 and Protocol 2 support.
+  Discovery has been tested on macOS with an ANAN G2 headless and a P1 simulator.
+- Source-built native WDSP 2.0 baseline with offline signal, ABI, noise-reduction
+  and lifecycle checks. Local macOS arm64 tests pass; Windows/Linux CI
+  qualification is the next step.
+- The portable harness does **not** stream radio I/Q, play audio or transmit.
+  The cross-platform UI, rendering and VST3 hosting are still planned work.
+- The inherited Windows application remains in the tree as the source/reference
+  implementation. Its features are not a claim of portable feature parity.
+
+The initial solution, project namespaces and native library names still use
+`Thetis`; the public project name is KymoSDR. See the
+[feature matrix](docs/FEATURE_MATRIX.md) for implementation and validation status.
+
+## Build and development
+
+- [Getting started: managed harness](docs/GETTING_STARTED.md)
+- [Building and testing native WDSP](docs/NATIVE_DSP.md)
+- [Implementation plan](docs/CROSS_PLATFORM_IMPLEMENTATION_PLAN.md)
+- [Native DSP results](docs/M2_NATIVE_RESULTS.md)
+- [Dependency provenance and licenses](docs/DEPENDENCIES.md)
+
+Use the existing [license](LICENSE) and component-specific notices; this port
+does not replace upstream licensing or attribution. The original SDR-VST3 README
+and credits are retained below for context. Its release notes and installation
+instructions describe the inherited Windows application, not a KymoSDR release.
+
+## Upstream SDR-VST3 README (historical)
+
 What is SDR-VST3?
 SDR-VST3 is a fork of Thetis (the OpenHPSDR software-defined radio console application) that adds built-in VST3 audio plugin support to ham radio operations. It allows operators to insert professional audio plugins (EQs, compressors, gates, limiters, noise reduction, etc.) into both the RX (receive) and TX (transmit) signal chains — similar to how a DAW works, but for live radio signal processing.
 Originally called "Thetis Plus", it was rebranded to SDR-VST3 in v4.1 (at the suggestion of Thetis maintainer Richie MW0LGE) to run as a fully independent, side-by-side installation alongside standard Thetis.

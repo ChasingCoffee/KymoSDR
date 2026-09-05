@@ -26,13 +26,17 @@ warren@wpratt.com
 
 // Yurij_eu2av: Thetis patch ported to WDSP 2.00
 
+#ifdef _WIN32
 #include <Windows.h>
 #include <process.h>
 #include <intrin.h>
+#include <avrt.h>
+#else
+#include "wdsp_platform.h"
+#endif
 #include <math.h>
 #include <stdint.h>
 #include <time.h>
-#include <avrt.h>
 #include <assert.h>
 #include "fftw3.h"
 
@@ -145,4 +149,3 @@ typedef double complex[2];
 #ifndef M_PI
 #  define M_PI 3.14159265358979323846
 #endif
-

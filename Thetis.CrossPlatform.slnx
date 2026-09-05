@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Thetis.Core/Thetis.Core.csproj" />
+    <Project Path="src/Thetis.Engine/Thetis.Engine.csproj" />
     <Project Path="src/Thetis.Headless/Thetis.Headless.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Thetis.Core.Tests/Thetis.Core.Tests.csproj" />
+    <Project Path="tests/Thetis.Engine.Tests/Thetis.Engine.Tests.csproj" />
   </Folder>
 </Solution>

@@ -25,11 +25,13 @@ internal sealed class DiscoveryBackend : IDiscoveryBackend
 internal static class DiscoveryCli
 {
     internal const string Help = """
-        Thetis.Headless — discovery only (does not start RX or TX)
+        Thetis.Headless — discovery and offline DSP tests (does not start RX or TX on a radio)
 
         Commands:
           nics       List usable IPv4 interfaces. Sends no discovery packets.
           discover   Send HPSDR discovery requests; finish after the scan/deadline.
+          dsp-selftest --native-dir ABSOLUTE_PATH
+                     Run offline DSP checks; JSON output. No radio or audio devices.
           --help     Show this help. No command also shows help.
 
         Options:

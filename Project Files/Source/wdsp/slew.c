@@ -59,7 +59,7 @@ void decalc_uslew (USLEW a)
 	_aligned_free (a->cup);
 }
 
-USLEW create_uslew (int channel, volatile long *ch_upslew, int size, double* in, double* out, double rate, double tdelay, double tupslew)
+USLEW create_uslew (int channel, volatile LONG *ch_upslew, int size, double* in, double* out, double rate, double tdelay, double tupslew)
 {
 	USLEW a = (USLEW)malloc0 (sizeof (uslew));
 	a->channel = channel;

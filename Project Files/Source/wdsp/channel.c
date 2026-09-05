@@ -30,8 +30,12 @@ struct _ch ch[MAX_CHANNELS];
 
 void start_thread (int channel)
 {
+#ifdef _WIN32
 	HANDLE handle = (HANDLE) _beginthread(wdspmain, 0, (void *)(uintptr_t)channel);
 	//SetThreadPriority(handle, THREAD_PRIORITY_HIGHEST);
+#else
+	ch[channel].dsp_thread = wdsp_start_joinable(wdspmain, (void *)(uintptr_t)channel);
+#endif
 }
 
 void pre_main_build (int channel)
@@ -97,7 +101,11 @@ void OpenChannel (int channel, int in_size, int dsp_size, int input_samplerate, 
 		InterlockedBitTestAndReset (&ch[channel].iob.pc->exec_bypass, 0);
 		InterlockedBitTestAndSet (&ch[channel].exchange, 0);
 	}
+#ifdef _WIN32
 	_MM_SET_FLUSH_ZERO_MODE (_MM_FLUSH_ZERO_ON);
+#else
+	wdsp_flush_denormals();
+#endif
 }
 
 void pre_main_destroy (int channel)
@@ -107,7 +115,12 @@ void pre_main_destroy (int channel)
 	InterlockedBitTestAndReset (&ch[channel].run, 0);
 	InterlockedBitTestAndSet (&ch[channel].iob.pc->exec_bypass, 0);
 	ReleaseSemaphore (a->Sem_BuffReady, 1, 0);
+#ifdef _WIN32
 	Sleep (25);
+#else
+	// A fixed sleep cannot establish that the worker stopped using its buffers.
+	wdsp_join(ch[channel].dsp_thread);
+#endif
 }
 
 void post_main_destroy (int channel)
