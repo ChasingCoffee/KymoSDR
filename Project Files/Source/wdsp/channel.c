@@ -28,11 +28,19 @@ warren@wpratt.com
 
 struct _ch ch[MAX_CHANNELS];
 
+#ifdef _WIN32
+static unsigned __stdcall run_dsp_thread(void *argument)
+{
+	wdspmain(argument);
+	return 0;
+}
+#endif
+
 void start_thread (int channel)
 {
 #ifdef _WIN32
-	HANDLE handle = (HANDLE) _beginthread(wdspmain, 0, (void *)(uintptr_t)channel);
-	//SetThreadPriority(handle, THREAD_PRIORITY_HIGHEST);
+	ch[channel].dsp_thread = (HANDLE)_beginthreadex(NULL, 0, run_dsp_thread, (void *)(uintptr_t)channel, 0, NULL);
+	if (!ch[channel].dsp_thread) abort();
 #else
 	ch[channel].dsp_thread = wdsp_start_joinable(wdspmain, (void *)(uintptr_t)channel);
 #endif
@@ -116,7 +124,8 @@ void pre_main_destroy (int channel)
 	InterlockedBitTestAndSet (&ch[channel].iob.pc->exec_bypass, 0);
 	ReleaseSemaphore (a->Sem_BuffReady, 1, 0);
 #ifdef _WIN32
-	Sleep (25);
+	WaitForSingleObject(ch[channel].dsp_thread, INFINITE);
+	CloseHandle(ch[channel].dsp_thread);
 #else
 	// A fixed sleep cannot establish that the worker stopped using its buffers.
 	wdsp_join(ch[channel].dsp_thread);

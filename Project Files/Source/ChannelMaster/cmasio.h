@@ -49,6 +49,7 @@ void asioOUT(int id, int nsamples, double* buff);
 
 void CallbackASIO(void* inputL, void* inputR, void* outputL, void* outputR);
 
+#ifndef THETIS_CM_HEADLESS
 extern __declspec(dllimport) long getASIODriverString(void* szData);
 extern __declspec(dllimport) long getASIOBlockNum(void* dwData);
 extern __declspec(dllimport) int prepareASIO(int blocksize, int samplerate, char* asioDriverName, void (*CallbackASIO)(void* inputL, void* inputR, void* outputL, void* outputR), long input_base_channel, long output_base_channel);
@@ -58,6 +59,7 @@ extern __declspec(dllimport) long asioStop();
 extern __declspec(dllimport) long getASIOBaseInputChannel(void* dwData);
 extern __declspec(dllimport) long getASIOBaseOutputChannel(void* dwData);
 extern __declspec(dllimport) long getASIOInputMode(void* dwData);
+#endif
 
 typedef enum
 {

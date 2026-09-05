@@ -27,10 +27,17 @@ warren@wpratt.com
 #ifndef _cmbuffs_h
 #define _cmbuffs_h
 #include "comm.h"
+#ifdef THETIS_CM_HEADLESS
+#include "cm_thread.h"
+#endif
 
 #define CMB_MULT		(3)						
 typedef struct _cmb
 {
+#ifdef THETIS_CM_HEADLESS
+	cm_thread worker;
+	int worker_started;
+#endif
 	int   id;
 	int   max_in_size;							// max input number of complex samples
 	int   max_outsize;							// max output number of complex samples
@@ -43,8 +50,8 @@ typedef struct _cmb
 	int   r1_inidx;								// in 'double', actual index into the buffer is 2 times this
 	int   r1_outidx;							// in 'double', actual index into the buffer is 2 times this
 	int   r1_unqueuedsamps;						// number of input samples not yet queued/released for execution
-	volatile long run;							// when 1, thread loops; when 0, thread terminates
-	volatile long accept;						// flag indicating whether accepting input data
+	volatile LONG run;							// when 1, thread loops; when 0, thread terminates
+	volatile LONG accept;						// flag indicating whether accepting input data
 	HANDLE Sem_BuffReady;						// count = number of output-sized buffers queued for processing
 	CRITICAL_SECTION csOUT;						// used to block output while parameters are updated or buffers flushed
 	CRITICAL_SECTION csIN;						// used to block input while parameters are updated or buffers flushed
@@ -53,6 +60,9 @@ typedef struct _cmb
 extern void create_cmbuffs (int id, int accept, int max_insize, int max_outsize, int outsize);
 
 extern void destroy_cmbuffs (int id);
+#ifdef THETIS_CM_HEADLESS
+extern void stop_cmbuffs(int id);
+#endif
 
 extern void flush_cmbuffs (int id);
 
@@ -66,4 +76,3 @@ extern void SetCMRingOutsize (int id, int size);
 
 
 #endif
-

@@ -42,6 +42,8 @@ typedef struct wdsp_waitable *HANDLE;
 #define InterlockedAnd(p,v) __atomic_fetch_and((p),(v),__ATOMIC_SEQ_CST)
 #define _InterlockedAnd(p,v) InterlockedAnd((p),(v))
 #define InterlockedExchange(p,v) __atomic_exchange_n((p),(v),__ATOMIC_SEQ_CST)
+#define _InterlockedExchange(p,v) InterlockedExchange((p),(v))
+#define _InterlockedOr(p,v) __atomic_fetch_or((p),(v),__ATOMIC_SEQ_CST)
 #define InterlockedIncrement(p) __atomic_add_fetch((p),1,__ATOMIC_SEQ_CST)
 #define InterlockedDecrement(p) __atomic_sub_fetch((p),1,__ATOMIC_SEQ_CST)
 #define InterlockedBitTestAndSet(p,b) ((unsigned char)((__atomic_fetch_or((p),UINT32_C(1) << (b),__ATOMIC_SEQ_CST) >> (b)) & 1))

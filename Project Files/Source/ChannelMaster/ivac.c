@@ -26,7 +26,9 @@ warren@wpratt.com
 */
 
 #include "cmcomm.h"
+#if defined(_WIN32) && !defined(THETIS_CM_HEADLESS)
 #include "pa_win_wasapi.h"
+#endif
 
 __declspec (align (16))			IVAC pvac[MAX_EXT_VACS];
 
@@ -123,9 +125,13 @@ void destroy_resamps(IVAC a)
 PORT void destroy_ivac(int id)
 {
 	IVAC a = pvac[id];
+	/* The mixer owns a worker that can call xvac_out(). Join it before
+	 * releasing its resamplers or the callback's IVAC owner. */
+	destroy_aamix(a->mixer, -1);
 	destroy_resamps(a);
 	DeleteCriticalSection(&a->cs_ivac);
 	free (a);
+	pvac[id] = NULL;
 }
 
 PORT void xvacIN(int id, double* in_tx, int bypass)
@@ -227,7 +233,7 @@ int CallbackIVAC(const void* input,
 	PaStreamCallbackFlags statusFlags,
 	void* userData)
 {
-	int id = (int)userData;
+	int id = (int)(intptr_t)userData;
 	IVAC a = pvac[id];
 	double* out_ptr = (double*)output;
 	double* in_ptr = (double*)input;
@@ -291,6 +297,10 @@ int CallbackIVAC(const void* input,
 
 PORT int StartAudioIVAC(int id)
 {
+#ifdef THETIS_CM_HEADLESS
+	(void)id;
+	return paDeviceUnavailable;
+#else
 	IVAC a = pvac[id];
 	int error = 0;
 	int in_dev = Pa_HostApiDeviceIndexToDeviceIndex(a->host_api_index, a->input_dev_index);
@@ -383,6 +393,7 @@ PORT int StartAudioIVAC(int id)
 	if (error != 0) return -1;
 
 	return 1;
+#endif
 }
 
 PORT void SetIVACRBReset(int id, int reset)
@@ -393,8 +404,12 @@ PORT void SetIVACRBReset(int id, int reset)
 
 PORT void StopAudioIVAC(int id)
 {
+#ifndef THETIS_CM_HEADLESS
 	IVAC a = pvac[id];
 	Pa_CloseStream(a->Stream);
+#else
+	(void)id;
+#endif
 }
 
 PORT void SetIVACrun(int id, int run)

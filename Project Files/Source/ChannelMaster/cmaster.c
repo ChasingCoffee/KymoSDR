@@ -338,6 +338,9 @@ void create_cmaster()
 void destroy_cmaster()
 {
 	int i;
+#ifdef THETIS_CM_HEADLESS
+	for (i = 0; i < pcm->cmSTREAM; ++i) stop_cmbuffs(i);
+#endif
 	destroy_analyzer_alloc();
 	destroy_router(0, 0);
 	destroy_cmasio();

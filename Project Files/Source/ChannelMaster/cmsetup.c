@@ -24,8 +24,7 @@ warren@wpratt.com
 
 */
 
-#include "cmsetup.h"
-#include "cmaster.h"
+#include "cmcomm.h"
 
 // set radio structure, call this first
 // these parameters are used by create_cmaster() to determine units to create & buffer sizes
@@ -96,6 +95,10 @@ void CreateRadio()
 PORT
 void DestroyRadio()
 {
+#ifdef THETIS_CM_HEADLESS
+	/* Producers must be joined while their pipe and DSP consumers still exist. */
+	for (int i = 0; i < pcm->cmSTREAM; ++i) stop_cmbuffs(i);
+#endif
 	destroy_sync();
 	destroy_pipe();
 	destroy_cmaster();

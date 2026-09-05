@@ -30,7 +30,9 @@ warren@wpratt.com
 
 struct _ch
 {
-#ifndef _WIN32
+#ifdef _WIN32
+	HANDLE dsp_thread;
+#else
 	pthread_t dsp_thread;
 #endif
 	int type;

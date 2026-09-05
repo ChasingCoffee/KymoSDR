@@ -15,6 +15,7 @@ public static class DspDiagnostics
         DspAbiInfo abi = DspRuntime.Initialize(nativeDirectory);
         lock (DspRuntime.Gate)
         {
+            OfflineRadioSession.RequireIdle();
             var checks = new List<DspCheck>();
             // Do not spend minutes producing machine-specific FFTW wisdom in a smoke test.
             NativeMethods.ThetisWdspSetPlanningTimeLimit(0);

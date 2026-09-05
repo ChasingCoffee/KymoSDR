@@ -11,7 +11,7 @@ simulator coverage without any hardware validation. Last updated 2026-09-04.
 | P2 discovery | Implemented/reused | Synthetic Saturn fixtures and real G2 broadcast/targeted discovery pass | Offline fixture/CLI tests pass in CI | Windows G2 check; separately record installed G2 server/FPGA versions. |
 | Deadline/cancellation/errors | Implemented | Offline tests, empty loopback deadline and actual SIGINT smoke | Offline regression tests pass in CI | Live-network/process cancellation checks on Windows/Linux. |
 | Native WDSP / .NET offline DSP | Initial offline gate passed | 11 signal checks, native ABI/NR3/NR4/lifecycle tests and sanitizer checks pass | 11 signal checks and 51 managed tests pass on both; Linux sanitizer/leak checks pass | Full DSP/mode parity and longer-run qualification; see CI results. |
-| ChannelMaster lifecycle | Not started | Static audit only | Existing legacy source remains | M3; correct radio-init ABI before use. |
+| ChannelMaster lifecycle | M3a offline core implemented | 100-cycle native/CLI tests and 58 managed tests pass; post-fix leak qualification in progress | New tests added to CI; pending qualification | [M3a boundary](CHANNELMASTER_OFFLINE.md); RNet/socket lifecycle still M3b. |
 | Radio streams / RX1 spectrum | Not started | None | None in new app | M4. |
 | Audio / shared desktop UI | Not started | None | None in new app | M5. |
 | TX / PTT / CW | Not started | None | None in new app | M6 and mode-specific hardware checks. |

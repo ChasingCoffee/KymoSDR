@@ -584,7 +584,15 @@ void dexchange (int channel, double* in, double* out)
 {
 	int n;
 	IOB a = ch[channel].iob.pd;
-	if (!_InterlockedAnd (&ch[channel].run, 1)) _endthread();
+	if (!_InterlockedAnd (&ch[channel].run, 1))
+	{
+		LeaveCriticalSection(&ch[channel].csDSP);
+#ifdef _WIN32
+		_endthreadex(0);
+#else
+		_endthread();
+#endif
+	}
 
 	EnterCriticalSection (&a->r2_ControlSection);
 	a->r2_havesamps += a->r2_insize;

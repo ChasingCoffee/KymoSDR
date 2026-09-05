@@ -33,12 +33,12 @@ typedef struct _sync
 	double* divbuff;
 	struct _sxmtr
 	{
-		volatile long ps_tx_idx;							// stream to use for PureSignal TX samples
-		volatile long ps_rx_idx;							// stream to use for PureSignal RX samples
+		volatile LONG ps_tx_idx;							// stream to use for PureSignal TX samples
+		volatile LONG ps_rx_idx;							// stream to use for PureSignal RX samples
 	} xmtr[cmMAXxmtr];
 } sync, *SYNC;
 
-extern SYNC psync;
+extern SYNC psyn;
 
 extern void create_sync();
 

@@ -24,12 +24,23 @@ warren@pratt.one
 
 */
 
+#ifndef THETIS_CMCOMM_H
+#define THETIS_CMCOMM_H
+#ifdef _WIN32
 #include <Windows.h>
 #include <process.h>
 #include <intrin.h>
 #include <math.h>
 #include <time.h>
 #include <avrt.h>
+#else
+#include "wdsp_platform.h"
+#endif
+#include "comm.h"
+#ifdef THETIS_CM_HEADLESS
+#include "cm_thread.h"
+#define _endthread cm_exit_thread
+#endif
 
 #include "aamix.h"
 #include "amix.h"
@@ -52,3 +63,4 @@ warren@pratt.one
 #include "vox.h"
 #include "znob.h"
 #include "znobII.h"
+#endif

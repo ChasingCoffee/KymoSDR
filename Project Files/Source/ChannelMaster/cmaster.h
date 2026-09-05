@@ -66,8 +66,8 @@ typedef struct _cmaster
 	void (*OutboundTx)(int id, int nsamples, double* buff);			// pointer to Outbound function called by ilv with xmtr samples from the interleaver
 	void (*OutboundTCIRxIQ)(int id, int nsamples, double* buff);	// pointer to callback with receiver IQ samples
 	void (*InboundTCITxAudio)(int nsamples, double* buff);			// pointer to callback to fill TX audio input
-	volatile long tci_rx_out_run;											// run TCI RX IQ/audio callbacks
-	volatile long apply_tci_tx_vst;											// apply TX VST chain while TCI TX audio is the active source
+	volatile LONG tci_rx_out_run;											// run TCI RX IQ/audio callbacks
+	volatile LONG apply_tci_tx_vst;											// apply TX VST chain while TCI TX audio is the active source
 	void (*VstRxProcess)(double* buff, int frames);					// pointer to callback to process RX audio through VST chain
 	void (*VstTxProcess)(double* buff, int frames);					// pointer to callback to process TX audio through VST chain
 	void (*VstInitialize)(void);									// pointer to callback to initialize VST hosting
@@ -85,7 +85,7 @@ typedef struct _cmaster
 		int ch_outrate;												// rate at rcvr channel output = rcvr input to aamix
 		int ch_outsize;												// size at rcvr channel output = rcvr input to aamix
 		double* audio[cmMAXSubRcvr];								// audio buff, per subrx
-		volatile long run_pan;										// run panadapter
+		volatile LONG run_pan;										// run panadapter
 		ANB panb;													// noiseblanker, per receiver
 		NOB pnob;													// noiseblanker II, per receiver
 	} rcvr[cmMAXrcvr];
@@ -102,7 +102,7 @@ typedef struct _cmaster
 		EER peer;													// eer block
 		ILV pilv;													// interleave for EER
 		AAMIX pavoxmix;												// anti-vox mixer
-		volatile long use_tci_audio;								// use TCI TX audio instead of other TX sources
+		volatile LONG use_tci_audio;								// use TCI TX audio instead of other TX sources
 	} xmtr[cmMAXxmtr];
 
 } cmaster, *CMASTER;

@@ -36411,6 +36411,8 @@ namespace Thetis
             return null;
         }
 
+        public bool InformHardwareP2Ports => chkInformHardwareP2Ports != null && chkInformHardwareP2Ports.Checked;
+
         public int ListenToRadioOnUDPPort
         {
             get

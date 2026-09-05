@@ -131,6 +131,10 @@ The default order prioritizes proving the engine before expanding UI work. FreeD
 
 ### M3 — ChannelMaster lifecycle without forms
 
+Implementation is split into **M3a: offline DSP/pipe lifecycle** and **M3b: RNet/
+socket lifecycle** so native transport is not accidentally qualified by a
+no-packet test. See [the M3a boundary and tests](CHANNELMASTER_OFFLINE.md).
+
 - Correct PORT-1's radio-init ABI on both managed and native sides, covering default and custom P2 port selection with focused tests before invoking it in the harness.
 - Adapt ChannelMaster's native sockets, workers, synchronization and allocation; retain packet-processing/routing algorithms. Define a non-Windows no-ASIO path and explicit no-device audio behavior.
 - Extract the needed setup sequence from `cmaster.cs`, `radio.cs`, `NetworkIO.cs` and `audio.cs` into the session owner. Replace form reads with validated options and explicit errors.
@@ -265,4 +269,4 @@ Repository setup and the three static audits are complete. The first implementat
 
 M0/M1 acceptance is still partial: managed CI now passes on Windows, macOS and Linux, but the legacy Windows reference build and Windows live G2/simulator comparisons remain unverified. The G2's raw discovery fields are recorded; installed server/FPGA release versions still need separate recording. Discovery is checkpointed at `77792260`.
 
-M2's initial cross-platform offline gate now passes on Windows x64, macOS arm64 and Linux x64: source-built dependencies/WDSP, library loading/ABI checks, 11 signal checks, 51 managed tests and native ABI/NR/lifecycle tests. Linux also passes ASan/UBSan with leak detection after the native CI portability/ownership fixes. See [CI results](NATIVE_CI_RESULTS.md), [initial local M2 results](M2_NATIVE_RESULTS.md) and [native build instructions](NATIVE_DSP.md). This is fixture qualification, not complete DSP/mode or real-time parity. M3–M11 remain pending. No radio streaming or live TX capability has been implemented or tested.
+M2's initial cross-platform offline gate passes on Windows x64, macOS arm64 and Linux x64; see [CI results](NATIVE_CI_RESULTS.md), [initial local M2 results](M2_NATIVE_RESULTS.md) and [native build instructions](NATIVE_DSP.md). M3a's offline ChannelMaster DSP/pipe lifecycle is implemented with a .NET owner, 100-cycle tests, cancellation/rollback, no-device audio and radio-init argument correction. Its qualification and limits are tracked in [ChannelMaster offline](CHANNELMASTER_OFFLINE.md). M3b's RNet/socket lifecycle and M4–M11 remain pending. No radio streaming or live TX capability has been implemented or tested.

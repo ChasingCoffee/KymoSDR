@@ -78,7 +78,7 @@ typedef struct _ivac
 	int vac_combine_input;
 	int vac_apply_rx_vst;
 	int vac_apply_tx_vst;
-	volatile long vac_feed_tx;			// 1 while this VAC is feeding the TX stream (updated each TX pass)
+	volatile LONG vac_feed_tx;			// 1 while this VAC is feeding the TX stream (updated each TX pass)
 	double vac_preamp;
 	double vac_rx_scale;
 	double vac_mon_scale;		// MW0LGE_21k9d the volume level of the vac mon

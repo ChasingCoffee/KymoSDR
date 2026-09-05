@@ -43,7 +43,31 @@ set_target_properties(wdsp PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>"
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
 
+# M3 offline ChannelMaster core shares the existing WDSP module and its global
+# channel/cache ownership. Socket transport, ASIO, PortAudio device backends and
+# diagnostic file writers are intentionally NOT in this source list.
+set(CM_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/Source/ChannelMaster")
+set(cm_units aamix amix analyzers cmaster cmbuffs cmsetup ilv ivac pipe ring
+  router sidetone sync tci txgain vox znob znobII)
+foreach(unit IN LISTS cm_units)
+  target_sources(wdsp PRIVATE "${CM_SOURCE_DIR}/${unit}.c")
+  set_source_files_properties("${CM_SOURCE_DIR}/${unit}.c" PROPERTIES COMPILE_DEFINITIONS THETIS_CM_HEADLESS)
+endforeach()
+target_sources(wdsp PRIVATE platform/cm_thread.c platform/cm_no_audio.c interop/cm_session.c)
+set_source_files_properties(platform/cm_no_audio.c interop/cm_session.c PROPERTIES COMPILE_DEFINITIONS THETIS_CM_HEADLESS)
+target_include_directories(wdsp PRIVATE "${CM_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/lib/portaudio-19.7.0/include")
+
 if(BUILD_TESTING)
+  add_executable(cm_session_tests tests/cm_session_tests.c tests/process_resources.c)
+  target_include_directories(cm_session_tests PRIVATE interop)
+  target_link_libraries(cm_session_tests PRIVATE wdsp)
+  if(WIN32)
+    target_link_libraries(cm_session_tests PRIVATE psapi)
+  endif()
+  set_target_properties(cm_session_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
+  add_test(NAME channelmaster_offline_lifecycle COMMAND cm_session_tests)
+  set_tests_properties(channelmaster_offline_lifecycle PROPERTIES TIMEOUT 600)
   add_executable(specbleach_tests tests/specbleach_tests.c)
   target_include_directories(specbleach_tests PRIVATE "${sb_root}/src/shared/utils")
   target_link_libraries(specbleach_tests PRIVATE thetis_specbleach)

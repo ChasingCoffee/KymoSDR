@@ -31,30 +31,50 @@ __declspec (align (16)) AAMIX paamix[MAX_EXT_AAMIX];		// array of pointers for A
 
 void mix_main (void *pargs)
 {
+#ifdef _WIN32
 	DWORD taskIndex = 0;
 	HANDLE hTask = AvSetMmThreadCharacteristics(TEXT("Pro Audio"), &taskIndex);
 	if (hTask != 0) AvSetMmThreadPriority(hTask, 2);
 	else SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+#endif
 
 	AAMIX a = (AAMIX) pargs;
 	
 	while (_InterlockedAnd (&a->run, 1))
 	{
+#ifdef THETIS_CM_HEADLESS
+		cm_wait_inputs(a->nactive, a->Aready);
+		if (!_InterlockedAnd(&a->run, 1)) break;
+#else
 		WaitForMultipleObjects (a->nactive, a->Aready, TRUE, INFINITE);
+#endif
 		xaamix (a);
 		if (a->id == 0 && pcm->VstRxProcess)
 			pcm->VstRxProcess(a->out, a->outsize);
 		(*a->Outbound)(a->outbound_id, a->outsize, a->out);
 		// WriteAudio (30.0, 48000, a->outsize, a->out, 3);
 	}
-	_endthread();
+	return;
 }
 
 void start_mixthread (AAMIX a)
 {
+#ifdef THETIS_CM_HEADLESS
+	a->worker = cm_start_thread(mix_main, a);
+	a->worker_started = 1;
+#else
 	HANDLE handle = (HANDLE) _beginthread(mix_main, 0, (void *)a);
 	//SetThreadPriority (handle, THREAD_PRIORITY_HIGHEST);
+#endif
 }
+
+#ifdef THETIS_CM_HEADLESS
+static void join_mixthread(AAMIX a)
+{
+	if (a->worker_started) cm_join_thread(a->worker);
+	a->worker_started = 0;
+}
+#endif
 
 enum _slew
 {
@@ -217,7 +237,11 @@ void destroy_aamix (void* ptr, int id)
 	InterlockedBitTestAndReset (&a->run, 0);
 	for (i = 0; i < a->ninputs; i++)
 		ReleaseSemaphore (a->Ready[i], 1, 0);
+#ifdef THETIS_CM_HEADLESS
+	join_mixthread(a);
+#else
 	Sleep (2);
+#endif
 	DeleteCriticalSection (&a->cs_out);
 	for (i = 0; i < a->ninputs; i++)
 	{
@@ -279,7 +303,7 @@ void xMixAudio (void* ptr, int id, int stream, double* data)
 	}
 }
 
-void upslew (AAMIX a)
+static void upslew (AAMIX a)
 {
 	int i;
 	double I, Q;
@@ -487,7 +511,11 @@ void close_mixer (AAMIX a)
 	for (i = 0; i < a->ninputs; i++)
 		ReleaseSemaphore(a->Ready[i], 1, 0);			// be sure the mixer thread can pass WaitForMultipleObjects in main()
 	LeaveCriticalSection (&a->cs_out);					// let the thread pass to the trap in xaamix()
+#ifdef THETIS_CM_HEADLESS
+	join_mixthread(a);
+#else
 	Sleep (2);											// wait for the mixer thread to die
+#endif
 	for (i = 0; i < a->ninputs; i++)
 		flush_mix_ring (a, i);							// restore rings to pristine condition
 }

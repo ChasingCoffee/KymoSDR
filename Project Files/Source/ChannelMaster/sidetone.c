@@ -159,6 +159,8 @@ void destroy_sidetone(int id)
 	SIDETONE a = psidetone[id];
 	decalc_sidetone(a);
 	DeleteCriticalSection(&a->update);
+	_aligned_free(a);
+	psidetone[id] = NULL;
 }
 
 enum States

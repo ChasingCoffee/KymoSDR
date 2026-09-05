@@ -39,7 +39,7 @@ typedef struct _pipe
 	void (__stdcall *create_WavePlay)(int id);
 	struct // receiver items
 	{
-		volatile long top_pan3_run;
+		volatile LONG top_pan3_run;
 		void (__stdcall *xscope)(int state, double* data);						// scope display
 		void (__stdcall *xplaywave)(int state, double* data);					// WAV player
 		void (__stdcall *xrecordwave)(int state, int pos, double* data);		// WAV recorder
@@ -49,7 +49,7 @@ typedef struct _pipe
 	} rcvr[cmMAXrcvr];
 	struct // transmitter items
 	{
-		volatile long txvac;
+		volatile LONG txvac;
 	} xmtr[cmMAXxmtr];
 	struct _spc0 // spc0 items
 	{

@@ -72,6 +72,8 @@ void destroy_eer (EER a)
 	DeleteCriticalSection (&a->cs_update);
 	destroy_delay (a->pdel);
 	destroy_delay (a->mdel);
+	_aligned_free(a->legacyM);
+	_aligned_free(a->legacy);
 	_aligned_free (a);
 }
 

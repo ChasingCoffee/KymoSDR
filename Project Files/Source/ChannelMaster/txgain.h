@@ -29,8 +29,8 @@ warren@wpratt.com
 
 typedef struct _txgain
 {
-	volatile long run_fixed;
-	volatile long run_amp_protect;
+	volatile LONG run_fixed;
+	volatile LONG run_amp_protect;
 	int size;
 	double* in;
 	double* out;
@@ -38,7 +38,7 @@ typedef struct _txgain
 	double Qgain;
 	int adc_value;
 	int adc_supply;
-	volatile long amp_protect_warning;
+	volatile LONG amp_protect_warning;
 	CRITICAL_SECTION cs_update0, cs_update1;
 } txgain, *TXGAIN;
 

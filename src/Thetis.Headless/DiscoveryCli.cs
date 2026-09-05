@@ -32,6 +32,8 @@ internal static class DiscoveryCli
           discover   Send HPSDR discovery requests; finish after the scan/deadline.
           dsp-selftest --native-dir ABSOLUTE_PATH
                      Run offline DSP checks; JSON output. No radio or audio devices.
+          session-selftest --native-dir ABSOLUTE_PATH
+                     Run 100 offline ChannelMaster lifecycles. No network or devices.
           --help     Show this help. No command also shows help.
 
         Options:

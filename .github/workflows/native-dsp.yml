@@ -7,6 +7,8 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'Project Files/Source/wdsp/**'
+      - 'Project Files/Source/ChannelMaster/**'
+      - 'Project Files/lib/portaudio-19.7.0/include/**'
       - 'Project Files/lib/NR_Algorithms_x64/src/**'
       - 'global.json'
       - 'Thetis.CrossPlatform.slnx'
@@ -17,6 +19,8 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'Project Files/Source/wdsp/**'
+      - 'Project Files/Source/ChannelMaster/**'
+      - 'Project Files/lib/portaudio-19.7.0/include/**'
       - 'Project Files/lib/NR_Algorithms_x64/src/**'
       - 'global.json'
       - 'Thetis.CrossPlatform.slnx'
@@ -69,6 +73,8 @@ jobs:
         run: dotnet build Thetis.CrossPlatform.slnx -c Release --no-restore
       - name: Offline CLI self-test (native library required)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- dsp-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: Offline ChannelMaster CLI (100 lifecycles, no devices)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- session-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Managed and native integration regressions
         run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger trx --results-directory artifacts/test-results
       - name: macOS dependency inspection

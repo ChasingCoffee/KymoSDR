@@ -1,7 +1,8 @@
 # Native WDSP build and offline checks
 
-This M2 slice builds the project's modified WDSP 2.00 source in place. It does
-not build ChannelMaster, contact a radio, open an audio device, or transmit.
+This builds the project's modified WDSP 2.00 source in place, plus the
+[M3a offline ChannelMaster core](CHANNELMASTER_OFFLINE.md). It does not build
+the native radio transport, contact a radio, open an audio device, or transmit.
 See the [baseline review](WDSP_BASELINE_REVIEW.md) before substituting upstream
 WDSP APIs or source files.
 
@@ -102,10 +103,10 @@ appropriate sanitizer runtime setup.
   use ordinary scheduler priority; real-time/QoS tuning is not yet implemented.
 - Windows-sized atomic fields use `LONG` (32 bits on every target); cache hash
   width follows pointer width. Cache persistence is disabled in the new harness.
-- `Thetis.Engine` currently exposes explicit loading and synchronous offline
-  diagnostics. Internal native bindings serialize configuration/planning and
-  keep pinned buffers alive until native resamplers are destroyed. A production
-  `RadioSession`/streaming API is deferred to M3.
+- `Thetis.Engine` exposes explicit loading, synchronous offline diagnostics and
+  a disposable `OfflineRadioSession`. Internal bindings serialize configuration
+  and planning, and keep buffers/callbacks alive for their native lifetime.
+  A production transport/streaming session remains deferred to M3b/M4.
 - `BUILD_TESTING=OFF` omits native test executables and the test-only helper
   exports; the ABI probe and .NET self-test support remain available.
 

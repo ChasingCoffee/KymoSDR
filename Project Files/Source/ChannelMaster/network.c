@@ -26,6 +26,7 @@
 #endif
 
 #include "network.h" 
+#include "radio_ports.h"
 #include <Iphlpapi.h>
 
 #pragma comment(lib, "IPHLPAPI.lib")
@@ -103,14 +104,7 @@ int nativeInitMetis(char* netaddr, int port, char* localaddr, int localport, int
 
 	if (protocol == ETH)
 	{
-		if (p2hw_uses_differnt_ports)
-		{
-			prn->p2_custom_port_base = port + 1;
-		}
-		else
-		{
-			prn->p2_custom_port_base = 1025;
-		}
+		prn->p2_custom_port_base = cm_p2_port_base(port, p2hw_uses_differnt_ports);
 	}
 
 	local.sin_port = htons((u_short)localport);

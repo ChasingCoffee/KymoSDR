@@ -13,6 +13,7 @@ FreeDV builds. See [native results](M2_NATIVE_RESULTS.md) for qualification limi
 | FFTW | `https://www.fftw.org/fftw-3.3.10.tar.gz`; SHA-256 `56c932549852cddcfafdab3820b0200c7742675be92179e59e6215b340e26467` | Source-built static double/float libraries; no FFTW worker threads, OpenMP, Fortran wrappers or optional SIMD kernels in this baseline. |
 | RNNoise / libspecbleach | Sources under `Project Files/lib/NR_Algorithms_x64/src` at the adopted SDR-VST3 revision | Compiled in place; existing generated binaries ignored. RNNoise selects NEON on arm64; SSE2 where the compiler advertises it, otherwise scalar C. No CPU runtime dispatch or fast-math flags. |
 | Recovered RNNoise headers | Xiph RNNoise `70f1d256acd4b34a572f999a05c87bf00b67730d` | Two missing headers only; [provenance and retained notices](../native/third_party/rnnoise/README.md). |
+| ChannelMaster / PortAudio types | ChannelMaster and `Project Files/lib/portaudio-19.7.0/include` at the adopted baseline | M3a compiles the offline core in place and uses PortAudio headers only; no PortAudio/ASIO device library or native network transport is linked. |
 | .NET SDK | `global.json`: 10.0.400, `latestPatch`, prereleases disabled | New managed solution. Root SDK selection also applies when using dotnet in the legacy tree. |
 | Microsoft.NET.Test.Sdk | 18.9.0 | Test project only. |
 | MSTest.TestAdapter / TestFramework | 4.4.0 | Test project only. |
@@ -21,7 +22,7 @@ FreeDV builds. See [native results](M2_NATIVE_RESULTS.md) for qualification limi
 
 The portable Core, Engine and Headless application projects have no NuGet package
 dependencies. Headless references Engine, but native loading occurs only for the
-explicit DSP command. Discovery links the existing discovery and enum files rather
+explicit DSP or offline session commands. Discovery links the existing discovery and enum files rather
 than copying their implementations. Existing copyright/license headers remain
 intact. Dependency notices remain with the original source and downloaded
 packages; review distribution requirements before shipping broader binaries.
@@ -57,3 +58,8 @@ upstream source/license notices remain intact.
 The NURBS and notch-database destructors also release their containing allocations
 after their internal buffers; leak-enabled CI covers direct and receiver-owned
 lifecycles. These are ownership fixes, not replacements of the DSP algorithms.
+
+M3a also repairs missing VAC-mixer, EER-buffer, CFIR-temporary and sidetone-owner
+teardown. CM workers use explicit joins in the portable target, and Windows WDSP
+channel workers now retain joinable handles. See [the offline lifecycle record](CHANNELMASTER_OFFLINE.md)
+for the tested boundary and remaining transport/advanced-worker work.

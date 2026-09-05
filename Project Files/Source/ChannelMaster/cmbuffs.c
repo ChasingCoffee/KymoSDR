@@ -28,8 +28,13 @@ warren@wpratt.com
 
 void start_cmthread (int id)
 {
+#ifdef THETIS_CM_HEADLESS
+	pcm->pcbuff[id]->worker = cm_start_thread(cm_main, (void *)(intptr_t)id);
+	pcm->pcbuff[id]->worker_started = 1;
+#else
 	HANDLE handle = (HANDLE) _beginthread(cm_main, 0, (void *)id);
 	//SetThreadPriority(handle, THREAD_PRIORITY_HIGHEST);
+#endif
 }
 
 void create_cmbuffs (int id, int accept, int max_insize, int max_outsize, int outsize)
@@ -57,9 +62,27 @@ void create_cmbuffs (int id, int accept, int max_insize, int max_outsize, int ou
 	start_cmthread (id);
 }
 
+#ifdef THETIS_CM_HEADLESS
+void stop_cmbuffs(int id)
+{
+	CMB a = pcm->pcbuff[id];
+	if (!a->worker_started) return;
+	InterlockedBitTestAndReset(&a->accept, 0);
+	EnterCriticalSection(&a->csIN);
+	InterlockedBitTestAndReset(&a->run, 0);
+	ReleaseSemaphore(a->Sem_BuffReady, 1, 0);
+	cm_join_thread(a->worker);
+	a->worker_started = 0;
+	LeaveCriticalSection(&a->csIN);
+}
+#endif
+
 void destroy_cmbuffs (int id)
 {
 	CMB a = pcm->pcbuff[id];
+#ifdef THETIS_CM_HEADLESS
+	stop_cmbuffs(id);
+#else
 	InterlockedBitTestAndReset(&a->accept, 0);		// shut the Inbound() gate to prevent new infusions
 	EnterCriticalSection (&a->csIN);				// wait until the current Inbound() infusion is finished
 	EnterCriticalSection (&a->csOUT);				// block the CM thread before cmdata()
@@ -68,6 +91,8 @@ void destroy_cmbuffs (int id)
 	ReleaseSemaphore(a->Sem_BuffReady, 1, 0);		// be sure the CM thread can pass WaitForSingleObject in cm_main()									// 
 	LeaveCriticalSection (&a->csOUT);				// let the thread pass to the trap in cmdata()
 	Sleep (2);										// wait for the CM thread to die
+	LeaveCriticalSection(&a->csIN);
+#endif
 	DeleteCriticalSection (&a->csOUT);
 	DeleteCriticalSection (&a->csIN);
 	CloseHandle (a->Sem_BuffReady);
@@ -150,21 +175,26 @@ void cmdata (int id, double* out)
 
 void cm_main (void *pargs)
 {
+#ifdef _WIN32
 	DWORD taskIndex = 0;
 	HANDLE hTask = AvSetMmThreadCharacteristics(TEXT("Pro Audio"), &taskIndex);
 	if (hTask != 0) AvSetMmThreadPriority(hTask, 2);
 	else SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+#endif
 
-	int id = (int)pargs;
+	int id = (int)(intptr_t)pargs;
 	CMB a = pcm->pdbuff[id];
 	
 	while (_InterlockedAnd (&a->run, 1))
 	{
 		WaitForSingleObject(a->Sem_BuffReady,INFINITE);
+#ifdef THETIS_CM_HEADLESS
+		if (!_InterlockedAnd(&a->run, 1)) break;
+#endif
 		cmdata (id, pcm->in[id]);
 		xcmaster(id);
 	}
-	_endthread();
+	return;
 }
 
 void SetCMRingOutsize (int id, int size)
@@ -177,7 +207,11 @@ void SetCMRingOutsize (int id, int size)
 	InterlockedBitTestAndReset(&a->run, 0);			// set a trap for the CM thread
 	ReleaseSemaphore(a->Sem_BuffReady, 1, 0);		// be sure the CM thread can pass WaitForSingleObject in cm_main()									// 
 	LeaveCriticalSection (&a->csOUT);				// let the thread pass to the trap in cmdata()
+#ifdef THETIS_CM_HEADLESS
+	cm_join_thread(a->worker);
+#else
 	Sleep (2);										// wait for the CM thread to die
+#endif
 	flush_cmbuffs(id);								// restore ring to pristine condition
 	a->r1_outsize = size;							// set its new outsize
 	InterlockedBitTestAndSet(&a->run,0);			// remove the CM thread trap
@@ -185,5 +219,3 @@ void SetCMRingOutsize (int id, int size)
 	LeaveCriticalSection (&a->csIN);				// enable Inbound() processing
 	InterlockedBitTestAndSet(&a->accept, 0);		// open the Inbound() gate
 }
-
-

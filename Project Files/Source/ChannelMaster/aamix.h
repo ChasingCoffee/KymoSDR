@@ -28,22 +28,29 @@ warren@wpratt.com
 #define _aamix_h
 
 #include "resample.h"
+#ifdef THETIS_CM_HEADLESS
+#include "cm_thread.h"
+#endif
 
 typedef struct _aamix
 {
+#ifdef THETIS_CM_HEADLESS
+	cm_thread worker;
+	int worker_started;
+#endif
 	int id;										// id of this aamixer
 	int outbound_id;							// id to use in the Outbound() call
-	volatile long run;							// thread runs when set to 1
-	volatile long accept[32];					// ring accepts data when set to 1
+	volatile LONG run;							// thread runs when set to 1
+	volatile LONG accept[32];					// ring accepts data when set to 1
 	int ringinsize;								// input size to rings, complex samples
 	int outsize;								// size to output, complex samples
 	int ninputs;								// number of inputs, assumed to be consecutive beginning at 0
 	int rsize;									// total size of a ring, complex samples
 	double* ring[32];							// ring buffers
 	double* out;								// pointer to output buffer
-	volatile long active;						// one bit per active (data flowing) input
+	volatile LONG active;						// one bit per active (data flowing) input
 	int nactive;								// number of active inputs
-	volatile long what;							// one bit per item to mix
+	volatile LONG what;							// one bit per item to mix
 	double vol [32];							// volume scaling per input
 	double tvol[32];							// final volume scaling
 	double volume;								// master volume scaling
@@ -75,8 +82,8 @@ typedef struct _aamix
 		int ndeldown;							// number of samples for delaydown time
 		int ntdown;								// number of samples for downslew
 		double* cdown;							// coefficients for downslew
-		volatile long uflag;					// set when upslew is to proceed or is in progress
-		volatile long dflag;					// set when downslew is to proceed or is in progress
+		volatile LONG uflag;					// set when upslew is to proceed or is in progress
+		volatile LONG dflag;					// set when downslew is to proceed or is in progress
 		HANDLE uwait;
 		HANDLE dwait;
 		int dtimeout;

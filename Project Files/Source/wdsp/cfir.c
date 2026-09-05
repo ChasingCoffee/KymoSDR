@@ -220,6 +220,7 @@ double* cfir_impulse (int N, int DD, int R, int Pairs, double runrate, double ci
 	impulse = fir_fsamp (N, A, rtype, 1.0, wintype);
 	// print_impulse ("cfirImpulse.txt", N, impulse, 1, 0);
 	_aligned_free (A);
+	_aligned_free (xistion);
 	return impulse;
 }
 
