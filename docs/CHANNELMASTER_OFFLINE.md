@@ -75,7 +75,8 @@ The CLI independently repeats 100 sessions through the .NET owner.
 The first Windows CI run built successfully but failed an exact process-thread
 count assertion after about 31 seconds; its log did not capture the changed count.
 The exact comparison also treats retiring OS/runtime helper threads as failures.
-The follow-up test logs changes and requires
+The final Windows run records a decrease from four threads to one. The test now
+logs changes and requires
 the process count not to exceed its startup ceiling; native-owned CM workers
 must still be exactly zero. This is a distinction between OS process accounting
 and explicit application worker ownership, not a relaxed native-worker leak limit.
@@ -101,9 +102,13 @@ LeakSanitizer are separate checks. Resident memory is diagnostic, not a portable
 leak verdict; original full-size analyzer allocation also makes this harness
 memory-heavy. It is not an optimized single-receiver engine.
 
-Current local checks: native four-test suite and 100-cycle CLI pass on macOS
-arm64; all 58 managed tests pass. Post-fix leak/sanitizer and Windows/Linux CI
-qualification are being recorded separately before marking the slice qualified.
+At source `32332704`, Windows x64, macOS arm64 and Linux x64 CI pass the native
+tests, 100-cycle .NET CLI and all 58 managed tests. Linux ASan/UBSan/LeakSanitizer
+passes; local macOS ASan/UBSan passes, and the separate post-leak-fix macOS scan
+reports zero leaks. Real local Ctrl-C exits 130 after cleanup; missing-library
+startup exits 3. See [the detailed CI and resource record](NATIVE_CI_RESULTS.md)
+for timings, memory observations and remaining qualification limits. M3a is an
+offline lifecycle checkpoint, not completion of the full M3 gate.
 
 ## Remaining M3 / before M4
 

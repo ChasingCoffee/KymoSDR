@@ -61,5 +61,5 @@ lifecycles. These are ownership fixes, not replacements of the DSP algorithms.
 
 M3a also repairs missing VAC-mixer, EER-buffer, CFIR-temporary and sidetone-owner
 teardown. CM workers use explicit joins in the portable target, and Windows WDSP
-channel workers now retain joinable handles. See [the offline lifecycle record](CHANNELMASTER_OFFLINE.md)
+channel and PureSignal background workers now retain joinable handles. See [the offline lifecycle record](CHANNELMASTER_OFFLINE.md)
 for the tested boundary and remaining transport/advanced-worker work.

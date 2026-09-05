@@ -19,7 +19,8 @@ Nereid of Thetis.
 - The portable harness does **not** stream radio I/Q, play audio or transmit.
   The cross-platform UI, rendering and VST3 hosting are still planned work.
 - ChannelMaster's [offline DSP/pipe lifecycle](docs/CHANNELMASTER_OFFLINE.md)
-  now has a .NET session owner and 100-cycle tests. Native radio transport is
+  now has a .NET session owner and 100-cycle tests passing on all three OSes.
+  Native radio transport is
   still being ported; this is not yet a usable radio receiver.
 - The inherited Windows application remains in the tree as the source/reference
   implementation. Its features are not a claim of portable feature parity.
