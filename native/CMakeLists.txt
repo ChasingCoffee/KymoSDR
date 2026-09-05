@@ -44,6 +44,15 @@ set_target_properties(wdsp PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
 
 if(BUILD_TESTING)
+  add_executable(specbleach_tests tests/specbleach_tests.c)
+  target_include_directories(specbleach_tests PRIVATE "${sb_root}/src/shared/utils")
+  target_link_libraries(specbleach_tests PRIVATE thetis_specbleach)
+  if(NOT WIN32)
+    target_link_libraries(specbleach_tests PRIVATE m)
+  endif()
+  add_test(NAME specbleach_median COMMAND specbleach_tests)
+  set_tests_properties(specbleach_median PROPERTIES TIMEOUT 20)
+
   target_sources(wdsp PRIVATE tests/wdsp_test_api.c)
   add_executable(wdsp_abi_tests tests/wdsp_abi_tests.c)
   target_link_libraries(wdsp_abi_tests PRIVATE wdsp)

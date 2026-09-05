@@ -5,6 +5,7 @@
 
 extern void SetAnalyzer(int, int, int, int, int *, int, int, int, double,
     int, int, double, double, int, int, int, double, double, int);
+extern void RNNRloadModel(const char *);
 
 PORT int ThetisWdspTestAnalyzer(void) {
     const int size = 2048, count = 1024;
@@ -56,6 +57,36 @@ PORT int ThetisWdspTestLifecycle(void) {
         Syncbound(sync, size, &input);
         SetSYNCBRingOutsize(sync, size/2);
         destroy_syncbuffs(sync);
+    }
+    _aligned_free(output); _aligned_free(input);
+    return failed;
+}
+
+PORT int ThetisWdspTestNoiseLifecycle(void) {
+    enum { size = 480, instances = 9 };
+    double *input = malloc0(size * sizeof(complex));
+    double *output = malloc0(size * sizeof(complex));
+    int failed = 0;
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        RNNR receivers[instances];
+        // Exercise empty -> 4 -> 8 -> 16 registry capacity, then return to empty.
+        for (int i = 0; i < instances; ++i) {
+            receivers[i] = create_rnnr(1, 0, size, input, output, 48000);
+            if (!receivers[i]->st) failed = 1;
+        }
+        RNNRloadModel(NULL); // Touch every retained entry after both copies.
+        for (int i = 0; i < instances; ++i) {
+            if (!receivers[i]->st || receivers[i]->run != 1) failed = 1;
+            xrnnr(receivers[i], 0);
+            for (int j = 0; j < size*2; ++j) if (!isfinite(output[j])) failed = 1;
+        }
+        // Non-LIFO removal must leave only live entries for the next reload.
+        for (int i = 0; i < instances; i += 2) destroy_rnnr(receivers[i]);
+        RNNRloadModel(NULL);
+        for (int i = 1; i < instances; i += 2) {
+            if (!receivers[i]->st || receivers[i]->run != 1) failed = 1;
+            destroy_rnnr(receivers[i]);
+        }
     }
     _aligned_free(output); _aligned_free(input);
     return failed;

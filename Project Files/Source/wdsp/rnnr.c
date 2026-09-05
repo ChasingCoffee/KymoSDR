@@ -224,7 +224,10 @@ RNNR create_rnnr(int run, int position, int size, double* in, double* out, int r
     {
         int new_cap = _rnnr_capacity ? _rnnr_capacity * 2 : 4; // limit number of reallocs by doubling space each time, overkill but that is my middle name ;)
         RNNR* tmp = malloc0(new_cap * sizeof(RNNR));
-        memcpy(tmp, _rnnr_instances, _rnnr_count * sizeof(RNNR));
+        // The first allocation has no source array. Even a zero-length memcpy
+        // requires valid pointers; skip the copy until there are live entries.
+        if (_rnnr_count > 0)
+            memcpy(tmp, _rnnr_instances, _rnnr_count * sizeof(RNNR));
         _aligned_free(_rnnr_instances);
         _rnnr_instances = tmp;
         _rnnr_capacity = new_cap;

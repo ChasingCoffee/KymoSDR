@@ -227,15 +227,27 @@ bool get_rolling_median_spectrum(float *median_spectrum,
                                  const float *current_spectrum_buffer,
                                  const uint32_t number_of_blocks,
                                  const uint32_t spectrum_size) {
-  if (!median_spectrum || !current_spectrum_buffer || spectrum_size <= 0U) {
+  if (!median_spectrum || !current_spectrum_buffer || spectrum_size == 0U ||
+      number_of_blocks == 0U ||
+      number_of_blocks > SIZE_MAX / sizeof(float) / spectrum_size) {
     return false;
   }
 
-  float tmp_buffer[number_of_blocks];
+  // MSVC does not support variable-length arrays. The configured five-frame
+  // audio path needs no heap allocation; retain support for larger callers with
+  // a checked fallback instead of placing an unbounded array on the stack.
+  float local_buffer[NUMBER_OF_MEDIAN_SPECTRUM];
+  float *tmp_buffer = local_buffer;
+  if (number_of_blocks > NUMBER_OF_MEDIAN_SPECTRUM) {
+    tmp_buffer = malloc((size_t)number_of_blocks * sizeof(float));
+    if (!tmp_buffer) {
+      return false;
+    }
+  }
 
   for (uint32_t i = 1U; i < spectrum_size; i++) {
     for (uint32_t j = 0U; j < number_of_blocks; j++) {
-      tmp_buffer[j] = current_spectrum_buffer[j * spectrum_size + i];
+      tmp_buffer[j] = current_spectrum_buffer[(size_t)j * spectrum_size + i];
     }
 
     // Sorting array
@@ -249,5 +261,8 @@ bool get_rolling_median_spectrum(float *median_spectrum,
     }
   }
 
+  if (tmp_buffer != local_buffer) {
+    free(tmp_buffer);
+  }
   return true;
 }

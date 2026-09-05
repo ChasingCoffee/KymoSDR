@@ -46,3 +46,10 @@ The native output statically includes dependencies. Preserve their source and
 license notices (WDSP/FFTW GPL, RNNoise BSD-style, libspecbleach LGPL) when
 preparing distribution artifacts; packaging and embedded-model training
 provenance review are not completed by this build milestone.
+
+Local native CI portability fixes retain the vendored algorithms: the
+libspecbleach median helper uses a fixed workspace for its configured five-frame
+path, with checked allocation for larger inputs, instead of a variable-length
+array unsupported by MSVC. The WDSP RNNoise adapter skips copying an empty
+instance registry from a null pointer. Both changes have native regression tests;
+upstream source/license notices remain intact.

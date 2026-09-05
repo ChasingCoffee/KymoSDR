@@ -28,6 +28,14 @@ sample amplitudes. No test reports dBm or claims radio/audio-device validation.
   1013904223, upper 24 bits normalized then scaled to ±0.01). Require finite
   output below absolute amplitude 10 and nonzero energy after 10 settling
   blocks. This is algorithm execution coverage, not a speech-quality score.
+- NR3 instance registry: three empty-to-empty cycles, each with nine simultaneous
+  instances to cross the initial 4- and 8-entry capacities. Reload the embedded
+  model after growth and after non-LIFO removal; require live states and finite
+  frame output. This exercises first allocation, copying live entries and reset.
+- libspecbleach median helper: 1–17 blocks (odd/even, configured stack workspace
+  and larger heap fallback), repeated 100 times. Check exact medians, retained
+  maxima, untouched DC/input data and output canaries. Reject null pointers,
+  zero dimensions and overflowing dimensions without modifying the output.
 
 FFTW planning time limits are zero in diagnostics, using its bounded fallback
 planning behavior rather than generating persistent wisdom. Numerical limits
