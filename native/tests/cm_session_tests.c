@@ -9,6 +9,7 @@ extern int StartAudioIVAC(int);
 extern int test_process_threads(void);
 extern uint64_t test_resident_bytes(void);
 static int baseline_threads;
+static int last_threads;
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "Failed: %s at %d\n", #x, __LINE__); exit(1); } } while (0)
 static int at_stage(int stage, void *context)
 {
@@ -22,11 +23,19 @@ static void closed(void)
     int32_t state[17] = {0}; state[16] = 12345;
     CHECK(ThetisCmGetState(state, 16) == 16);
     CHECK(state[0] == 1 && state[1] == 0 && state[2] == 0 && state[10] == 0 && state[16] == 12345);
-    CHECK(test_process_threads() == baseline_threads);
+    int threads = test_process_threads();
+    if (threads != last_threads)
+        printf("Process threads after close: %d (startup ceiling %d, previous %d)\n", threads, baseline_threads, last_threads);
+    last_threads = threads;
+    /* OS/runtime helper threads may retire during a long test (Windows loader
+     * workers, for example). A smaller process count is not an application leak.
+     * Native-owned CM workers must be exactly zero above; WDSP/PS workers join. */
+    CHECK(threads > 0 && threads <= baseline_threads);
 }
 int main(void)
 {
     baseline_threads = test_process_threads();
+    last_threads = baseline_threads;
     CHECK(baseline_threads > 0);
     uint64_t warm_bytes = 0;
     CHECK(ThetisCmP2PortBase(1024, 0) == 1025);

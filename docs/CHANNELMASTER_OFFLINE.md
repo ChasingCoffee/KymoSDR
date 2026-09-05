@@ -59,8 +59,9 @@ CM input producers are joined before pipe/DSP consumers are freed. Mixers are
 joined before callback targets, resamplers and semaphores are released. Mixer
 wait-all adaptation is restricted to its single-consumer semaphore inputs, not
 a general Win32 emulation. Windows WDSP channel workers now retain joinable
-handles as well; other advanced WDSP completion handshakes still require the
-streaming/concurrency audit in M3b.
+handles as well. The four PureSignal save/restore/calculation/turnoff workers
+created with TX now also join on both platforms, after their existing completion
+handshakes. Other advanced streaming work still needs the M3b concurrency audit.
 
 ## Validation and fixes
 
@@ -70,6 +71,14 @@ invalid options, device/TX rejection, and cancellation/failure after each of
 three completed startup stages. The managed tests also force GC during startup,
 contain callback exceptions, verify exclusive ownership and reopen at 96 kHz.
 The CLI independently repeats 100 sessions through the .NET owner.
+
+The first Windows CI run built successfully but failed an exact process-thread
+count assertion after about 31 seconds; its log did not capture the changed count.
+The exact comparison also treats retiring OS/runtime helper threads as failures.
+The follow-up test logs changes and requires
+the process count not to exceed its startup ceiling; native-owned CM workers
+must still be exactly zero. This is a distinction between OS process accounting
+and explicit application worker ownership, not a relaxed native-worker leak limit.
 
 The legacy radio initializer now receives its missing seventh argument from the
 existing “Inform hardware of ports to use” checkbox. The extracted, shared P2

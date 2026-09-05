@@ -30,6 +30,11 @@ warren@wpratt.com
 #include "lmath.h"
 typedef struct _calcc
 {
+#ifdef _WIN32
+	HANDLE workers[4];
+#else
+	pthread_t workers[4];
+#endif
 	int channel;
 	int runcal;
 	int size;

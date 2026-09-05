@@ -27,6 +27,41 @@ warren@wpratt.com
 #define _CRT_SECURE_NO_WARNINGS
 #include "comm.h"
 
+#ifdef _WIN32
+/* Retain actual thread handles, not just the completion flags written shortly
+ * before return. No PureSignal calculation or routing behavior changes. */
+typedef struct { void (*function)(void *); void *argument; } ps_thread_start;
+static unsigned __stdcall run_ps_thread(void *argument)
+{
+	ps_thread_start start = *(ps_thread_start *)argument;
+	free(argument);
+	start.function(start.argument);
+	return 0;
+}
+static HANDLE start_ps_thread(void (*function)(void *), void *argument)
+{
+	ps_thread_start *start = malloc(sizeof(*start));
+	if (!start) abort();
+	start->function = function;
+	start->argument = argument;
+	HANDLE thread = (HANDLE)_beginthreadex(NULL, 0, run_ps_thread, start, 0, NULL);
+	if (!thread) abort();
+	return thread;
+}
+#else
+#define start_ps_thread wdsp_start_joinable
+#endif
+
+static void join_ps_thread(CALCC a, int index)
+{
+#ifdef _WIN32
+	if (WaitForSingleObject(a->workers[index], INFINITE) != WAIT_OBJECT_0) abort();
+	CloseHandle(a->workers[index]);
+#else
+	wdsp_join(a->workers[index]);
+#endif
+}
+
 void size_calcc (CALCC a)
 {	// for change in ints or spi
 	int i;
@@ -189,16 +224,16 @@ CALCC create_calcc (int channel, int runcal, int size, int rate, int ints, int s
 	// correction save and restore threads
 	InterlockedBitTestAndReset(&a->savecorr_bypass, 0);
 	a->Sem_SaveCorr = CreateSemaphore(0, 0, 1, 0);
-	_beginthread(PSSaveCorrection, 0, (void*)a);
+	a->workers[0] = start_ps_thread(PSSaveCorrection, a);
 	InterlockedBitTestAndReset(&a->restcorr_bypass, 0);
 	a->Sem_RestCorr = CreateSemaphore(0, 0, 1, 0);
-	_beginthread(PSRestoreCorrection, 0, (void*)a);
+	a->workers[1] = start_ps_thread(PSRestoreCorrection, a);
 	InterlockedBitTestAndReset(&a->calccorr_bypass, 0);
 	a->Sem_CalcCorr = CreateSemaphore(0, 0, 1, 0);
-	_beginthread(doPSCalcCorrection, 0, (void*)a);
+	a->workers[2] = start_ps_thread(doPSCalcCorrection, a);
 	InterlockedBitTestAndReset(&a->turnoff_bypass, 0);
 	a->Sem_TurnOff = CreateSemaphore(0, 0, 1, 0);
-	_beginthread(doPSTurnoff, 0, (void*)a);
+	a->workers[3] = start_ps_thread(doPSTurnoff, a);
 
 	return a;
 }
@@ -211,18 +246,22 @@ void destroy_calcc (CALCC a)
 	InterlockedBitTestAndSet(&a->savecorr_bypass, 0);
 	ReleaseSemaphore(a->Sem_SaveCorr, 1, 0);
 	while (InterlockedAnd(&a->savecorr_bypass, 0xffffffff)) Sleep(1);
+	join_ps_thread(a, 0);
 	CloseHandle(a->Sem_SaveCorr);
 	InterlockedBitTestAndSet(&a->restcorr_bypass, 0);
 	ReleaseSemaphore(a->Sem_RestCorr, 1, 0);
 	while (InterlockedAnd(&a->restcorr_bypass, 0xffffffff)) Sleep(1);
+	join_ps_thread(a, 1);
 	CloseHandle(a->Sem_RestCorr);
 	InterlockedBitTestAndSet(&a->calccorr_bypass, 0);
 	ReleaseSemaphore(a->Sem_CalcCorr, 1, 0);
 	while (InterlockedAnd(&a->calccorr_bypass, 0xffffffff)) Sleep(1);
+	join_ps_thread(a, 2);
 	CloseHandle(a->Sem_CalcCorr);
 	InterlockedBitTestAndSet(&a->turnoff_bypass, 0);
 	ReleaseSemaphore(a->Sem_TurnOff, 1, 0);
 	while (InterlockedAnd(&a->turnoff_bypass, 0xffffffff)) Sleep(1);
+	join_ps_thread(a, 3);
 	CloseHandle(a->Sem_TurnOff);
 
 	_aligned_free (a->temptx);																						// remove later
