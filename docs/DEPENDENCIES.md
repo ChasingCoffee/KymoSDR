@@ -53,3 +53,6 @@ path, with checked allocation for larger inputs, instead of a variable-length
 array unsupported by MSVC. The WDSP RNNoise adapter skips copying an empty
 instance registry from a null pointer. Both changes have native regression tests;
 upstream source/license notices remain intact.
+The NURBS and notch-database destructors also release their containing allocations
+after their internal buffers; leak-enabled CI covers direct and receiver-owned
+lifecycles. These are ownership fixes, not replacements of the DSP algorithms.

@@ -11,6 +11,7 @@ extern int ThetisWdspTestNoise(void);
 extern int ThetisWdspTestNoiseLifecycle(void);
 extern int ThetisWdspTestLifecycle(void);
 extern int ThetisWdspTestAnalyzer(void);
+extern int ThetisWdspTestOwnedLifetimes(void);
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "Failed: %s at %d\n", #x, __LINE__); exit(1); } } while (0)
 int main(void) {
     int32_t data[10] = {0}; data[9] = 123456;
@@ -22,11 +23,12 @@ int main(void) {
     CHECK(GetWDSPVersion() == 200);
     init_impulse_cache(0);
     ThetisWdspSetPlanningTimeLimit(0); // bounded offline tests, not a wisdom benchmark
+    CHECK(ThetisWdspTestOwnedLifetimes() == 0);
     CHECK(ThetisWdspTestNoiseLifecycle() == 0);
     CHECK(ThetisWdspTestNoise() == 0);
     CHECK(ThetisWdspTestAnalyzer() == 0);
     CHECK(ThetisWdspTestLifecycle() == 0);
     destroy_impulse_cache();
-    puts("PASS: WDSP 2.00 ABI, NR3 registry growth/teardown, NR3/NR4 processing, 20 receiver and sync-buffer lifecycle cycles");
+    puts("PASS: WDSP 2.00 ABI, 100 NURBS/notch lifecycles, NR3 registry growth/teardown, NR3/NR4 processing, 20 receiver and sync-buffer lifecycle cycles");
     return 0;
 }

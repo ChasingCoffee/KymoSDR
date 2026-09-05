@@ -36,6 +36,9 @@ sample amplitudes. No test reports dBm or claims radio/audio-device validation.
   and larger heap fallback), repeated 100 times. Check exact medians, retained
   maxima, untouched DC/input data and output canaries. Reject null pointers,
   zero dimensions and overflowing dimensions without modifying the output.
+- Owned native objects: 100 direct NURBS/notch-database create/destroy cycles,
+  in addition to the 20 complete receiver/sync-buffer cycles. Linux leak checking
+  must account for both each object's internal arrays and its containing object.
 
 FFTW planning time limits are zero in diagnostics, using its bounded fallback
 planning behavior rather than generating persistent wisdom. Numerical limits

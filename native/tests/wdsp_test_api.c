@@ -7,6 +7,25 @@ extern void SetAnalyzer(int, int, int, int, int *, int, int, int, double,
     int, int, double, double, int, int, int, double, double, int);
 extern void RNNRloadModel(const char *);
 
+PORT int ThetisWdspTestOwnedLifetimes(void) {
+    int failed = 0;
+    // These destructors own both their buffers and the containing allocation.
+    // Keep the objects local so leak checking cannot mistake stale global
+    // pointers for live ownership after the final receiver is closed.
+    for (int cycle = 0; cycle < 100; ++cycle) {
+        NURBS spline = create_nurbs(3, 3, 0, 1, 16, 4, 3, 16, 16);
+        NOTCHDB notches = create_notchdb(0, 4);
+        if (spline->max_cp != 4 || spline->max_knots != 8 ||
+            notches->maxnotches != 4 || notches->nn != 0) failed = 1;
+        for (int i = 0; i < 4; ++i) {
+            if (spline->W[i] != 1 || notches->active[i] != 0) failed = 1;
+        }
+        destroy_notchdb(notches);
+        destroy_nurbs(spline);
+    }
+    return failed;
+}
+
 PORT int ThetisWdspTestAnalyzer(void) {
     const int size = 2048, count = 1024;
     int success, flip = 0, ready = 0, failed = 0;
