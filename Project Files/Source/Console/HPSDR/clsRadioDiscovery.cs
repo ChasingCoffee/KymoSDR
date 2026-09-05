@@ -44,6 +44,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Diagnostics;
+using System.Threading;
 
 // -----------------------------------------------------------------------------
 // Discovery timing guide
@@ -412,6 +413,10 @@ namespace Thetis
         public int DiscoveryPortBase { get; set; }
         public int BindLocalPort { get; set; }
 
+        // Zero preserves legacy timing. A positive value bounds the whole scan,
+        // including all selected NICs and continuous/unrelated incoming traffic.
+        public int MaxScanMilliseconds { get; set; }
+
         public int AttemptsPerNic { get; set; }
         public int PollTimeoutMilliseconds { get; set; }
         public int QuietPollsBeforeResend { get; set; }
@@ -432,6 +437,11 @@ namespace Thetis
 
         public IPAddress FixedTargetIp { get; set; }
         public IPAddress FixedLocalIp { get; set; }
+
+        internal RadioDiscoveryOptions Copy()
+        {
+            return (RadioDiscoveryOptions)MemberwiseClone();
+        }
 
         public RadioDiscoveryOptions()
         {
@@ -552,6 +562,10 @@ namespace Thetis
         public int RejectedProtocolModeMismatch { get; set; }
 
         public bool SocketError { get; set; }
+        public string SocketErrorCode { get; set; }
+        public string ErrorMessage { get; set; }
+        public bool DeadlineReached { get; set; }
+        public int RejectedMalformed { get; set; }
     }
 
     public sealed class NicRadioScanResult
@@ -620,6 +634,16 @@ namespace Thetis
     {
         private const int P1DefaultPortCount = 1;
         private const int P2DefaultPortCount = 18;
+        private readonly Func<IDiscoverySocket> socketFactory;
+
+        public RadioDiscoveryService() : this(() => new DiscoverySocket())
+        {
+        }
+
+        internal RadioDiscoveryService(Func<IDiscoverySocket> socketFactory)
+        {
+            this.socketFactory = socketFactory ?? throw new ArgumentNullException(nameof(socketFactory));
+        }
 
         private sealed class NicIpv4Binding
         {
@@ -630,16 +654,25 @@ namespace Thetis
 
         public List<NicRadioScanResult> DiscoverUsingAllNics(RadioDiscoveryOptions options)
         {
+            return DiscoverUsingAllNics(options, CancellationToken.None);
+        }
+
+        public List<NicRadioScanResult> DiscoverUsingAllNics(RadioDiscoveryOptions options, CancellationToken cancellationToken)
+        {
             if (options == null)
             {
                 throw new ArgumentNullException(nameof(options));
             }
 
+            ValidateOptions(options);
+            cancellationToken.ThrowIfCancellationRequested();
+            Stopwatch scanClock = Stopwatch.StartNew();
             List<NicRadioScanResult> results = new List<NicRadioScanResult>();
             List<NicIpv4Binding> bindings = enumerateNicIpv4Bindings(options);
 
             for (int i = 0; i < bindings.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 NicIpv4Binding b = bindings[i];
 
                 NicRadioScanResult nicResult = createNicResultSkeleton(b);
@@ -647,7 +680,7 @@ namespace Thetis
                 sanitizeLoopbackNicFields(nicResult);
 
                 DiscoveryDiagnostics diag;
-                List<RadioInfo> radios = discoverOnNic(b.LocalIp, b.Mask, options, out diag);
+                List<RadioInfo> radios = discoverOnNic(b.LocalIp, b.Mask, options, out diag, cancellationToken, scanClock);
                 nicResult.Diagnostics = diag;
 
                 for (int r = 0; r < radios.Count; r++)
@@ -663,6 +696,11 @@ namespace Thetis
 
         public NicRadioScanResult DiscoverUsingSingleNic(RadioDiscoveryOptions options, IPAddress localIPv4)
         {
+            return DiscoverUsingSingleNic(options, localIPv4, CancellationToken.None);
+        }
+
+        public NicRadioScanResult DiscoverUsingSingleNic(RadioDiscoveryOptions options, IPAddress localIPv4, CancellationToken cancellationToken)
+        {
             if (options == null)
             {
                 throw new ArgumentNullException(nameof(options));
@@ -673,7 +711,10 @@ namespace Thetis
                 throw new ArgumentNullException(nameof(localIPv4));
             }
 
-            RadioDiscoveryOptions o = options;
+            ValidateOptions(options);
+            cancellationToken.ThrowIfCancellationRequested();
+            Stopwatch scanClock = Stopwatch.StartNew();
+            RadioDiscoveryOptions o = options.Copy();
             o.FixedLocalIp = localIPv4;
 
             List<NicIpv4Binding> bindings = enumerateNicIpv4Bindings(o);
@@ -689,7 +730,7 @@ namespace Thetis
             sanitizeLoopbackNicFields(nicResult);
 
             DiscoveryDiagnostics diag;
-            List<RadioInfo> radios = discoverOnNic(b.LocalIp, b.Mask, o, out diag);
+            List<RadioInfo> radios = discoverOnNic(b.LocalIp, b.Mask, o, out diag, cancellationToken, scanClock);
             nicResult.Diagnostics = diag;
 
             for (int r = 0; r < radios.Count; r++)
@@ -707,7 +748,8 @@ namespace Thetis
                 throw new ArgumentNullException(nameof(options));
             }
 
-            RadioDiscoveryOptions o = options;
+            ValidateOptions(options);
+            RadioDiscoveryOptions o = options.Copy();
             o.FixedLocalIp = null;
 
             List<NicRadioScanResult> results = new List<NicRadioScanResult>();
@@ -788,7 +830,11 @@ namespace Thetis
             IPv4InterfaceProperties v4 = props.GetIPv4Properties();
             if (v4 != null)
             {
-                nicResult.IsDhcpEnabled = v4.IsDhcpEnabled;
+                // IsDhcpEnabled is Windows-only in .NET. It is not needed for discovery.
+                if (OperatingSystem.IsWindows())
+                {
+                    nicResult.IsDhcpEnabled = v4.IsDhcpEnabled;
+                }
                 nicResult.Mtu = v4.Mtu;
             }
         }
@@ -909,25 +955,33 @@ namespace Thetis
             return list;
         }
 
-        private List<RadioInfo> discoverOnNic(IPAddress localIPv4, IPAddress localMaskIPv4, RadioDiscoveryOptions options, out DiscoveryDiagnostics diagnostics)
+        internal List<RadioInfo> discoverOnNic(IPAddress localIPv4, IPAddress localMaskIPv4, RadioDiscoveryOptions options, out DiscoveryDiagnostics diagnostics,
+            CancellationToken cancellationToken = default(CancellationToken), Stopwatch scanClock = null)
         {
+            ValidateOptions(options);
             DiscoveryDiagnostics d = new DiscoveryDiagnostics();
+            diagnostics = d;
             Stopwatch sw = Stopwatch.StartNew();
+            Stopwatch budgetClock = scanClock ?? sw;
 
             List<RadioInfo> radios = new List<RadioInfo>();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            Socket s = null;
+            IDiscoverySocket s = null;
             try
             {
-                s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                s.EnableBroadcast = true;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (DeadlineExpired(options, budgetClock, d)) return radios;
+                s = socketFactory();
 
                 IPEndPoint bindEp = new IPEndPoint(localIPv4, options.BindLocalPort);
                 s.Bind(bindEp);
 
                 byte[] p1 = buildDiscoveryPacketP1();
                 byte[] p2 = buildDiscoveryPacketP2();
+                // Receive a complete UDP datagram so unrelated oversized traffic
+                // cannot abort a scan with MessageSize on platforms that throw it.
+                byte[] rx = new byte[65535];
 
                 int attempts = options.AttemptsPerNic;
                 if (attempts < 1) attempts = 1;
@@ -940,12 +994,16 @@ namespace Thetis
 
                 for (int attempt = 0; attempt < attempts; attempt++)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (DeadlineExpired(options, budgetClock, d)) return radios;
                     d.AttemptsUsed++;
 
                     List<IPEndPoint> targets = buildTargets(localIPv4, localMaskIPv4, options);
 
                     for (int t = 0; t < targets.Count; t++)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (DeadlineExpired(options, budgetClock, d)) return radios;
                         IPEndPoint dest = targets[t];
 
                         if (options.ProtocolMode == RadioDiscoveryProtocolMode.Auto || options.ProtocolMode == RadioDiscoveryProtocolMode.P1Only)
@@ -965,9 +1023,26 @@ namespace Thetis
 
                     while (quietPolls < quietBeforeResend)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (DeadlineExpired(options, budgetClock, d)) return radios;
                         d.Polls++;
 
-                        bool readable = s.Poll(pollMs * 1000, SelectMode.SelectRead);
+                        // Retain the profile's quiet-poll timing while checking cancellation
+                        // in short slices, so a tolerant profile does not delay Ctrl-C.
+                        bool readable = false;
+                        int remainingPollMs = pollMs;
+                        while (remainingPollMs > 0 && !readable)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            if (DeadlineExpired(options, budgetClock, d)) return radios;
+                            int sliceMs = Math.Min(remainingPollMs, 50);
+                            if (options.MaxScanMilliseconds > 0)
+                                sliceMs = Math.Min(sliceMs, Math.Max(1, options.MaxScanMilliseconds - (int)budgetClock.ElapsedMilliseconds));
+                            readable = s.Poll(sliceMs * 1000);
+                            remainingPollMs -= sliceMs;
+                        }
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (DeadlineExpired(options, budgetClock, d)) return radios;
                         if (!readable)
                         {
                             quietPolls++;
@@ -976,7 +1051,6 @@ namespace Thetis
                         }
 
                         EndPoint remote = new IPEndPoint(IPAddress.Any, 0);
-                        byte[] rx = new byte[256];
                         int recv = s.ReceiveFrom(rx, ref remote);
                         if (recv <= 0)
                         {
@@ -995,6 +1069,7 @@ namespace Thetis
 
                         if (!parsed.IsDiscovery && !parsed.IsBusy)
                         {
+                            d.RejectedMalformed++;
                             continue;
                         }
 
@@ -1067,15 +1142,11 @@ namespace Thetis
                     }
                 }
             }
-            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+            catch (SocketException ex)
             {
                 d.SocketError = true;
-                diagnostics = d;
-                return radios;
-            }
-            catch
-            {
-                diagnostics = d;
+                d.SocketErrorCode = ex.SocketErrorCode.ToString();
+                d.ErrorMessage = ex.Message;
                 return radios;
             }
             finally
@@ -1088,7 +1159,7 @@ namespace Thetis
                 {
                     try
                     {
-                        s.Close();
+                        s.Dispose();
                     }
                     catch
                     {
@@ -1100,7 +1171,7 @@ namespace Thetis
             return radios;
         }
 
-        private sealed class DiscoveryParseResult
+        internal sealed class DiscoveryParseResult
         {
             public bool IsDiscovery { get; set; }
             public bool IsBusy { get; set; }
@@ -1119,14 +1190,14 @@ namespace Thetis
             public byte MetisVersion { get; set; }
         }
 
-        private DiscoveryParseResult parseDiscoveryReply(byte[] data, int len, IPAddress senderIp, RadioDiscoveryOptions options)
+        internal DiscoveryParseResult parseDiscoveryReply(byte[] data, int len, IPAddress senderIp, RadioDiscoveryOptions options)
         {
             DiscoveryParseResult r = new DiscoveryParseResult();
             r.IsDiscovery = false;
             r.IsBusy = false;
             r.Protocol = RadioDiscoveryRadioProtocol.Unknown;
 
-            if (data == null || len < 24)
+            if (data == null || len < 24 || len > data.Length)
             {
                 return r;
             }
@@ -1209,6 +1280,30 @@ namespace Thetis
             if (boardId == 5) return HPSDRHW.Orion;
             if (boardId == 10) return HPSDRHW.OrionMKII;
             return (HPSDRHW)boardId;
+        }
+
+        private static bool DeadlineExpired(RadioDiscoveryOptions options, Stopwatch clock, DiscoveryDiagnostics diagnostics)
+        {
+            if (options.MaxScanMilliseconds <= 0 || clock.ElapsedMilliseconds < options.MaxScanMilliseconds) return false;
+            diagnostics.DeadlineReached = true;
+            return true;
+        }
+
+        private static void ValidateOptions(RadioDiscoveryOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            if (options.DiscoveryPortBase < 1 || options.DiscoveryPortBase > 65535)
+                throw new ArgumentOutOfRangeException(nameof(options.DiscoveryPortBase));
+            if (options.BindLocalPort < 0 || options.BindLocalPort > 65535)
+                throw new ArgumentOutOfRangeException(nameof(options.BindLocalPort));
+            if (options.MaxScanMilliseconds < 0)
+                throw new ArgumentOutOfRangeException(nameof(options.MaxScanMilliseconds));
+            if (!Enum.IsDefined(typeof(RadioDiscoveryProtocolMode), options.ProtocolMode))
+                throw new ArgumentOutOfRangeException(nameof(options.ProtocolMode));
+            if (options.FixedLocalIp != null && options.FixedLocalIp.AddressFamily != AddressFamily.InterNetwork)
+                throw new ArgumentException("The local interface must be IPv4.");
+            if (options.FixedTargetIp != null && options.FixedTargetIp.AddressFamily != AddressFamily.InterNetwork)
+                throw new ArgumentException("The discovery target must be IPv4.");
         }
 
         //private List<IPEndPoint> buildTargets(IPAddress localIPv4, IPAddress mask, RadioDiscoveryOptions options)
@@ -1426,5 +1521,41 @@ namespace Thetis
 
             return new IPAddress(broadcast);
         }
+    }
+
+    // Narrow transport seam: production uses UDP; tests replay synthetic datagrams
+    // without opening sockets, enumerating NICs, or sending radio traffic.
+    internal interface IDiscoverySocket : IDisposable
+    {
+        void Bind(IPEndPoint endpoint);
+        void SendTo(byte[] packet, IPEndPoint endpoint);
+        bool Poll(int microseconds);
+        int ReceiveFrom(byte[] buffer, ref EndPoint remote);
+    }
+
+    internal sealed class DiscoverySocket : IDiscoverySocket
+    {
+        private readonly Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+
+        public DiscoverySocket()
+        {
+            try
+            {
+                socket.EnableBroadcast = true;
+                socket.SendTimeout = 100;
+                socket.ReceiveTimeout = 100;
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+
+        public void Bind(IPEndPoint endpoint) { socket.Bind(endpoint); }
+        public void SendTo(byte[] packet, IPEndPoint endpoint) { socket.SendTo(packet, endpoint); }
+        public bool Poll(int microseconds) { return socket.Poll(microseconds, SelectMode.SelectRead); }
+        public int ReceiveFrom(byte[] buffer, ref EndPoint remote) { return socket.ReceiveFrom(buffer, ref remote); }
+        public void Dispose() { socket.Dispose(); }
     }
 }

@@ -1,0 +1,77 @@
+name: Cross-platform discovery
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'global.json'
+      - 'Thetis.CrossPlatform.slnx'
+      - 'Project Files/Source/Console/HPSDR/clsRadioDiscovery.cs'
+      - 'Project Files/Source/Console/enums.cs'
+      - '.github/workflows/cross-platform.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'global.json'
+      - 'Thetis.CrossPlatform.slnx'
+      - 'Project Files/Source/Console/HPSDR/clsRadioDiscovery.cs'
+      - 'Project Files/Source/Console/enums.cs'
+      - '.github/workflows/cross-platform.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  discovery:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - name: Record SDK and architecture
+        run: dotnet --info
+      - name: Restore pinned dependencies
+        run: dotnet restore Thetis.CrossPlatform.slnx --locked-mode
+      - name: Build
+        run: dotnet build Thetis.CrossPlatform.slnx -c Release --no-restore
+      - name: Offline discovery and CLI tests
+        run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --logger "trx;LogFileName=discovery.trx"
+      - name: CLI help (no sockets)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- --help
+      - name: Local NIC enumeration (no discovery packets)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- nics --allow-loopback --json
+
+  # Deliberately separate from the portable tests. This checks the legacy native
+  # Windows solution on demand; it does not publish or build an installer.
+  windows-reference:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+      - name: Restore legacy Windows solution
+        run: msbuild "Project Files/Source/Thetis_VS2026.sln" -t:Restore -p:Configuration=Release -p:Platform=x64 -m -nologo
+      - name: Build legacy Windows solution
+        run: msbuild "Project Files/Source/Thetis_VS2026.sln" -p:Configuration=Release -p:Platform=x64 -m -nologo

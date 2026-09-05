@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Linked legacy files predate nullable annotations. -->
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Project Files/Source/Console/HPSDR/clsRadioDiscovery.cs" Link="Discovery/clsRadioDiscovery.cs" />
+    <Compile Include="../../Project Files/Source/Console/enums.cs" Link="Legacy/enums.cs" />
+    <InternalsVisibleTo Include="Thetis.Core.Tests" />
+  </ItemGroup>
+</Project>

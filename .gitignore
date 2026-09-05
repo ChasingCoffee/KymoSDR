@@ -10,6 +10,10 @@
 *.userosscache
 *.sln.docstates
 .planning/
+.DS_Store
+
+# Cross-platform SDK/package caches and staged artifacts live under artifacts/.
+# Keep packages.lock.json files: CI restores the new projects in locked mode.
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
