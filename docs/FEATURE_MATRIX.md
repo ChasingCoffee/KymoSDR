@@ -5,12 +5,12 @@ simulator coverage without any hardware validation. Last updated 2026-09-04.
 
 | Feature | Implementation | macOS arm64 evidence | Windows / Linux | Remaining gate |
 | --- | --- | --- | --- | --- |
-| Managed solution/toolchain | Implemented | SDK restore and Release build pass | CI definitions added; execution pending | Run CI and Windows reference build. |
-| NIC listing and selection | Implemented | Real local enumeration and offline CLI selection tests | Not executed locally | Verify adapter metadata/filtering on each OS. |
-| P1 discovery | Implemented/reused | Synthetic fixtures and pinned HL2-profile simulator discovery pass | Not executed locally | Windows-reference simulator comparison and eventual real P1 hardware. |
-| P2 discovery | Implemented/reused | Synthetic Saturn fixtures and real G2 broadcast/targeted discovery pass | Not executed locally | Windows G2 check; separately record installed G2 server/FPGA versions. |
-| Deadline/cancellation/errors | Implemented | Offline tests, empty loopback deadline and actual SIGINT smoke | Not executed locally | Repeat on CI/Windows. |
-| Native WDSP / .NET offline DSP | Initial implementation | 11 signal checks, native ABI/NR3/NR4/lifecycle tests and sanitizer checks pass | Native CI added; execution pending | Windows/Linux parity and longer-run qualification; see M2 results. |
+| Managed solution/toolchain | Implemented | Local and hosted restore/build/tests pass | Hosted Windows/Linux checks pass | Legacy Windows reference build remains pending. |
+| NIC listing and selection | Implemented | Real local enumeration and offline CLI selection tests | Hosted NIC enumeration and offline tests pass | Verify physical/VM adapter metadata and routing locally. |
+| P1 discovery | Implemented/reused | Synthetic fixtures and pinned HL2-profile simulator discovery pass | Offline fixture/CLI tests pass in CI | Windows-reference simulator comparison and eventual real P1 hardware. |
+| P2 discovery | Implemented/reused | Synthetic Saturn fixtures and real G2 broadcast/targeted discovery pass | Offline fixture/CLI tests pass in CI | Windows G2 check; separately record installed G2 server/FPGA versions. |
+| Deadline/cancellation/errors | Implemented | Offline tests, empty loopback deadline and actual SIGINT smoke | Offline regression tests pass in CI | Live-network/process cancellation checks on Windows/Linux. |
+| Native WDSP / .NET offline DSP | Initial offline gate passed | 11 signal checks, native ABI/NR3/NR4/lifecycle tests and sanitizer checks pass | 11 signal checks and 51 managed tests pass on both; Linux sanitizer/leak checks pass | Full DSP/mode parity and longer-run qualification; see CI results. |
 | ChannelMaster lifecycle | Not started | Static audit only | Existing legacy source remains | M3; correct radio-init ABI before use. |
 | Radio streams / RX1 spectrum | Not started | None | None in new app | M4. |
 | Audio / shared desktop UI | Not started | None | None in new app | M5. |
@@ -22,4 +22,6 @@ simulator coverage without any hardware validation. Last updated 2026-09-04.
 
 The user's G2/P2 is the first live hardware target. Parallels can supply a local
 Windows environment, but installed guest OS, architecture and networking have not
-been verified. Linux remains an intended target, not a tested support claim.
+been verified. Linux x64 is tested for the offline harness/DSP on Ubuntu 24.04;
+Linux desktop, audio, packaging and radio operation remain unqualified. See the
+[CI validation record](NATIVE_CI_RESULTS.md) for exact runners and evidence.

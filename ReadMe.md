@@ -14,8 +14,8 @@ Nereid of Thetis.
 - .NET 10 headless discovery harness with Protocol 1 and Protocol 2 support.
   Discovery has been tested on macOS with an ANAN G2 headless and a P1 simulator.
 - Source-built native WDSP 2.0 baseline with offline signal, ABI, noise-reduction
-  and lifecycle checks. Local macOS arm64 tests pass; Windows/Linux CI
-  qualification is the next step.
+  and lifecycle checks. Windows x64, macOS arm64 and Linux x64 CI pass, including
+  Linux sanitizer/leak checks. See the [validation record](docs/NATIVE_CI_RESULTS.md).
 - The portable harness does **not** stream radio I/Q, play audio or transmit.
   The cross-platform UI, rendering and VST3 hosting are still planned work.
 - The inherited Windows application remains in the tree as the source/reference

@@ -1,5 +1,8 @@
 # M2 native DSP results
 
+This is the initial local macOS record. Subsequent Windows/macOS/Linux validation
+and native CI fixes are recorded in [native CI results](NATIVE_CI_RESULTS.md).
+
 Recorded 2026-09-04 on macOS 26.6 arm64, Apple Clang 21.0.0, CMake 4.4.2,
 .NET SDK 10.0.400/runtime 10.0.11. Discovery checkpoint: `77792260`.
 
@@ -65,10 +68,11 @@ diagnostics. Existing DSP algorithms and the modified 2.00/PureSignal baseline
 are retained. Native compilation still reports pre-existing assignment-in-
 condition warnings; these were not broadly rewritten or suppressed.
 
-Windows x64 and Linux execution remain pending. Their build/test jobs are added,
-including a Linux sanitizer job, but no push or CI execution was performed.
-The legacy Windows solution has not been rebuilt here. **M2 acceptance is
-therefore partial**, not a claim of qualified cross-platform DSP parity.
+At the time of these initial measurements, Windows x64 and Linux execution were
+pending and no push or CI execution had been performed. The later
+[CI validation](NATIVE_CI_RESULTS.md) passes the initial M2 cross-platform offline
+gate. The legacy Windows solution has not been rebuilt here, and these fixtures
+are not a claim of complete DSP feature parity.
 
 No radio packets, RX/TX control commands, audio devices, VST hosts or FreeDV
 components were involved in this batch. Parallels was not configured. Long-run

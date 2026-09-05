@@ -110,5 +110,8 @@ appropriate sanitizer runtime setup.
   exports; the ABI probe and .NET self-test support remain available.
 
 The [native CI workflow](../.github/workflows/native-dsp.yml) builds and tests the
-host architecture on macOS/Linux and x64 on Windows. CI definitions are not
-execution evidence; see [recorded results](M2_NATIVE_RESULTS.md).
+host architecture on macOS/Linux and x64 on Windows. Windows x64, macOS arm64
+and Linux x64 offline checks, including Linux sanitizer/leak checks, have passed;
+see the [CI validation record](NATIVE_CI_RESULTS.md) for exact runners, commits,
+test counts and remaining limits. The [initial local record](M2_NATIVE_RESULTS.md)
+preserves the earlier macOS measurements.

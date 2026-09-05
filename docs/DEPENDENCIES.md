@@ -32,7 +32,8 @@ Local verification environment:
 - MSBuild 18.9.6 from that SDK.
 - Apple Clang 21.0.0; simulator built with `-O2 -pthread ... -lm`, no source patches.
 - CMake 4.4.2 builds native Release and instrumented RelWithDebInfo targets.
-- No native Windows/Linux execution, Parallels VM setup or RADE model recovery performed.
+- Subsequent native Windows/Linux hosted execution is recorded in
+  [CI results](NATIVE_CI_RESULTS.md); no Parallels setup or RADE model recovery was performed.
 
 The build/test workflow also pins checkout, setup-dotnet and setup-msbuild to
 immutable Git revisions. Update pins and package locks deliberately, with tests.
