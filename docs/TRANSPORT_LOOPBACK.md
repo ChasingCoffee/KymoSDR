@@ -96,10 +96,14 @@ of arbitrary scheduling safety or a production memory/latency budget.
 
 ## Validation status and next boundary
 
-Local macOS arm64: six native tests, 68 managed tests, the 100-cycle transport CLI,
-and ASan/UBSan pass. The separate macOS transport leak scan reports zero leaks;
-warm/final threads are 1/1 and descriptors 4/4 in that run. Hosted Windows/Linux
-qualification is pending for this checkpoint; see [CI results](NATIVE_CI_RESULTS.md).
+At source `21f7203d`, Windows x64, macOS arm64 and Linux x64 CI pass the native
+tests, all 68 managed tests and both 100-cycle CLIs. Linux ASan/UBSan/LeakSanitizer
+also passes. Native probe thread/descriptor counts do not grow in these runs.
+Local macOS ASan/UBSan passes, and separate leak scans of both RNet allocation
+and transport tests report zero leaks. A build with test helpers disabled also
+passes the transport CLI. Real Ctrl-C exits 130 after cleanup; missing-library
+startup exits 3. See [CI results](NATIVE_CI_RESULTS.md) for exact resource counts,
+timings, test scope and qualification limits.
 
 Before contacting the G2: adapt the real P2 packet receiver and its start/stop
 ownership, exercise recorded/synthetic receive fixtures, and audit the control

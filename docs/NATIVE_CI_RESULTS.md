@@ -1,6 +1,63 @@
 # Native cross-platform CI results
 
-## M3a — offline ChannelMaster core
+## M3b checkpoint — RNet and loopback socket lifecycle
+
+Validated source: `21f7203de38c3c9576cf7f91a6d5d2a80a922d1c`, recorded
+2026-09-04 Pacific / 2026-09-05 UTC.
+The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/33943107358)
+passes on all three platforms, including Linux ASan/UBSan/LeakSanitizer without
+suppressions. See the [implementation boundary](TRANSPORT_LOOPBACK.md).
+
+| Target / compiler | Native CTest | .NET transport CLI | .NET CM session CLI | Managed tests |
+| --- | --- | --- | --- | --- |
+| Windows x64 / MSVC 19.51.36256.0 | 5/5; loopback 7.20 s | 100 cycles, 8.297 s | 100 cycles, 121.855 s | 68/68, no skips |
+| macOS arm64 / Apple Clang 21.0.0.21000101 | 6/6; loopback 17.97 s | 100 cycles, 16.633 s | 100 cycles, 63.376 s | 68/68, no skips |
+| Linux x64 / GCC 13.3.0 | 6/6; loopback 5.61 s | 100 cycles, 6.082 s | 100 cycles, 98.378 s | 68/68, no skips |
+
+The existing DSP CLI also passes its 11 checks on each OS. Native CM lifecycle
+times are Windows 118.09 s, macOS 70.63 s and Linux 103.55 s. The new tests cover
+21 RNet allocation failure boundaries, actual seven-argument P1/P2 socket
+initialization, P2 port relocation, ten signed startup checkpoints, partial
+event/worker failure, exclusive bind/rebind and joined reader/timer teardown.
+The fixture reader does not parse radio packets or produce DSP input. Each
+transport CLI run counts 300 received and 100 oversized fixture datagrams.
+
+Native loopback resource observations after ten warmups / 100 further cycles:
+
+| Target | Process threads | Descriptors / Windows process handles | Resident bytes |
+| --- | --- | --- | --- |
+| Windows | 4 / 4 | 81 / 81 handles | 5,304,320 / 5,304,320 |
+| macOS | 1 / 1 | 3 / 3 descriptors | 1,753,088 / 1,769,472 |
+| Linux | 1 / 1 | 6 / 6 descriptors | 2,981,888 / 2,981,888 |
+| Linux sanitizer | 1 / 1 | 6 / 6 descriptors | 51,789,824 / 63,651,840 |
+
+The [sanitizer job](https://github.com/ChasingCoffee/KymoSDR/actions/runs/33943107358/job/101244168536)
+passes all six native tests; loopback takes 5.77 s and the CM core 176.03 s.
+RSS is diagnostic, not a hard memory budget: allocator/sanitizer retention and
+instrumentation differ. No continuing thread/descriptor growth was observed in
+these finite tests; this is not general leak freedom or a real-time guarantee.
+
+Local macOS also passes all six native tests, all 68 managed tests, and ASan/
+UBSan. Separate `leaks --atExit` runs of both `rnet_tests` and
+`cm_transport_tests` each report **0 leaks / 0 leaked bytes**. The transport scan
+records threads 1/1 and descriptors 4/4; ordinary local CTest records 1/1 and
+3/3, reflecting a different launch context. A separate `BUILD_TESTING=OFF` build
+passes the 100-cycle transport CLI with the fault-injection export absent.
+Real Ctrl-C during the transport CLI exits 130 after cleanup; a fresh process
+with a missing native directory exits 3.
+
+The [discovery-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/33943107525)
+also passes on all three OSes: 56 tests pass and 12 native-only tests skip, as
+expected without a native library. No legacy Windows reference build was run.
+
+**Status:** RNet/socket allocation and loopback lifecycle checks pass
+cross-platform. Full M3 remains partial: real P1/P2 packet-worker shutdown,
+active-stream callback/control safety and longer-run resource/performance
+qualification are still required. All fixture traffic stayed on IPv4 loopback;
+the native probe has no sender. No G2 packets, radio RX/TX or audio devices were
+used. The G2's receive-only ANT1 restriction remains in force.
+
+## M3a — prior offline ChannelMaster core qualification
 
 Validated source: `3233270486585bb798f0b4570304102a55177ba8`, recorded
 2026-09-04 Pacific / 2026-09-05 UTC.

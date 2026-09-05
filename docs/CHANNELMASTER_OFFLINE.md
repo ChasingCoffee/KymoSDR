@@ -119,7 +119,7 @@ offline lifecycle checkpoint, not completion of the full M3 gate.
   are authorized. Keep M3 transport tests offline/loopback; future live RX work
   must preserve this restriction until the user explicitly approves a change.
 - [RNet/socket allocation and loopback probe](TRANSPORT_LOOPBACK.md) now cover the
-  actual radio-init ABI and partial startup rollback. Qualify on all three OSes.
+  actual radio-init ABI and partial startup rollback, with passing three-OS CI.
 - Port the real P1/P2 packet workers and audit their shutdown, preserving the
   algorithms. The loopback reader/timer are not production radio workers.
 - Audit active streaming, advanced WDSP background work and shutdown races;
