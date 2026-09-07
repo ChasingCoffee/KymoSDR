@@ -81,14 +81,14 @@ jobs:
         run: dotnet restore Thetis.CrossPlatform.slnx --locked-mode
       - name: Build managed harness
         run: dotnet build Thetis.CrossPlatform.slnx -c Release --no-restore
-      - name: Linux native allocation and thread-placement comparison (loopback only)
+      - name: Linux reconnect allocator regression (loopback only)
         if: runner.os == 'Linux'
         # Fresh processes: allocator history from one mode must not contaminate another.
-        # Explicit trim is an end-of-process diagnostic, never application policy.
+        # No forced GC, allocator trimming or global allocator environment tuning.
         run: |
           dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" same 6
-          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" async 6 --release-reserved
-          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" owner 6
+          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" async 20 --check-linux-budget
+          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" hopping 20 --check-linux-budget
       - name: Offline CLI self-test (native library required)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- dsp-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Offline ChannelMaster CLI (100 lifecycles, no devices)

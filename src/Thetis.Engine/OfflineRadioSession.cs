@@ -40,6 +40,12 @@ public sealed class OfflineRadioSession : IDisposable
         options.Validate();
         token.ThrowIfCancellationRequested();
         DspRuntime.Initialize(nativeDirectory);
+        return NativeLifecycle.Invoke(() => OpenOnLifecycle(options, token, checkpoint));
+    }
+
+    private static OfflineRadioSession OpenOnLifecycle(OfflineSessionOptions options, CancellationToken token,
+        Func<int, int>? checkpoint)
+    {
         lock (DspRuntime.Gate)
         {
             RequireIdle();
@@ -115,7 +121,8 @@ public sealed class OfflineRadioSession : IDisposable
     {
         public override bool IsInvalid => handle == 0;
         internal void MarkOpen() => SetHandle(1);
-        protected override bool ReleaseHandle()
+        protected override bool ReleaseHandle() => NativeLifecycle.Invoke(CloseOnLifecycle);
+        private static bool CloseOnLifecycle()
         {
             lock (DspRuntime.Gate)
             {

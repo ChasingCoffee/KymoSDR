@@ -10,8 +10,17 @@ public static class SessionDiagnostics
 {
     public static SessionSelfTestResult Run(string nativeDirectory, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var timer = Stopwatch.StartNew();
         var abi = DspRuntime.Initialize(nativeDirectory);
+        // Dispatch the entire exclusive diagnostic before taking the gate; nested
+        // session open/close calls execute inline on the lifecycle worker.
+        return NativeLifecycle.Invoke(() => RunOnLifecycle(nativeDirectory, cancellationToken, timer, abi));
+    }
+
+    private static SessionSelfTestResult RunOnLifecycle(string nativeDirectory, CancellationToken cancellationToken,
+        Stopwatch timer, DspAbiInfo abi)
+    {
         lock (DspRuntime.Gate)
         {
             OfflineRadioSession.RequireIdle();

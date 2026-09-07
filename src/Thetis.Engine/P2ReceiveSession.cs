@@ -43,6 +43,12 @@ public sealed class P2ReceiveSession : IDisposable
     {
         ArgumentNullException.ThrowIfNull(options); options.Validate(); token.ThrowIfCancellationRequested();
         DspRuntime.Initialize(nativeDirectory);
+        return NativeLifecycle.Invoke(() => OpenOnLifecycle(options, token, checkpoint));
+    }
+
+    private static P2ReceiveSession OpenOnLifecycle(P2ReceiveOptions options, CancellationToken token,
+        Func<int, int>? checkpoint)
+    {
         lock (DspRuntime.Gate)
         {
             OfflineRadioSession.RequireIdle(); token.ThrowIfCancellationRequested(); ReadNativeState();
@@ -138,7 +144,8 @@ public sealed class P2ReceiveSession : IDisposable
     {
         public override bool IsInvalid => handle == 0;
         internal void MarkOpen() => SetHandle(1);
-        protected override bool ReleaseHandle()
+        protected override bool ReleaseHandle() => NativeLifecycle.Invoke(CloseOnLifecycle);
+        private static bool CloseOnLifecycle()
         {
             lock (DspRuntime.Gate)
             {

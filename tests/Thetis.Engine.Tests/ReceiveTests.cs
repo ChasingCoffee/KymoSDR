@@ -33,6 +33,34 @@ public sealed class ReceiveTests
     }
 
     [TestMethod, TestCategory("Native")]
+    public async Task ReceiveAndOfflineStartupShareOneLifecycleThreadAcrossCallers()
+    {
+        string directory = NativeDirectory();
+        int owner = NativeLifecycle.Invoke(() => Environment.CurrentManagedThreadId);
+        await using var simulator = G2Simulator.Open(new(BasePort: 0));
+        for (int cycle = 0; cycle < 3; ++cycle)
+        {
+            var offline = await OnNewCaller(() => OfflineRadioSession.OpenCore(directory, null, default, CheckThread));
+            try { Assert.AreEqual(18, offline.State.ChannelMasterWorkers); }
+            finally { await OnNewCaller(() => { offline.Dispose(); return 0; }); }
+            var receiver = await OnNewCaller(() => P2ReceiveSession.OpenCore(directory, new(simulator.BasePort), default, CheckThread));
+            try { ReceiveSelfTest.Measure(receiver, 1000); }
+            finally { await OnNewCaller(() => { receiver.Dispose(); return 0; }); }
+            await WaitUntil(() => !simulator.State.Running);
+            AssertClosed();
+        }
+        Assert.AreEqual(0, simulator.State.Transmit.Packets);
+
+        int CheckThread(int stage)
+        {
+            Assert.AreEqual(owner, Environment.CurrentManagedThreadId);
+            return 0;
+        }
+        static Task<T> OnNewCaller<T>(Func<T> action) => Task.Factory.StartNew(action,
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
+
+    [TestMethod, TestCategory("Native")]
     public async Task ShortSoakExercisesFaultsAndReconnectsWithIsolatedCounters()
     {
         var result = await ReceiveSoak.RunAsync(NativeDirectory(), new(10, 1));

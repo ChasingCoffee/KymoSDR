@@ -11,15 +11,16 @@ using Thetis.Simulator;
 // Isolated allocator experiment, not a hardware command or application allocator policy.
 // Run each mode in a FRESH process so previous arena high-water marks cannot contaminate it.
 if (args.Length is < 3 or > 4 || !Path.IsPathFullyQualified(args[0]) ||
-    args[1] is not ("same" or "async" or "owner") || !int.TryParse(args[2], out int cycles) ||
-    cycles is < 3 or > 20 || (args.Length == 4 && args[3] != "--release-reserved"))
+    args[1] is not ("same" or "async" or "owner" or "hopping") || !int.TryParse(args[2], out int cycles) ||
+    cycles is < 3 or > 20 || (args.Length == 4 && args[3] is not ("--release-reserved" or "--check-linux-budget")) ||
+    (args.Length == 4 && args[3] == "--check-linux-budget" && (!OperatingSystem.IsLinux() || cycles < 6)))
 {
-    Console.Error.WriteLine("Usage: Thetis.MemoryProbe ABSOLUTE_NATIVE_DIR same|async|owner CYCLES(3..20) [--release-reserved]");
+    Console.Error.WriteLine("Usage: Thetis.MemoryProbe ABSOLUTE_NATIVE_DIR same|async|owner|hopping CYCLES(3..20) [--release-reserved|--check-linux-budget]");
     return 2;
 }
 using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; timeout.Cancel(); };
-using var owner = args[1] == "owner" ? new ProbeOwner() : null;
+using var callers = new ProbeCallers(args[1]);
 string directory = args[0], mode = args[1];
 var timer = Stopwatch.StartNew();
 var samples = new List<Snapshot>();
@@ -29,8 +30,9 @@ try
     Sample(0, "baseline");
     for (int cycle = 1; cycle <= cycles; ++cycle)
     {
+        callers.Cycle = cycle;
         timeout.Token.ThrowIfCancellationRequested();
-        var simulator = G2Simulator.Open();
+        var simulator = G2Simulator.Open(new(BasePort: 0));
         P2ReceiveSession? session = null;
         int nativePort = 0;
         try
@@ -68,15 +70,16 @@ try
         Sample(cycle, "closed");
         if (mode != "same") await Task.Delay(25, timeout.Token);
     }
-    if (args.Length == 4)
+    MemoryBudget? budget = args.Length == 4 && args[3] == "--check-linux-budget" ? CheckLinuxBudget() : null;
+    if (args.Length == 4 && args[3] == "--release-reserved")
     {
         // Diagnostic-only control experiment, never used by the engine or normal tests.
         Sample(cycles, "before-release-reserved");
         NativeHeap.ReleaseReserved();
         Sample(cycles, "after-release-reserved");
     }
-    Console.WriteLine(JsonSerializer.Serialize(new { passed = true, mode, cycles, elapsedMs = timer.ElapsedMilliseconds, samples }));
-    return 0;
+    Console.WriteLine(JsonSerializer.Serialize(new { passed = budget?.Passed ?? true, mode, cycles, elapsedMs = timer.ElapsedMilliseconds, budget, samples }));
+    return budget is { Passed: false } ? 1 : 0;
 }
 catch (Exception error)
 {
@@ -84,14 +87,29 @@ catch (Exception error)
     return error is OperationCanceledException ? 130 : 1;
 }
 
-T Call<T>(Func<T> action) => owner is null ? action() : owner.Invoke(action);
+T Call<T>(Func<T> action) => callers.Invoke(action);
+MemoryBudget CheckLinuxBudget()
+{
+    // Regression guard for this fixed topology on hosted glibc Linux, not a
+    // portable application memory budget. No GC/trim or allocator env overrides.
+    const long usedAllowance = 32L * 1024 * 1024, retainedAllowance = 128L * 1024 * 1024;
+    var baseline = samples.Single(s => s.Phase == "baseline");
+    var warm = samples.Single(s => s.Cycle == 3 && s.Phase == "closed");
+    var closed = samples.Where(s => s.Phase == "closed").ToArray();
+    var afterWarm = samples.Where(s => s.Cycle > 3).ToArray();
+    long usedGrowth = closed.Max(s => s.HeapUsed!.Value) - baseline.HeapUsed!.Value;
+    long reservedGrowth = afterWarm.Max(s => s.HeapReserved!.Value) - warm.HeapReserved!.Value;
+    long rssGrowth = afterWarm.Max(s => s.Rss) - warm.Rss;
+    return new(usedGrowth <= usedAllowance && reservedGrowth <= retainedAllowance && rssGrowth <= retainedAllowance,
+        usedGrowth, reservedGrowth, rssGrowth, usedAllowance, retainedAllowance);
+}
 void Sample(int cycle, string phase)
 {
     using var process = Process.GetCurrentProcess();
     var heap = NativeHeap.Read();
     var sample = new Snapshot(cycle, phase, Environment.CurrentManagedThreadId, NativeHeap.ThreadId(),
         process.WorkingSet64, GC.GetTotalMemory(false), heap.Used, heap.Reserved,
-        owner?.ThreadId ?? 0);
+        callers.ThreadId);
     samples.Add(sample);
     Console.Error.WriteLine($"{mode} cycle={cycle} {phase}: tid={sample.OsThread} owner={sample.OwnerThread} " +
         $"RSS={sample.Rss / 1048576.0:F1} MiB, allocator-used={sample.HeapUsed / 1048576.0:F1} MiB, reserved={sample.HeapReserved / 1048576.0:F1} MiB");
@@ -99,6 +117,8 @@ void Sample(int cycle, string phase)
 
 internal sealed record Snapshot(int Cycle, string Phase, int ManagedThread, ulong OsThread, long Rss,
     long ManagedBytes, long? HeapUsed, long? HeapReserved, ulong OwnerThread);
+internal sealed record MemoryBudget(bool Passed, long ClosedUsedGrowth, long PostWarmReservedGrowth,
+    long PostWarmRssGrowth, long UsedAllowance, long RetainedAllowance);
 
 internal static class NativeHeap
 {
@@ -144,7 +164,20 @@ internal static class NativeHeap
     private static extern uint GetCurrentThreadId();
 }
 
-// Probe-only candidate: no production lifecycle change until A/B evidence exists.
+// A fixed set of callers deliberately stresses allocation placement; none is
+// the engine's internal lifecycle worker. Keep them alive for the whole probe.
+internal sealed class ProbeCallers : IDisposable
+{
+    private readonly ProbeOwner[] owners;
+    internal int Cycle { get; set; }
+    private ProbeOwner? Current => owners.Length == 0 ? null : owners[Math.Max(0, Cycle - 1) % owners.Length];
+    internal ulong ThreadId => Current?.ThreadId ?? 0;
+    internal ProbeCallers(string mode) => owners = Enumerable.Range(0, mode == "owner" ? 1 : mode == "hopping" ? 6 : 0)
+        .Select(_ => new ProbeOwner()).ToArray();
+    internal T Invoke<T>(Func<T> action) => Current is { } owner ? owner.Invoke(action) : action();
+    public void Dispose() { foreach (var owner in owners) owner.Dispose(); }
+}
+
 internal sealed class ProbeOwner : IDisposable
 {
     private readonly BlockingCollection<Action> queue = new();
