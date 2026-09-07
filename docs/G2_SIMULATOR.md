@@ -174,6 +174,14 @@ loss or advancing the tone through ungenerated samples. Sustained host stalls
 therefore reduce sample throughput versus wall time; this is not a hard-real-time
 radio clock. Public state is an immutable snapshot/copy.
 
+On Windows, each open simulator owns a 1 ms `timeBeginPeriod` request, balanced
+by `timeEndPeriod` when its worker exits (including cancellation/failure), or on
+worker-start failure. This improves short socket-wait timing without busy-spinning
+or replaying larger bursts; it is not a scheduling guarantee. macOS/Linux never
+call or load WinMM. The request can increase power use while the simulator is
+open; modern Windows scopes it to requesting processes, with additional Windows
+11 visibility caveats. See [Microsoft's timer documentation](https://learn.microsoft.com/en-us/windows/win32/api/timeapi/nf-timeapi-timebeginperiod).
+
 ## Identity and provenance
 
 Discovery uses locally administered MAC `02-4B-59-4D-4F-01`, board 10 (Saturn),

@@ -2,6 +2,13 @@
 
 ## Receive-endurance qualification: fixes under validation
 
+The first bounded-replay Windows run at `c755f191` passed native CTest and the
+offline lifecycle CLI but timed out in the audio smoke test before reaching the
+soak campaign. Coarse Windows timer waits are the suspected cause of insufficient
+sample throughput with the new small replay budget. A balanced, simulator-owned
+1 ms Windows timer request is being validated; deadlines and replay bounds are
+not relaxed. The audio timeout now includes counters for future diagnosis.
+
 The new [receive-soak campaign](RECEIVE_SOAK.md) exposed a simulator scheduling
 defect: after a host pause it replayed 32 packets before rebasing its clock.
 At 238 samples per packet, that 7616-sample burst exceeds the 6144-sample CM
@@ -41,6 +48,10 @@ It does not replace any joins or immediate native ownership assertions. A
 OS counts and requires settling after every cycle, without opening WDSP/CM.
 The existing deliberately held live-worker check must still detect that worker
 after the complete grace period. A persistent extra thread still fails.
+At `c755f191`, the isolated probe records 10/1000 transient counts on the hosted
+Linux sanitizer runner, and 992/1000 locally on macOS (932/1000 under ASan).
+Every cycle settles to one thread. The Linux sanitizer job passes all eight
+tests with ASan, UBSan and leak detection enabled, without suppressions.
 
 ## Renderer-independent P2 receive spectrum frames
 

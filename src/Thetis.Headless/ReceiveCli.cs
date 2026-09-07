@@ -118,8 +118,10 @@ public static class ReceiveSelfTest
         while (frames < 8192)
         {
             token.ThrowIfCancellationRequested();
-            if (deadline.Elapsed > TimeSpan.FromSeconds(8)) throw new TimeoutException("Native receive audio did not advance.");
             var state = session.State;
+            if (deadline.Elapsed > TimeSpan.FromSeconds(8)) throw new TimeoutException(
+                $"Native receive audio did not advance: IQ={state.IqPackets}, produced={state.AudioProduced}, read={skipped}, " +
+                $"socket={state.SocketErrors}, DSP={state.DspErrors}, overruns={state.InputOverruns}.");
             if (state.SocketErrors != 0 || state.DspErrors != 0) throw new IOException("Native packet/DSP worker reported an error.");
             int count = session.ReadAudio(buffer);
             for (int i = 0; i < count; ++i)

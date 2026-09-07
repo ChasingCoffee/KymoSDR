@@ -12,6 +12,7 @@ public sealed class G2Simulator : IAsyncDisposable
     private readonly P2Device device;
     private readonly object disposeGate = new();
     private readonly Task worker;
+    private readonly SimulatorTimerResolution? timerResolution;
     private Task? disposeTask;
     private SimulatorState snapshot;
     public int BasePort { get; }
@@ -30,8 +31,17 @@ public sealed class G2Simulator : IAsyncDisposable
         sockets = bound; BasePort = options.BasePort;
         device = new(options); snapshot = device.Snapshot();
         stop = CancellationTokenSource.CreateLinkedTokenSource(token);
-        try { worker = Task.Factory.StartNew(Run, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default); }
-        catch { stop.Dispose(); throw; }
+        try
+        {
+            timerResolution = SimulatorTimerResolution.Acquire();
+            worker = Task.Factory.StartNew(Run, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }
+        catch
+        {
+            try { timerResolution?.Dispose(); }
+            finally { stop.Dispose(); }
+            throw;
+        }
     }
 
     public static G2Simulator Open(SimulatorOptions? options = null, CancellationToken cancellationToken = default)
@@ -103,8 +113,12 @@ public sealed class G2Simulator : IAsyncDisposable
         }
         finally
         {
-            device.Shutdown(); Volatile.Write(ref snapshot, device.Snapshot());
-            foreach (var socket in sockets.Values) socket.Dispose();
+            try
+            {
+                device.Shutdown(); Volatile.Write(ref snapshot, device.Snapshot());
+                foreach (var socket in sockets.Values) socket.Dispose();
+            }
+            finally { timerResolution?.Dispose(); }
         }
     }
 
