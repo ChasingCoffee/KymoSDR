@@ -1,5 +1,65 @@
 # Native cross-platform CI results
 
+## P2 simulator → native ChannelMaster/WDSP receive
+
+Validated source: `aa124b5ebca90ec5b2256404931f94f884cbc58d`, recorded 2026-09-07.
+The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34159409716)
+passes on Windows x64, macOS arm64 and Linux x64. This is the first test that
+feeds simulator I/Q through the native P2 decoder, inherited CM router/input
+worker and WDSP RX0/sub0, then measures recovered audio. It is loopback-only,
+receive-only and pre-mixer; no physical radio, audio device or native TX engine
+is exercised. See [implementation and commands](P2_RECEIVE_INTEGRATION.md).
+
+| Target | Native CTest | Managed tests with native library | Receive CLI tone before / after retune |
+| --- | --- | --- | --- |
+| Windows x64 | 7/7 | 119/119, no skips | 998.20 / 1500.18 Hz |
+| macOS arm64 | 8/8 | 119/119, no skips | 998.48 / 1500.16 Hz |
+| Linux x64 | 8/8 | 119/119, no skips | 996.22 / 1500.18 Hz |
+
+All receive CLI measurements satisfy the ±20 Hz tolerance around 1 kHz/1.5 kHz;
+RMS is approximately 0.17678 for a 0.25-amplitude input with unity gain. Native
+socket/DSP errors, CM input overruns and audio queue drops are zero in these
+three CLI runs. STOP is observed and simulator PTT/TX packet counts stay off/zero.
+The final Windows simulator snapshot separately reports four aggregate peer
+socket errors. Individual error codes/timestamps are not retained, so this is
+not a claim that every simulator UDP reply succeeded; in-flight replies can
+overlap native socket teardown. The native receive measurements and shutdown
+assertions pass. Finer peer-error attribution remains a diagnostic improvement.
+
+Each job also passes the 11-check DSP CLI and existing 100-cycle CM and socket
+probe CLIs. The 119 tests comprise 97 Core/simulator/CLI and 22 Engine tests.
+The [Linux ASan/UBSan job](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34159409716/job/101857891816)
+passes all eight native tests with leak detection enabled, including real UDP
+packet decoding/routing/WDSP, malformed/sequence fixtures and three active RX
+cycles. No sanitizer suppressions were added.
+
+The [managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34158894066)
+passes on all three OSes at implementation source
+`7e5aff6a34076ed64e1364e21cd83cbf47f60fb9`: 101 tests pass, 18 native tests skip,
+and standalone RX/TX simulator self-tests pass. The subsequent `aa124b5e` changes
+only native test observations and documentation, not managed or runtime code.
+
+Local macOS also passes 119 managed tests, all eight native tests and all eight
+ASan/UBSan tests. A separate `leaks --atExit` scan of the active receive fixture
+reports zero leaks (the tool warns that detailed inspection is security-limited).
+A `BUILD_TESTING=OFF` runtime build passes `receive-selftest`; actual Ctrl-C
+during streaming exits 130 after both owners are disposed. Native dependencies
+and NuGet versions are unchanged; lockfile changes are project references only.
+
+The first hosted macOS run exposed a transient OS thread count in the existing
+offline lifecycle test. A standalone no-op pthread reproduced a count of two
+immediately after successful `pthread_join`, falling to one after 1 ms, without
+loading WDSP/CM. `aa124b5e` adds a bounded macOS observation window and a test
+that a deliberately held live worker is still detected. Actual worker joins
+and immediate zero owned-worker assertions are retained. Separately, runtime
+work in `7e5aff6a` makes WDSP's previously detached flush worker joinable and
+bounds the portable CM input ring so unread data cannot be overwritten.
+
+This does not complete M4: spectrum, P1 receive, live G2 RX, broader protocol/
+multi-receiver support and long-run performance qualification remain pending.
+The G2's receive-only ANT1 restriction and simulator-only TX authorization are
+unchanged. Earlier checkpoint results below retain their original test scopes.
+
 ## Virtual TX sink checkpoint — simulator-only transmission
 
 Validated source: `fd05b91876c98fc7e46891f0b0f7ce324150021f`, recorded 2026-09-07.
