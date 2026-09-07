@@ -1,13 +1,117 @@
 # Native cross-platform CI results
 
-## Receive-endurance qualification: fixes under validation
+## Simulator-backed receive endurance and fault campaign
+
+The [campaign](RECEIVE_SOAK.md) now covers sustained receive, repeated retuning,
+packet loss, bounded slow-reader behavior, peer disappearance and same-layout
+reconnects. Every peer is owned IPv4 loopback; the campaign has no TX, hardware,
+audio-device or UI path. No native runtime code changed in this checkpoint.
+Validated implementation source: `bb463658f39c86004f5b55e1a91afabb5fd4eb68`,
+recorded 2026-09-07. The harness and finite functional checks pass; reconnect
+memory remains an open resource-qualification issue, especially on Linux.
+
+### Final-source CI and local regression
+
+The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34167665438)
+passes on all three platforms, including the short six-phase receive campaign:
+
+| Target | Native CTest | Managed tests with native library | Full short campaign | Steady spectrum cadence |
+| --- | --- | --- | --- | --- |
+| Windows x64 | 7/7 | 135/135, no skips | 31.648 s | 19.492 frames/s |
+| macOS arm64 | 8/8 | 135/135, no skips | 33.293 s | 17.946 frames/s |
+| Linux x64 | 8/8 | 135/135, no skips | 36.192 s | 19.393 frames/s |
+
+Each short campaign includes ten seconds steady receive, a retune, all three
+fault phases and two reconnects. All phases pass. Native input overruns and DSP
+errors are zero throughout; socket errors occur only for deliberate peer loss
+(one per run), missing packets only in the loss phase (345/333/346 respectively),
+and audio drops only in the slow-reader phase (31,872/32,704/32,128). Simulator
+socket errors are zero in all three reports. STOP/disposal/rebind and no-TX
+checks pass. The existing 11-check DSP, receive audio/spectrum, 100-cycle CM and
+100-cycle transport CLIs also pass on every OS.
+
+The macOS short steady window records 237 simulator pacing resyncs, versus zero
+on Windows/Linux; host scheduling affects synthetic throughput and measured
+cadence. The bounded replay prevents large bursts without claiming a hardware
+sample clock or identical hosted-runner performance.
+
+The [Linux sanitizer job](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34167665438/job/101881835006)
+passes eight native CTests with ASan, UBSan and leak detection, without
+suppressions. These instrument native fixtures, not the .NET soak process.
+The [managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34167665425)
+passes on all three OSes: 114 tests pass and 21 native-dependent tests skip;
+the existing standalone simulator RX/virtual-TX self-tests pass. The legacy
+Windows-reference build remains opt-in and skipped.
+
+Local macOS passes 135 managed tests (109 Core, 26 Engine), with no skips or
+managed build warnings. The changed native test observers pass all eight CTests
+and eight local ASan/UBSan CTests; macOS LeakSanitizer is disabled. Deterministic
+clock-jump/high-rate regressions, independent fault allowances, strict CLI
+options, partial-report cancellation and observer-error cleanup are included.
+
+A fresh isolated **final-source ten-minute** campaign also passes: 600.003
+seconds steady / 637.535 seconds total, 39 retunes, all fault phases and ten
+reconnects. It consumes 28,800,000 stereo audio frames and 11,761 spectrum frames
+(19.610 produced frames/s, maximum read gap 420.602 ms), with 3200 audio and
+11,039 spectrum signal checks. Steady native error/loss/drop counters and
+simulator pacing resyncs are zero. Every phase passes shutdown/port-release
+checks, with the explicitly expected peer-loss exception; no unsafe request,
+watchdog stop or TX packet occurs.
+
+Its process CPU is 83.231 seconds / 13.872% of one core. Sampled steady RSS is
+1,260,912,640 → 1,274,429,440 bytes (peak 1,274,445,824); approximate managed live
+bytes are 1,039,968 → 1,014,560, with 541,166,560 allocated. Final reconnect RSS
+is 1,593,491,456 bytes, so macOS reconnect retention also merits profiling even
+though its increase is smaller than Linux's. Raw final-source report:
+`artifacts/receive-soak-20260907/bounded-report.json`. The separate earlier
+30-minute checkpoint below must not be conflated with this ten-minute run.
+
+### Completed local 30-minute checkpoint
+
+An isolated Release publish of managed runtime source `c755f191` passes on
+macOS 26.6.2 arm64, using the existing `BUILD_TESTING=OFF` native runtime build.
+This is **before** the Windows timer scope and final high-rate pacing follow-up
+described below; it is not a claim of a 30-minute run at the final revision.
+The complete command takes 1837.362 seconds, including 1800.003 seconds of
+steady observation, three fault phases and ten reconnects (14 phases total).
+
+| Steady-window measurement | Observed value |
+| --- | --- |
+| Retunes / settled signal checks | 119 retunes; 9598 audio and 33,111 spectrum checks |
+| Audio / spectrum consumed | 86,394,368 stereo audio frames; 35,285 spectrum frames |
+| Spectrum cadence / largest read gap | 19.607 produced frames/s; 411.249 ms, including retune settling |
+| CPU | 225.529 process CPU seconds; 12.529% of one logical core |
+| Sampled RSS baseline / final / peak | 1,260,584,960 / 1,275,576,320 / 1,275,576,320 bytes |
+| Approximate managed live bytes / allocation | 1,028,088 → 7,585,592 live; 1,605,566,760 allocated over the window |
+| Process threads / simulator pacing resyncs | 57 → 63 threads; six resyncs |
+
+Native socket/DSP errors, input overruns, missing/malformed/foreign/late packets
+and audio drops are zero during steady receive. The intentional loss phase
+records 346 missing packets; slow reading records 31,936 dropped audio frames
+and 19 coalesced spectrum frames; peer disappearance records its expected one
+socket error. All ten fresh reconnects pass their signal and clean-counter
+checks. Every native owner disposes and its port rebinds; STOP is observed for
+each live peer, and the disappeared peer records expected failure instead.
+No watchdog stop, unsafe request or TX packet occurs.
+
+Steady RSS rises about 14.3 MiB; the final reconnect ends at 1,375,502,336 bytes.
+These figures include .NET, simulator, harness and inherited native topology.
+They are not DSP-only CPU, calibrated latency, a forced-GC leak test, or a
+performance-budget pass. Native test builds ran briefly on the same host during
+the steady window; this is endurance evidence, not an isolated benchmark.
+The raw report is retained locally at
+`artifacts/receive-soak-20260907/paced-report.json` (ignored build artifact).
+
+### Failures found and corrected
 
 The first bounded-replay Windows run at `c755f191` passed native CTest and the
 offline lifecycle CLI but timed out in the audio smoke test before reaching the
 soak campaign. Coarse Windows timer waits are the suspected cause of insufficient
 sample throughput with the new small replay budget. A balanced, simulator-owned
-1 ms Windows timer request is being validated; deadlines and replay bounds are
-not relaxed. The audio timeout now includes counters for future diagnosis.
+1 ms Windows timer request restores passing receive/short-soak/integration tests
+in the [Windows job at 6abf24b5](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34166937632/job/101879742987).
+Deadlines and replay bounds are not relaxed. The audio timeout now includes
+counters for future diagnosis.
 
 The new [receive-soak campaign](RECEIVE_SOAK.md) exposed a simulator scheduling
 defect: after a host pause it replayed 32 packets before rebasing its clock.
@@ -32,7 +136,7 @@ ring, without the one-packet starvation. Clock-jump tests check the bound,
 contiguous sequences, phase continuity and continued progress under repeated
 coarse high-rate wakeups; ordinary small jitter still catches up normally.
 Resync counters remain visible; native overrun assertions, ring capacity and
-signal-measurement deadlines are unchanged. Final-source validation is pending.
+signal-measurement deadlines are unchanged. Final-source validation above passes.
 
 ### POSIX post-join OS thread observations
 
@@ -71,6 +175,9 @@ steady window (+13,201,408 bytes). The approximate managed heap remains small.
 The same runner's synchronous 100-cycle native CM fixture is nearly flat after
 warm-up (1,251,774,464 → 1,251,782,656 bytes); the managed offline lifecycle CLI
 also remains near its warm baseline (1,285,849,088 → 1,289,093,120 bytes).
+The final-source Linux short campaign at `bb463658` repeats the growth:
+1,253,744,640 bytes at its steady baseline → 6,445,420,544 bytes at the end of
+reconnect 2. The pacing fixes do not resolve this resource issue.
 
 This is **unresolved reconnect memory growth**, not a proven leak or harmless
 cache. Native fixture LeakSanitizer success does not qualify the asynchronous

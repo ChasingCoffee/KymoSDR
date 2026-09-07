@@ -181,6 +181,14 @@ resource use and fault/reconnect behavior, with short CI and opt-in long runs.
 This does not satisfy the hardware/P1 exit gate below; source-specific durations
 and results are recorded separately.
 
+The simulator endurance checkpoint now passes three-OS short CI, an earlier
+local 30-minute campaign and a final-source ten-minute/ten-reconnect campaign;
+see [exact sources and results](NATIVE_CI_RESULTS.md#simulator-backed-receive-endurance-and-fault-campaign).
+It exposed substantial RSS growth between asynchronous reconnect phases,
+especially on Linux. Profile allocation ownership/retention across reconnects
+before treating resource stability as qualified or advancing to desktop work.
+This follow-up does not authorize hardware streaming or transmit tests.
+
 - Add bounded `receive` operation to the CLI: select discovered radio/interface, start RX1 at one confirmed supported rate, tune, set mode/filter, read spectrum and stop.
 - Preserve G2-specific capability, routing and port handling. Do not treat all P2 boards as interchangeable. Compare control sequences and observable receive behavior with the Windows reference.
 - Choose the existing RX1 analyzer or additional-analyzer API after validating IDs, configuration and ownership. Expose renderer-independent frames with sequence, time, frequency/rate, scaling and calibration status.
