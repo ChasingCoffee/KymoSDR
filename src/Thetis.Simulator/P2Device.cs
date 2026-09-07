@@ -10,6 +10,7 @@ namespace Thetis.Simulator;
 internal sealed class P2Device
 {
     internal const int DdcCount = 10, SamplesPerPacket = 238, IqPacketSize = 1444;
+    private const int CatchUpPackets = 8;
     internal static readonly int[] SocketOffsets = [0, 1, 2, 3, 4, 5, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
     private static readonly (int Field, int Offset)[] PortFields = [(5, 1), (7, 2), (9, 3), (11, 1), (13, 4), (15, 5), (17, 11), (19, 2)];
     private readonly SimulatorOptions options;
@@ -179,8 +180,13 @@ internal sealed class P2Device
             var r = receivers[i];
             if (!r.Enabled) continue;
             double interval = SamplesPerPacket / (double)r.Rate;
+            // The synthetic clock is not hardware time. After a host pause,
+            // rebase BEFORE emitting data instead of replaying an oversized
+            // burst into the receiver (32 old packets exceeded the CM ring).
+            // Small timer jitter still catches up within a bounded budget.
+            if (now - r.Due >= CatchUpPackets * interval) { r.Due = now; ++pacingResyncs; }
             int batch = 0;
-            while (r.Due <= now && batch++ < 32 && running)
+            while (r.Due <= now && batch++ < CatchUpPackets && running)
             {
                 FillIq(r);
                 ++r.Ordinal;
@@ -190,8 +196,9 @@ internal sealed class P2Device
             }
             if (r.Due <= now) { r.Due = now + interval; ++pacingResyncs; }
         }
+        if (now - micDue >= CatchUpPackets * (64.0 / 48000)) { micDue = now; ++pacingResyncs; }
         int micBatch = 0;
-        while (running && micDue <= now && micBatch++ < 32)
+        while (running && micDue <= now && micBatch++ < CatchUpPackets)
         {
             BinaryPrimitives.WriteUInt32BigEndian(mic, micSequence++);
             send(2, mic, client!); ++micPackets; micDue += 64.0 / 48000;

@@ -1,5 +1,47 @@
 # Native cross-platform CI results
 
+## Receive-endurance qualification: fixes under validation
+
+The new [receive-soak campaign](RECEIVE_SOAK.md) exposed a simulator scheduling
+defect: after a host pause it replayed 32 packets before rebasing its clock.
+At 238 samples per packet, that 7616-sample burst exceeds the 6144-sample CM
+input ring. A local sustained run stopped at 676.05 seconds with eight input
+overruns and one simulator pacing resync; native socket/DSP errors, missing
+packets and audio drops remained zero. Cleanup still disposed both owners,
+observed STOP and rebound the native port. A deterministic 100 ms clock-jump
+test reproduces the 32-packet burst without sockets.
+
+The simulator now rebases **before** emitting an over-budget replay, with a
+maximum eight-packet catch-up for small jitter. The clock-jump regression now
+expects one packet, contiguous sequence numbers and continuous synthetic signal
+phase; another test retains normal small-jitter catch-up. Pacing resyncs remain
+visible in reports. Native input-overrun assertions and ring capacity are
+unchanged. A fresh 30-minute qualification and cross-platform CI are pending;
+the failed run is not endurance qualification.
+
+### POSIX post-join OS thread observations
+
+A separate Linux sanitizer lifecycle failure reported two process threads
+against a one-thread baseline after the native owned-worker count reached zero.
+There was no sanitizer diagnostic. Linux OS accounting, like the previously
+observed macOS case, need not be settled at the instant a join completes:
+[glibc 2.39's join implementation](https://github.com/bminor/glibc/blob/glibc-2.39/nptl/pthread_join_common.c)
+waits for the kernel to clear the thread ID. Linux v6.11 clears it and wakes the
+joiner in [mm_release](https://github.com/torvalds/linux/blob/v6.11/kernel/fork.c),
+called during `exit_mm`, before `exit_notify`/`release_task`/`__exit_signal`
+decrement `nr_threads` in [the exit path](https://github.com/torvalds/linux/blob/v6.11/kernel/exit.c).
+The [proc status implementation](https://github.com/torvalds/linux/blob/v6.11/fs/proc/array.c)
+uses that thread count. These pinned source versions explain the possible
+observation race; they are not a claim about the runner's exact kernel version.
+
+The test-only observation helper now also polls on Linux, at most 100 times
+with 1 ms requested sleeps, when the count initially exceeds its baseline.
+It does not replace any joins or immediate native ownership assertions. A
+1000-cycle plain no-op pthread probe checks successful joins, reports transient
+OS counts and requires settling after every cycle, without opening WDSP/CM.
+The existing deliberately held live-worker check must still detect that worker
+after the complete grace period. A persistent extra thread still fails.
+
 ## Renderer-independent P2 receive spectrum frames
 
 Validated source: `76b0d13a9e00b3f1bab13df8b3f48ede5d402302`, recorded

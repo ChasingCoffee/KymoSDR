@@ -52,6 +52,36 @@ public sealed class SimulatorProtocolTests
     }
 
     [TestMethod]
+    public void SchedulerStallRebasesBeforeSendingInsteadOfDumpingAReplayBurst()
+    {
+        var device = Device(); Configure(device, rate: 192000);
+        device.Tick(0, Capture); output.Clear();
+        device.Tick(0.1, Capture); // 100 ms host scheduling pause, within the control lease
+        var iq = output.Where(p => p.Port == 13).ToArray();
+        Assert.HasCount(1, iq);
+        Assert.AreEqual(1u, BinaryPrimitives.ReadUInt32BigEndian(iq[0].Data));
+        Assert.HasCount(1, output.Where(p => p.Port == 2));
+        Assert.AreEqual(2, device.Snapshot().PacingResyncs); // RX and mic clocks each rebased
+        Assert.AreEqual(0, device.Snapshot().InjectedDrops);
+        output.Clear(); device.Tick(0.1, Capture); Assert.IsEmpty(output);
+        device.Tick(0.1 + 238.0 / 192000 + 0.000001, Capture);
+        Assert.AreEqual(2u, BinaryPrimitives.ReadUInt32BigEndian(output.Single(p => p.Port == 13).Data));
+        // Rebase does not invent missing wire packets or advance synthetic signal time.
+        double phase = 2 * Math.PI * 1000 * (2 * 238) / 192000;
+        Assert.AreEqual(2097152 * Math.Cos(phase), Read24(output.Single(p => p.Port == 13).Data.AsSpan(16)), 1);
+    }
+
+    [TestMethod]
+    public void OrdinaryTimerJitterKeepsSampleCadenceWithinTheSmallBurstBudget()
+    {
+        var device = Device(); Configure(device, rate: 192000);
+        device.Tick(0, Capture); output.Clear();
+        device.Tick(0.008, Capture);
+        Assert.HasCount(6, output.Where(p => p.Port == 13));
+        Assert.AreEqual(0, device.Snapshot().PacingResyncs);
+    }
+
+    [TestMethod]
     public void DiscoveryHasDistinctSyntheticIdentityAndIsParsedByExistingClient()
     {
         var device = Device();
@@ -260,7 +290,7 @@ public sealed class SimulatorProtocolTests
     {
         var device = Device(new(BasePort: Port, LeaseTimeoutMilliseconds: 60000)); Configure(device, rate: 384000);
         device.Tick(10, Capture);
-        Assert.AreEqual(32, output.Count(p => p.Port == 13));
+        Assert.AreEqual(1, output.Count(p => p.Port == 13));
         Assert.IsTrue(device.Snapshot().PacingResyncs > 0);
     }
 }

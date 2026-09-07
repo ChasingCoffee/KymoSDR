@@ -166,9 +166,13 @@ a simulator safety/lifecycle policy, not an assertion of exact firmware timing.
 
 One joinable socket worker owns mutable protocol state and buffers. Receive
 batches and catch-up bursts are bounded, and cancellation joins before sockets
-are released. Host scheduler stalls increment `pacingResyncs` and rebase the
-wall-clock schedule without synthesizing extra sequence loss; this is not a
-hard-real-time radio clock. Public state is an immutable snapshot/copy.
+are released. Small timer jitter catches up by at most eight packets per DDC
+and eight microphone packets per tick. When a host pause exceeds that budget,
+the corresponding clock is rebased **before** sending, rather than replaying a
+large burst. Such rebases increment `pacingResyncs` without synthesizing sequence
+loss or advancing the tone through ungenerated samples. Sustained host stalls
+therefore reduce sample throughput versus wall time; this is not a hard-real-time
+radio clock. Public state is an immutable snapshot/copy.
 
 ## Identity and provenance
 

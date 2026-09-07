@@ -8,6 +8,24 @@ static double seconds(void) {
     return (double)t.tv_sec + t.tv_nsec * 1e-9;
 }
 static volatile LONG counter;
+static void *noop(void *unused) { return unused; }
+static void check_joined(int ceiling) {
+    int threads = test_process_threads_after_join(ceiling);
+    CHECK(threads > 0 && threads <= ceiling);
+}
+static void probe_join_accounting(int baseline) {
+    int transients = 0, tag = 42;
+    // No WDSP/CM session or thread adapter: isolate OS accounting after a join.
+    for (int i = 0; i < 1000; ++i) {
+        pthread_t worker; void *returned = NULL;
+        CHECK(pthread_create(&worker, NULL, noop, &tag) == 0);
+        CHECK(pthread_join(worker, &returned) == 0 && returned == &tag);
+        int immediate = test_process_threads(); CHECK(immediate > 0);
+        if (immediate > baseline) ++transients;
+        check_joined(baseline);
+    }
+    printf("No-op pthread probe: %d/1000 transient post-join OS counts; settled ceiling %d\n", transients, baseline);
+}
 static void count(void *unused) {
     (void)unused;
     for (int i = 0; i < 10000; ++i) InterlockedIncrement(&counter);
@@ -22,6 +40,7 @@ static DWORD queued_work(void *p) {
 }
 int main(void) {
     int baseline_threads = test_process_threads(); CHECK(baseline_threads > 0);
+    probe_join_accounting(baseline_threads);
     CHECK(sizeof(LONG) == 4 && sizeof(DWORD) == 4);
     volatile LONG bits = 8;
     CHECK(InterlockedBitTestAndSet(&bits, 3) == 1);
@@ -34,13 +53,13 @@ int main(void) {
     for (int i = 0; i < 4; ++i) threads[i] = wdsp_start_joinable(count, NULL);
     for (int i = 0; i < 4; ++i) wdsp_join(threads[i]);
     CHECK(counter == 40000);
-    CHECK(test_process_threads_after_join(baseline_threads) <= baseline_threads);
+    check_joined(baseline_threads);
     HANDLE held = CreateEvent(NULL, TRUE, FALSE, NULL);
     pthread_t held_worker = wdsp_start_joinable(wait_for_release, held);
     // The bounded observation helper must not hide a worker that is still alive.
     CHECK(test_process_threads_after_join(baseline_threads) > baseline_threads);
     CHECK(SetEvent(held)); wdsp_join(held_worker); CHECK(CloseHandle(held));
-    CHECK(test_process_threads_after_join(baseline_threads) <= baseline_threads);
+    check_joined(baseline_threads);
     void *p = _aligned_malloc(1001, 64);
     CHECK(p && ((uintptr_t)p % 64) == 0); _aligned_free(p);
     CRITICAL_SECTION cs;

@@ -111,6 +111,11 @@ frame-read gap, signal-check counts, native/simulator snapshots and cleanup flag
 - Simulator aggregate socket errors are retained, including replies racing
   native socket teardown. Native socket errors are forbidden during observation;
   only the explicit peer-disappearance check permits them after observation.
+- `pacingResyncs` records simulator clock rebases after host scheduling pauses.
+  The simulator limits catch-up to eight packets and rebases before sending when
+  farther behind; it does not dump a long replay burst into CM. Rebases can lower
+  wall-time throughput and remain visible; no native input-overrun allowance is
+  introduced to make such failures pass.
 
 State/loop bounds are checked, but there is no new native allocation-failure or
 hard real-time guarantee. A native crash or hung native constructor/destructor

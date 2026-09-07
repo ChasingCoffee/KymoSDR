@@ -9,12 +9,12 @@
 #include <Psapi.h>
 #elif defined(__APPLE__)
 #include <mach/mach.h>
-#include <time.h>
 #else
 #include <string.h>
 #endif
 #ifndef _WIN32
 #include <dirent.h>
+#include <time.h>
 #endif
 
 int test_process_descriptors(void)
@@ -67,11 +67,13 @@ int test_process_threads(void)
 int test_process_threads_after_join(int ceiling)
 {
     int count = test_process_threads();
-#ifdef __APPLE__
-    /* task_threads can briefly include an exited pthread even after a successful
-     * pthread_join. Reproduced with a no-op pthread and no WDSP/CM loaded. This
-     * is only a bounded OS-observation grace period; owner counters and real
-     * joins are still checked immediately. A live/leaked thread still fails. */
+#if defined(__APPLE__) || defined(__linux__)
+    /* OS accounting can briefly include an exited pthread after pthread_join:
+     * Mach task_threads on macOS; /proc's nr_threads on Linux, where the kernel
+     * clears child_tid before exit_notify/release_task decrements nr_threads.
+     * See docs/NATIVE_CI_RESULTS.md for source references and the isolated probe.
+     * This bounded observation grace period does not replace real joins or
+     * immediate zero owner counters. A held live worker must still be detected. */
     for (int attempt = 0; count > ceiling && attempt < 100; ++attempt)
     {
         struct timespec delay = {0, 1000000}; nanosleep(&delay, NULL);
