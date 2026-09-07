@@ -9,6 +9,22 @@ namespace Thetis.Core.Tests;
 public sealed class SimulatorSocketTests
 {
     [TestMethod]
+    public void AutomaticLayoutRetriesUnavailableWindowsPortsWithABoundedBudget()
+    {
+        foreach (bool windows in new[] { false, true })
+        {
+            Assert.IsTrue(G2Simulator.CanRetryLayout(0, 98, SocketError.AddressAlreadyInUse, windows));
+            Assert.AreEqual(windows, G2Simulator.CanRetryLayout(0, 0, SocketError.AccessDenied, windows));
+            foreach (var error in new[] { SocketError.AddressAlreadyInUse, SocketError.AccessDenied })
+            {
+                Assert.IsFalse(G2Simulator.CanRetryLayout(51024, 0, error, windows));
+                Assert.IsFalse(G2Simulator.CanRetryLayout(0, 99, error, windows));
+            }
+            Assert.IsFalse(G2Simulator.CanRetryLayout(0, 0, SocketError.NoBufferSpaceAvailable, windows));
+        }
+    }
+
+    [TestMethod]
     public async Task SelfTestUsesRealLoopbackDiscoveryControlsAndDdc2Samples()
     {
         var result = await SimulatorDiagnostics.RunAsync();

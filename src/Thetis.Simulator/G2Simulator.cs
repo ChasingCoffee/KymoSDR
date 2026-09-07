@@ -39,6 +39,7 @@ public sealed class G2Simulator : IAsyncDisposable
         options ??= new(); options.Validate(); cancellationToken.ThrowIfCancellationRequested();
         for (int attempt = 0; ; ++attempt)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             int port = options.BasePort == 0 ? Random.Shared.Next(20000, 60000) : options.BasePort;
             var bound = new Dictionary<int, Socket>();
             try
@@ -55,11 +56,18 @@ public sealed class G2Simulator : IAsyncDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 return new(options with { BasePort = port }, bound, cancellationToken);
             }
-            catch (SocketException ex) when (options.BasePort == 0 && attempt < 99 && ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+            catch (SocketException ex) when (CanRetryLayout(options.BasePort, attempt, ex.SocketErrorCode, OperatingSystem.IsWindows()))
             { foreach (var socket in bound.Values) socket.Dispose(); }
             catch { foreach (var socket in bound.Values) socket.Dispose(); throw; }
         }
     }
+
+    // Winsock can report WSAEACCES for an unavailable/exclusively reserved port,
+    // not just WSAEADDRINUSE. Only automatic layout selection may try another;
+    // never change OS reservations, relax exclusive binding or relocate a fixed port.
+    internal static bool CanRetryLayout(int requestedPort, int attempt, SocketError error, bool isWindows) =>
+        requestedPort == 0 && attempt < 99 && (error == SocketError.AddressAlreadyInUse ||
+            (isWindows && error == SocketError.AccessDenied));
 
     private void Run()
     {

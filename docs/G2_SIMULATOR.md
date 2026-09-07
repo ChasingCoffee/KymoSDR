@@ -42,6 +42,9 @@ duration, `serve` stops after 300 seconds; `--duration-seconds 0` runs until
 cancelled. `--base-port 0` chooses a free layout and reports it in the ready
 JSON event. `--base-port 1024` uses standard P2 ports. A port conflict is an
 error, not permission to share or take over another process's sockets.
+Automatic selection retries up to 100 layouts, including Windows access-denied
+port conflicts/reservations. Explicit ports still fail; no OS reservation or
+firewall settings are changed. See [Winsock bind error semantics](https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2).
 
 Example signal/fault settings:
 
@@ -129,7 +132,7 @@ P1 `hpsdrsim` remains a separate independent tool.
 
 ## Validation and limits
 
-Local macOS passes 94 managed tests (including existing native integration
+Local macOS passes 95 managed tests (including existing native integration
 checks). Simulator tests include literal header/signed-sample checks, analytic
 tone phase across packet boundaries, four rates, multiple DDCs, seeded noise,
 drops, malformed/unsupported controls, ownership/watchdog/reconnect, real
