@@ -1,5 +1,48 @@
 # Native cross-platform CI results
 
+## Reconnect allocation-thread fix
+
+Validated source: `63484307e5e492f798c12642bd71cad79985efc4`, recorded
+2026-09-07. Full P2/offline native topology open/close now runs on one persistent
+engine lifecycle thread, including SafeHandle fallback cleanup. This corrects
+the observed Linux allocator amplification when asynchronous reconnects change
+API caller threads. Audio/spectrum reads and tuning retain their existing paths;
+no native destructor, DSP buffer size or production allocator setting changes.
+See [diagnosis, ownership contract and exact memory results](RECONNECT_MEMORY.md).
+
+The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34169904861)
+passes at this source:
+
+| Target | Native CTest | Managed tests with native library | Short receive/fault campaign | Final reconnect RSS |
+| --- | --- | --- | --- | --- |
+| Windows x64 | 7/7 | 139/139, no skips | 32.189 s, all six phases pass | 1,248,714,752 bytes |
+| macOS arm64 | 8/8 | 139/139, no skips | 32.754 s, all six phases pass | 1,273,921,536 bytes |
+| Linux x64 | 8/8 | 139/139, no skips | 34.395 s, all six phases pass | 1,322,430,464 bytes |
+
+Linux's previous final reconnect RSS was 6,445,420,544 bytes at `bb463658`.
+Fresh-process 20-cycle async and six-caller rotating regressions now pass the
+new fixed-topology guards: closed allocator-used growth ≤32 MiB above baseline,
+and post-cycle-3 RSS/reserved growth ≤128 MiB. Actual worst rotating-caller
+growth is 15,204,352 RSS bytes / 180,224 reserved bytes; used growth above
+baseline is 3,200,448 bytes. No trim, forced GC or allocator override is used.
+The large native allocations are freed on close and reused on subsequent opens.
+
+The 11-check DSP, receive audio/spectrum, 100-cycle CM and 100-cycle transport
+CLIs pass on every OS. The Linux sanitizer job passes eight native tests with
+ASan/UBSan/LeakSanitizer, without suppressions; it does not instrument the .NET
+probe. The [managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34169904845)
+also passes all three OSes: 117 pass / 22 native-dependent skips. The opt-in
+legacy Windows-reference build is still skipped.
+
+Local macOS passes all 139 tests, a 20-cycle six-caller allocator probe, and a
+120-second steady receive / twenty-reconnect fault campaign (24 passing phases,
+180.178 seconds total). The latter ends at 1,518,551,040 bytes RSS, so this is
+**not** a claim of zero macOS allocator retention or a reduced full-topology
+footprint. The earlier 10-/30-minute checkpoints below are historical sources,
+not new long-duration runs of this fix. Desktop resource budgets, P1 and real
+hardware RX remain unqualified. All streaming validation here is owned loopback
+receive only; no physical radio or hardware TX was exercised.
+
 ## Simulator-backed receive endurance and fault campaign
 
 The [campaign](RECEIVE_SOAK.md) now covers sustained receive, repeated retuning,
@@ -7,8 +50,9 @@ packet loss, bounded slow-reader behavior, peer disappearance and same-layout
 reconnects. Every peer is owned IPv4 loopback; the campaign has no TX, hardware,
 audio-device or UI path. No native runtime code changed in this checkpoint.
 Validated implementation source: `bb463658f39c86004f5b55e1a91afabb5fd4eb68`,
-recorded 2026-09-07. The harness and finite functional checks pass; reconnect
-memory remains an open resource-qualification issue, especially on Linux.
+recorded 2026-09-07. At this earlier checkpoint the harness and finite functional
+checks pass, but reconnect memory remains open. The allocation-thread fix above
+supersedes that finding; the measurements below are preserved as historical evidence.
 
 ### Final-source CI and local regression
 
@@ -167,6 +211,11 @@ tests with ASan, UBSan and leak detection enabled, without suppressions.
 
 ### Open follow-up: Linux reconnect memory
 
+**Historical status at `bb463658`:** the follow-up described here is addressed
+by the [allocation-thread fix and measured regressions](RECONNECT_MEMORY.md).
+General desktop resource qualification and macOS allocator retention remain
+separate limits; the paragraphs below document why the investigation was needed.
+
 The short campaign at `c755f191` passes its signal, fault and cleanup checks on
 Linux, but its process RSS increases from 1,255,747,584 bytes at the steady
 baseline to 6,445,428,736 bytes at the end of the second reconnect. Most of that
@@ -179,16 +228,16 @@ The final-source Linux short campaign at `bb463658` repeats the growth:
 1,253,744,640 bytes at its steady baseline → 6,445,420,544 bytes at the end of
 reconnect 2. The pacing fixes do not resolve this resource issue.
 
-This is **unresolved reconnect memory growth**, not a proven leak or harmless
+At that checkpoint this was **unresolved reconnect memory growth**, not a proven leak or harmless
 cache. Native fixture LeakSanitizer success does not qualify the asynchronous
 managed campaign's memory behavior. Allocator arena reuse and allocation/free
 thread placement are hypotheses to compare with retained live native blocks;
 [glibc's allocator controls](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html)
 provide diagnostic levers, not an established fix. No allocator override,
 forced trim/GC, topology reduction or memory-limit relaxation was added.
-Profile repeated asynchronous open/close before treating long Linux reconnect
-runs as memory-qualified; opt-in runs can require substantially more memory
-than one steady session. This is the next resource-qualification task.
+That evidence prompted the isolated allocator/thread-placement experiment and
+subsequent fix above. It did not justify treating native leak checks alone as
+memory qualification for the asynchronous managed campaign.
 
 ## Renderer-independent P2 receive spectrum frames
 

@@ -3,8 +3,8 @@
 The receive endurance campaign exposed growing RSS between reconnect phases,
 especially on Linux. RSS alone cannot distinguish live allocations from unused
 space retained by an allocator. The engine now places full native topology
-open/close on one process-lifetime lifecycle thread. Cross-platform validation
-of that fix is in progress; the baseline evidence is recorded below.
+open/close on one process-lifetime lifecycle thread. The Linux allocator and
+receive-campaign regressions pass; exact measurements are recorded below.
 
 ## Fix and lifetime contract
 
@@ -108,3 +108,60 @@ Signal/lifecycle, no-TX and port-release checks still apply independently.
 `--check-linux-budget` requires Linux and at least six cycles; it cannot be
 combined with the diagnostic trim option. macOS/Windows memory observations
 remain diagnostic rather than inheriting glibc-specific thresholds.
+
+## Fixed-source Linux measurements
+
+The [Linux job at 63484307](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34169904861/job/101888090317)
+passes all native/managed/CLI checks and both memory guards:
+
+| Probe | Cycles | Closed used range (bytes) | Largest post-warmup RSS growth | Largest post-warmup reserved growth | Final closed RSS |
+| --- | --- | --- | --- | --- | --- |
+| Async callers | 20 | 3,028,864–8,918,112 | 14,983,168 | 208,896 | 1,320,951,808 |
+| Six rotating callers | 20 | 3,302,096–9,144,976 | 15,204,352 | 180,224 | 1,321,902,080 |
+
+The rotating test observes six distinct persistent probe caller threads. Used
+growth above the process baseline is at most 3,200,448 bytes, below the 32 MiB
+guard; reserved/RSS growth is well below the unchanged 128 MiB guard. The
+synchronous six-cycle reference also passes (final RSS 1,309,986,816). No
+allocator trim, forced GC or allocator-setting override is used.
+
+The ordinary six-phase receive/fault campaign passes in 34.395 seconds, with
+two reconnects. Its RSS is 1,253,605,376 at the initial steady baseline and
+1,322,430,464 at the final reconnect, versus 6,445,420,544 at the same final
+phase before the fix (`bb463658`). This is evidence that the observed Linux
+reconnect amplification is corrected, not that the approximately 1.2 GB native
+topology or all process-wide allocator retention has been eliminated.
+
+## Local fixed-source validation
+
+At `63484307`, macOS 26.6.2 arm64 builds without warnings and passes 139
+managed tests with the existing `BUILD_TESTING=OFF` native runtime (109 Core,
+30 Engine). The 30 Engine tests also pass after rebuilding the final ephemeral
+port fixture. New tests cover single-thread/reentrant dispatch, exception
+propagation, gate inversion rejection, execution-context/last-work retention,
+and alternating offline/P2 startup from different callers. Existing cancellation,
+rollback, concurrent disposal and abandoned SafeHandle tests still pass. The
+context-retention test also passes alone in a fresh process, exercising initial
+worker startup with a populated caller context.
+
+The `hopping 20` probe passes in 30.783 seconds. Six distinct probe callers are
+observed. Closed allocator-used bytes stay between 3,513,072 and 8,211,248;
+RSS at cycle 3 close is 1,307,918,336 and cycle 20 close is 1,342,439,424.
+No trim/forced GC is used. Raw report:
+`artifacts/reconnect-memory-fixed-hopping.json` (ignored local artifact).
+
+A separate receive-soak passes 120.001 seconds steady / 180.178 seconds total,
+seven retunes, all three fault phases and twenty reconnects (24 passing phases).
+Steady counters show zero native errors/overruns/loss/drops and zero simulator
+pacing resyncs, 5,759,936 stereo frames read and 19.658 produced spectrum
+frames/s. Every phase disposes and rebinds; STOP/no-watchdog/no-TX checks pass,
+with the deliberate disappeared-peer exception. Raw report:
+`artifacts/receive-soak-reconnect-fixed.json`.
+
+Steady RSS is 1,261,191,168 → 1,273,479,168 bytes; reconnect 20 ends at
+1,518,551,040 bytes, including a roughly 185 MiB step at reconnect 9. The
+allocator-probe results do **not** establish zero macOS retention or a portable
+RSS plateau. The fix targets allocation-thread amplification, especially glibc;
+full topology footprint and longer desktop resource budgets remain separate
+qualification work. Local regressions overlapped the steady phase, so CPU and
+timing observations are not an isolated benchmark.

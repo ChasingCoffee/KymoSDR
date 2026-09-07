@@ -128,9 +128,12 @@ The short campaign, input/error policy tests and real cancellation/observer-erro
 cleanup tests supplement the existing receive regressions. Source-specific
 platform and long-run results are recorded in [CI results](NATIVE_CI_RESULTS.md).
 The first Linux short run exposed substantial RSS growth between reconnect
-phases despite passing native leak checks; see the [open memory investigation](NATIVE_CI_RESULTS.md#open-follow-up-linux-reconnect-memory).
-Long Linux reconnect campaigns can need much more memory than a steady session;
-the optional long mode is not a claim of memory qualification.
+phases despite passing native leak checks. The [allocation-thread fix and
+regression guards](RECONNECT_MEMORY.md) correct that amplification: the short
+Linux campaign now ends at 1.32 GB rather than 6.45 GB RSS, and two 20-cycle
+allocator probes pass without forced GC/trim. The inherited topology footprint,
+macOS allocator retention and desktop resource budgets remain separate work;
+the optional long mode is not a blanket claim of memory qualification.
 Simulator endurance is not live-radio qualification or completion of M4: P1
 streaming, real G2 RX, Windows-reference comparisons and hardware performance
 checks remain pending. Desktop/audio output and native TX integration remain

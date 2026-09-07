@@ -185,8 +185,12 @@ The simulator endurance checkpoint now passes three-OS short CI, an earlier
 local 30-minute campaign and a final-source ten-minute/ten-reconnect campaign;
 see [exact sources and results](NATIVE_CI_RESULTS.md#simulator-backed-receive-endurance-and-fault-campaign).
 It exposed substantial RSS growth between asynchronous reconnect phases,
-especially on Linux. Profile allocation ownership/retention across reconnects
-before treating resource stability as qualified or advancing to desktop work.
+especially on Linux. The [allocation-thread fix](RECONNECT_MEMORY.md) now passes
+three-OS regression CI and Linux 20-cycle async/six-caller memory guards; the
+short Linux campaign ends at 1.32 GB RSS instead of 6.45 GB. The inherited full
+topology footprint, macOS allocator retention and longer desktop resource
+budgets remain separate qualification work. The specific Linux amplification
+blocker is addressed; this does not satisfy the broader M4 hardware/P1 gate.
 This follow-up does not authorize hardware streaming or transmit tests.
 
 - Add bounded `receive` operation to the CLI: select discovered radio/interface, start RX1 at one confirmed supported rate, tune, set mode/filter, read spectrum and stop.
