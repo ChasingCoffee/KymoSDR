@@ -1,5 +1,69 @@
 # Native cross-platform CI results
 
+## Renderer-independent P2 receive spectrum frames
+
+Validated source: `76b0d13a9e00b3f1bab13df8b3f48ede5d402302`, recorded
+2026-09-07. The existing loopback receive session now publishes spectrum frames
+from CM RX0's pre-demodulation input using its existing WDSP analyzer. See the
+[frame contract](P2_RECEIVE_INTEGRATION.md#spectrum-frame-contract) for ownership,
+frequency-axis mapping, tuning-generation semantics and uncalibrated units.
+No renderer, audio device, physical radio or native TX path is exercised.
+
+The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34161509656)
+passes on all three OSes:
+
+| Target | Native CTest | Managed tests with native library | Receive CLI audio before / after tuning |
+| --- | --- | --- | --- |
+| Windows x64 | 7/7 | 121/121, no skips | 998.31 / 1500.17 Hz |
+| macOS arm64 | 8/8 | 121/121, no skips | 998.28 / 1500.17 Hz |
+| Linux x64 | 8/8 | 121/121, no skips | 996.22 / 1500.18 Hz |
+
+All three CLI runs report the same spectrum peak offsets (+984.375 / +1500 Hz),
+RF positions and levels listed below. Sequence and tuning generation advance;
+native socket/DSP errors, CM input overruns, audio drops and the simulator's
+aggregate socket errors are zero in these runs. STOP and no-TX assertions pass.
+The [Linux sanitizer job](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34161509656/job/101864137152)
+passes all eight native tests with ASan, UBSan and leak detection enabled,
+including active UDP/CM/WDSP spectrum processing. No suppressions were added.
+The existing 11-check DSP and 100-cycle CM/transport CLIs also pass on each OS.
+
+The [managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34161509556)
+passes on all three OSes: 102 tests pass, 19 native-dependent tests skip, and
+standalone simulator RX/TX self-tests pass. The legacy Windows-reference build
+remains an opt-in, skipped job; this is not legacy application parity evidence.
+
+Local macOS arm64 validation passes:
+
+- Release build with no managed warnings; 121/121 managed tests (97 Core, 24
+  Engine), with no skips; eight native CTests and eight ASan/UBSan CTests.
+- The receive CLI's schema-2 spectrum peaks are +984.375 Hz and +1500 Hz for
+  expected +1 kHz/+1.5 kHz offsets; bin spacing is 46.875 Hz. Peak RF frequencies
+  are 14,199,984.375 and 14,200,000 Hz, within one bin of the 14.200 MHz tone.
+  Levels are -12.67 and -12.04 uncalibrated dB for 0.25-amplitude I/Q. Sequence
+  advances across retuning and generation changes from 1 to 2. Audio remains
+  approximately 1/1.5 kHz and RMS 0.17678. Native socket/DSP/input-overrun/audio-drop
+  counters are zero, STOP is observed and simulator PTT/TX remain off/zero.
+- All four input rates (48/96/192/384 kHz), DDC selection, rapid retuning to a
+  negative offset, copied-frame lifetime, slow readers, concurrent disposal,
+  cancellation/rollback and SafeHandle cleanup remain covered.
+- The native fixture checks coherent positive/negative/DC/edge tones, zero input,
+  exact FFT bin mapping and level scaling, ABI capacity/canaries, coalescing and
+  pending-frame invalidation on tune. Three active packet/audio/spectrum cycles
+  close with no remaining owned workers or OS-thread growth.
+- A separate `leaks --atExit` scan reports zero leaks after the active fixture;
+  detailed inspection is security-limited. The macOS sanitizer run disables
+  LeakSanitizer; the independent leaks scan is separate evidence.
+- A `BUILD_TESTING=OFF` native build passes the complete audio/spectrum CLI.
+  Actual Ctrl-C during streaming exits 130 after both owners are disposed.
+
+The analyzer runs synchronously on the joined CM worker using existing WDSP
+kernels, without additional async FFT workers or a managed DSP rewrite. The
+4095-pixel axis deliberately accounts for WDSP omitting the negative Nyquist
+bin; the new signed/DC/edge-bin fixture catches off-by-one mapping errors.
+This is finite simulator qualification, not M4 completion: P1, hardware RX,
+reference parity and long-run performance/latency budgets remain outstanding.
+Earlier records below describe their original source and scope.
+
 ## P2 simulator → native ChannelMaster/WDSP receive
 
 Validated source: `aa124b5ebca90ec5b2256404931f94f884cbc58d`, recorded 2026-09-07.
