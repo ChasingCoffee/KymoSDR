@@ -136,9 +136,29 @@ Local macOS passes 95 managed tests (including existing native integration
 checks). Simulator tests include literal header/signed-sample checks, analytic
 tone phase across packet boundaries, four rates, multiple DDCs, seeded noise,
 drops, malformed/unsupported controls, ownership/watchdog/reconnect, real
-discovery, active/idle cancellation, partial bind rollback and 100 open/dispose/
-port-rebind cycles. Hosted qualification is pending; the managed CI workflow
-now also runs the standalone simulator CLI without any native library present.
+discovery, active/idle cancellation, partial bind rollback, bounded automatic
+port selection and 100 open/dispose/port-rebind cycles. Twenty consecutive local
+CLI self-tests also pass; each receives at least 100 I/Q packets. A separate
+headless discovery process finds the simulator, and real Ctrl-C exits 130 after
+the worker and sockets close.
+
+Validated source: `acc1638fd06a5ed6b3ed0c5ec04950b60e8fe4cf`, recorded 2026-09-07.
+The [managed CI workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34153221191)
+passes on Windows x64, macOS arm64 and Linux x64: 83 tests pass and the 12
+native-only checks skip as expected. Each runner also passes the standalone
+simulator CLI with 100 sequenced DDC2 I/Q packets, mic silence and status. No
+native library is present in that workflow. The
+[native regression workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34153221164)
+also passes on all three OSes: 95 managed tests with no skips, the existing
+native/CLI DSP and lifecycle tests, and all six Linux sanitizer tests. See the
+[native regression record](NATIVE_CI_RESULTS.md). These are separate simulator
+and offline engine tests, not a simulator-to-native-P2-to-WDSP integration test.
+
+The [first Windows run](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34152892095/job/101838642085)
+exposed Winsock access-denied during random layout allocation. Automatic
+selection now retries unavailable Windows layouts after disposing every partial
+bind; fixed layouts still fail and the 100-attempt ceiling is tested. The
+superseded native workflow was cancelled once the corrected revision started.
 
 This enables packet and engine development without the G2. It cannot qualify
 RF behavior, calibration, antenna relays, ADC differences, FPGA quirks, true

@@ -1,5 +1,32 @@
 # Native cross-platform CI results
 
+## G2 simulator checkpoint — existing native regressions
+
+Validated source: `acc1638fd06a5ed6b3ed0c5ec04950b60e8fe4cf`, recorded 2026-09-07.
+The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34153221164)
+passes after adding the standalone managed G2/P2 receive simulator. No native
+implementation changed in this checkpoint.
+
+| Target | Native CTest | Managed tests with native library | Existing DSP / lifecycle CLIs |
+| --- | --- | --- | --- |
+| Windows x64 | 5/5 | 95/95, no skips | 11 DSP checks; 100 CM and 100 transport cycles pass |
+| macOS arm64 | 6/6 | 95/95, no skips | 11 DSP checks; 100 CM and 100 transport cycles pass |
+| Linux x64 | 6/6 | 95/95, no skips | 11 DSP checks; 100 CM and 100 transport cycles pass |
+
+The [Linux sanitizer job](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34153221164/job/101839603325)
+also passes all six existing native tests with ASan/UBSan and leak detection.
+The [managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34153221191)
+passes on all three OSes: 83 tests pass, 12 native-only checks skip, and each
+standalone simulator CLI receives 100 sequenced I/Q packets plus mic silence and
+status without a native library.
+
+The simulator's scope, local repeatability checks and Windows port-allocation
+fix are recorded in [G2 simulator validation](G2_SIMULATOR.md). Simulator sockets
+and all test clients are loopback-only; no G2, LAN peer, audio device or transmit
+path was exercised. The native P2 packet parser is not connected to this peer
+yet. These results preserve the M3a/M3b boundaries below rather than establishing
+a working native radio receive path.
+
 ## M3b checkpoint — RNet and loopback socket lifecycle
 
 Validated source: `21f7203de38c3c9576cf7f91a6d5d2a80a922d1c`, recorded
