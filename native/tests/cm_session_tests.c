@@ -8,6 +8,7 @@ extern void destroy_impulse_cache(void);
 extern void ThetisWdspSetPlanningTimeLimit(double);
 extern int StartAudioIVAC(int);
 extern int test_process_threads(void);
+extern int test_process_threads_after_join(int);
 extern uint64_t test_resident_bytes(void);
 static int baseline_threads;
 static int last_threads;
@@ -24,7 +25,7 @@ static void closed(void)
     int32_t state[17] = {0}; state[16] = 12345;
     CHECK(ThetisCmGetState(state, 16) == 16);
     CHECK(state[0] == 1 && state[1] == 0 && state[2] == 0 && state[10] == 0 && state[16] == 12345);
-    int threads = test_process_threads();
+    int threads = test_process_threads_after_join(baseline_threads);
     if (threads != last_threads)
         printf("Process threads after close: %d (startup ceiling %d, previous %d)\n", threads, baseline_threads, last_threads);
     last_threads = threads;

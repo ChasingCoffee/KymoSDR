@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "wdsp_platform.h"
+extern int test_process_threads(void);
+extern int test_process_threads_after_join(int);
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "Failed: %s at %d\n", #x, __LINE__); exit(1); } } while (0)
 static double seconds(void) {
     struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
@@ -11,6 +13,7 @@ static void count(void *unused) {
     for (int i = 0; i < 10000; ++i) InterlockedIncrement(&counter);
 }
 static void release_later(void *p) { Sleep(20); CHECK(ReleaseSemaphore(p, 1, NULL)); }
+static void wait_for_release(void *p) { CHECK(WaitForSingleObject(p, INFINITE) == WAIT_OBJECT_0); }
 struct queued { HANDLE gate, done; };
 static DWORD queued_work(void *p) {
     struct queued *q = p;
@@ -18,6 +21,7 @@ static DWORD queued_work(void *p) {
     CHECK(SetEvent(q->done)); return 0;
 }
 int main(void) {
+    int baseline_threads = test_process_threads(); CHECK(baseline_threads > 0);
     CHECK(sizeof(LONG) == 4 && sizeof(DWORD) == 4);
     volatile LONG bits = 8;
     CHECK(InterlockedBitTestAndSet(&bits, 3) == 1);
@@ -30,6 +34,13 @@ int main(void) {
     for (int i = 0; i < 4; ++i) threads[i] = wdsp_start_joinable(count, NULL);
     for (int i = 0; i < 4; ++i) wdsp_join(threads[i]);
     CHECK(counter == 40000);
+    CHECK(test_process_threads_after_join(baseline_threads) <= baseline_threads);
+    HANDLE held = CreateEvent(NULL, TRUE, FALSE, NULL);
+    pthread_t held_worker = wdsp_start_joinable(wait_for_release, held);
+    // The bounded observation helper must not hide a worker that is still alive.
+    CHECK(test_process_threads_after_join(baseline_threads) > baseline_threads);
+    CHECK(SetEvent(held)); wdsp_join(held_worker); CHECK(CloseHandle(held));
+    CHECK(test_process_threads_after_join(baseline_threads) <= baseline_threads);
     void *p = _aligned_malloc(1001, 64);
     CHECK(p && ((uintptr_t)p % 64) == 0); _aligned_free(p);
     CRITICAL_SECTION cs;

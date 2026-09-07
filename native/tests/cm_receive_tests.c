@@ -20,6 +20,7 @@ extern void destroy_impulse_cache(void);
 extern void ThetisWdspSetPlanningTimeLimit(double);
 extern int ThetisTestCMInputRing(void);
 extern int test_process_threads(void);
+extern int test_process_threads_after_join(int);
 extern int test_peer_send(cm_socket, int, const void *, int);
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "Failed: %s at %d\n", #x, __LINE__); exit(1); } } while (0)
 static int baseline;
@@ -31,7 +32,8 @@ static void closed(void)
     CHECK(state[0] == 1 && state[1] == 0 && state[2] == 0 && state[6] == 0 && state[22] == 1 && state[23] == 0);
     CHECK(ThetisCmGetState(core, 16) == 16 && core[1] == 0 && core[10] == 0);
     CHECK(ThetisTransportGetState(transport, 16) == 16 && transport[7] == 0 && transport[2] == 0);
-    CHECK(test_process_threads() > 0 && test_process_threads() <= baseline);
+    int threads = test_process_threads_after_join(baseline);
+    CHECK(threads > 0 && threads <= baseline);
 }
 static int checkpoint(int stage, void *context)
 {

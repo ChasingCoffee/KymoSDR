@@ -116,6 +116,12 @@ decoder/routing/DSP work is instrumented. Existing 100-cycle offline CM/probe
 tests remain separate. See [the CI validation record](NATIVE_CI_RESULTS.md) for
 source-specific platform results; these are finite tests, not soak qualification.
 
+macOS's `task_threads` can temporarily count an exited pthread after a successful
+join (also reproduced with a no-op pthread, without WDSP/CM). OS thread-count
+assertions therefore poll at most 100 times with 1 ms sleeps when above the
+baseline. Joined-owner counters must still be zero immediately. A platform test
+holds a real worker alive to verify that this observation helper does not hide it.
+
 Next: expose advancing spectrum frames from the existing RX analyzer and feed
 them through this same simulated receive session. Still pending: P1 receive,
 multi-DDC/multi-RX and rate changes while running, native TX-to-simulator

@@ -9,6 +9,7 @@
 #include <Psapi.h>
 #elif defined(__APPLE__)
 #include <mach/mach.h>
+#include <time.h>
 #else
 #include <string.h>
 #endif
@@ -62,6 +63,24 @@ int test_process_threads(void)
     fclose(file);
     return count;
 #endif
+}
+int test_process_threads_after_join(int ceiling)
+{
+    int count = test_process_threads();
+#ifdef __APPLE__
+    /* task_threads can briefly include an exited pthread even after a successful
+     * pthread_join. Reproduced with a no-op pthread and no WDSP/CM loaded. This
+     * is only a bounded OS-observation grace period; owner counters and real
+     * joins are still checked immediately. A live/leaked thread still fails. */
+    for (int attempt = 0; count > ceiling && attempt < 100; ++attempt)
+    {
+        struct timespec delay = {0, 1000000}; nanosleep(&delay, NULL);
+        count = test_process_threads();
+    }
+#else
+    (void)ceiling;
+#endif
+    return count;
 }
 uint64_t test_resident_bytes(void)
 {

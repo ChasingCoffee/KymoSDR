@@ -10,6 +10,7 @@
 #endif
 extern int test_peer_send(cm_socket, int, const void *, int);
 extern int test_process_threads(void);
+extern int test_process_threads_after_join(int);
 extern int test_process_descriptors(void);
 extern uint64_t test_resident_bytes(void);
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "Failed: %s at %d\n", #x, __LINE__); exit(1); } } while (0)
@@ -113,7 +114,7 @@ int main(void)
             CHECK(warm_threads > 0 && warm_descriptors > 0);
         }
     }
-    int final_threads = test_process_threads(), final_descriptors = test_process_descriptors();
+    int final_threads = test_process_threads_after_join(warm_threads), final_descriptors = test_process_descriptors();
     printf("Threads warm/final: %d/%d; descriptors or Windows handles: %d/%d; resident bytes: %llu/%llu\n",
         warm_threads, final_threads, warm_descriptors, final_descriptors,
         (unsigned long long)warm_bytes, (unsigned long long)test_resident_bytes());
