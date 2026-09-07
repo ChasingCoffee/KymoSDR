@@ -9,4 +9,7 @@
     <Project Path="tests/Thetis.Core.Tests/Thetis.Core.Tests.csproj" />
     <Project Path="tests/Thetis.Engine.Tests/Thetis.Engine.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Thetis.MemoryProbe/Thetis.MemoryProbe.csproj" />
+  </Folder>
 </Solution>
