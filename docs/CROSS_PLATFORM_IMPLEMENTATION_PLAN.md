@@ -175,8 +175,11 @@ remain outside this checkpoint.
 Initial progress: `receive-selftest` recovers and retunes USB audio from its own
 loopback G2 simulator through native CM/WDSP, and now verifies advancing RX
 spectrum frames with signed frequency mapping and tuning-generation metadata.
-The frame API is renderer-independent, bounded and uncalibrated. This does not
-satisfy the hardware/P1/soak exit gate below.
+The frame API is renderer-independent, bounded and uncalibrated. A separate
+[receive-soak campaign](RECEIVE_SOAK.md) now measures sustained simulated receive,
+resource use and fault/reconnect behavior, with short CI and opt-in long runs.
+This does not satisfy the hardware/P1 exit gate below; source-specific durations
+and results are recorded separately.
 
 - Add bounded `receive` operation to the CLI: select discovered radio/interface, start RX1 at one confirmed supported rate, tune, set mode/filter, read spectrum and stop.
 - Preserve G2-specific capability, routing and port handling. Do not treat all P2 boards as interchangeable. Compare control sequences and observable receive behavior with the Windows reference.

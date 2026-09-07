@@ -183,7 +183,11 @@ baseline. Joined-owner counters must still be zero immediately. A platform test
 holds a real worker alive to verify that this observation helper does not hide it.
 
 Advancing renderer-independent spectrum frames are now exposed through this
-same simulated receive session. Still pending: P1 receive,
+same simulated receive session. The [receive endurance campaign](RECEIVE_SOAK.md)
+adds sustained observation, resource/cadence reporting and isolated loss,
+slow-reader, peer-disappearance and reconnect scenarios. Its long mode is opt-in;
+see the validation record for the durations actually qualified on each OS.
+Still pending: P1 receive,
 multi-DDC/multi-RX and rate changes while running, native TX-to-simulator
 integration, audio devices/UI/VSTs, firmware/Windows-reference comparisons,
 long-run CPU/memory/latency budgets and explicitly authorized live G2 RX.

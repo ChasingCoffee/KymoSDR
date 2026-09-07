@@ -93,6 +93,12 @@ spectrum measurements. It does not play audio, draw a UI or use TX.
 See [receive integration](P2_RECEIVE_INTEGRATION.md) for the command, frame API,
 uncalibrated spectrum units, counters and remaining hardware/soak gates.
 
+For sustained receive plus packet-loss, slow-reader, peer-failure and reconnect
+checks, use `receive-soak --native-dir ABSOLUTE_NATIVE_STAGE_DIRECTORY`.
+Add `--duration-seconds 1800 --reconnects 10` for a 30-minute steady window.
+See [endurance instructions and report semantics](RECEIVE_SOAK.md); progress is
+on stderr and the final or partial JSON report is on stdout. Hardware/TX stay off.
+
 ## P1 simulator (optional; macOS/Linux host)
 
 Build a pinned external simulator without building piHPSDR's desktop app:

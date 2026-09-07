@@ -33,6 +33,43 @@ public sealed class ReceiveTests
     }
 
     [TestMethod, TestCategory("Native")]
+    public async Task ShortSoakExercisesFaultsAndReconnectsWithIsolatedCounters()
+    {
+        var result = await ReceiveSoak.RunAsync(NativeDirectory(), new(10, 1));
+        Assert.IsTrue(result.Passed, result.Failure);
+        Assert.IsFalse(result.Cancelled || result.TransmitAllowed);
+        Assert.AreEqual(1, result.ReconnectsCompleted); Assert.AreEqual(5, result.Phases.Count);
+        Assert.IsTrue(result.Phases.All(p => p.Passed && p.NativeDisposed && p.PortRebound));
+        Assert.IsTrue(result.Phases[0].ObservedSeconds >= 10 && result.Phases[0].Retunes > 0);
+        Assert.IsTrue(result.Phases[0].AudioSignalChecks > 0 && result.Phases[0].SpectrumSignalChecks > 0);
+        Assert.IsTrue(result.Phases[0].Resources!.Samples >= 3);
+        Assert.IsTrue(result.Phases[1].Native!.MissingPackets > 0 && result.Phases[1].Simulator!.InjectedDrops > 0);
+        Assert.IsTrue(result.Phases[2].Native!.AudioDropped > 0 && result.Phases[2].SpectrumFramesCoalesced > 0);
+        Assert.IsTrue(result.Phases[3].ExpectedPeerFailureObserved && !result.Phases[3].StopObserved);
+        Assert.IsTrue(result.Phases[4].StopObserved);
+        Assert.AreEqual(result.Phases[3].Native!.BasePort, result.Phases[4].Native!.BasePort);
+        Assert.AreEqual(0, result.Phases[4].Native!.MissingPackets);
+        Assert.AreEqual(0, result.Phases[4].Native!.AudioDropped);
+        AssertClosed();
+    }
+
+    [TestMethod, TestCategory("Native")]
+    public async Task SoakCancellationAndObservationFailureRetainPartialReportAndCloseOwners()
+    {
+        string directory = NativeDirectory();
+        using var cancelled = new CancellationTokenSource();
+        var result = await ReceiveSoak.RunAsync(directory, new(10, 1), _ => cancelled.Cancel(), cancelled.Token);
+        Assert.IsFalse(result.Passed); Assert.IsTrue(result.Cancelled);
+        Assert.AreEqual(1, result.Phases.Count);
+        Assert.IsTrue(result.Phases[0].NativeDisposed && result.Phases[0].StopObserved && result.Phases[0].PortRebound);
+        AssertClosed();
+        result = await ReceiveSoak.RunAsync(directory, new(10, 1), _ => throw new IOException("injected observer error"));
+        Assert.IsFalse(result.Passed || result.Cancelled); StringAssert.Contains(result.Failure, "injected observer error");
+        Assert.IsTrue(result.Phases[0].NativeDisposed && result.Phases[0].StopObserved && result.Phases[0].PortRebound);
+        AssertClosed();
+    }
+
+    [TestMethod, TestCategory("Native")]
     public async Task SimulatorFlowsThroughNativeWdspAndRetunesWithoutTransmit()
     {
         var result = await ReceiveSelfTest.RunAsync(NativeDirectory());

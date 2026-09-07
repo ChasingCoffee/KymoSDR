@@ -26,6 +26,14 @@ on:
       - 'Thetis.CrossPlatform.slnx'
       - '.github/workflows/native-dsp.yml'
   workflow_dispatch:
+    inputs:
+      receive_soak:
+        description: 'Receive endurance run (30-minute option adds time on all three OSes)'
+        type: choice
+        default: short
+        options:
+          - short
+          - 30-minutes
 
 permissions:
   contents: read
@@ -49,7 +57,7 @@ jobs:
           - os: ubuntu-latest
             cmake_args: ''
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -77,6 +85,12 @@ jobs:
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- session-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Simulator to native P2, ChannelMaster and WDSP audio/spectrum
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: Short receive endurance and fault campaign (loopback only)
+        if: github.event_name != 'workflow_dispatch' || inputs.receive_soak != '30-minutes'
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 10 --reconnects 2
+      - name: Opt-in 30-minute receive endurance and fault campaign (loopback only)
+        if: github.event_name == 'workflow_dispatch' && inputs.receive_soak == '30-minutes'
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 1800 --reconnects 10
       - name: Managed and native integration regressions
         # All transport fixture traffic is hard-restricted to IPv4 loopback.
         run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger trx --results-directory artifacts/test-results

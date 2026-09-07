@@ -24,6 +24,8 @@ Nereid of Thetis.
   allocation, binding and joined shutdown. A new [loopback receive integration](docs/P2_RECEIVE_INTEGRATION.md)
   connects simulated P2 I/Q through ChannelMaster to WDSP audio and advancing,
   renderer-independent spectrum frames, with retuning and packet/buffer diagnostics.
+  A [receive endurance campaign](docs/RECEIVE_SOAK.md) adds sustained runs,
+  resource measurements and isolated fault/reconnect checks without hardware.
   This is not yet a usable hardware receiver.
 - The inherited Windows application remains in the tree as the source/reference
   implementation. Its features are not a claim of portable feature parity.

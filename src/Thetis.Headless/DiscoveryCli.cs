@@ -37,7 +37,9 @@ internal static class DiscoveryCli
           transport-selftest --native-dir ABSOLUTE_PATH
                      Run 100 loopback-only RNet/socket lifecycles. No radio commands.
           receive-selftest --native-dir ABSOLUTE_PATH
-                     Simulator -> native P2/ChannelMaster/WDSP audio. Loopback RX only.
+                     Simulator -> native P2/ChannelMaster/WDSP audio/spectrum. Loopback RX only.
+          receive-soak --native-dir ABSOLUTE_PATH [--duration-seconds 10..7200] [--reconnects 1..20]
+                     Sustained simulator RX, fault/reconnect checks and resource report.
           --help     Show this help. No command also shows help.
 
         Options:
