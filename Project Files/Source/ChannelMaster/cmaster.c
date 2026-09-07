@@ -25,6 +25,9 @@ warren@wpratt.com
 */
 
 #include "cmcomm.h"
+#ifdef THETIS_CM_HEADLESS
+#include "cm_receive_core.h"
+#endif
 
 cmaster cm  = {0};
 CMASTER pcm = &cm;
@@ -404,7 +407,12 @@ void xcmaster (int stream)
 		}
 
 		for (j = 0; j < pcm->cmSubRCVR; j++)
+		{
 			fexchange0 (chid (stream, j), pcm->in[stream], pcm->rcvr[rx].audio[j], &error);		// dsp
+#ifdef THETIS_CM_HEADLESS
+			if (j == 0) cm_observe_rx(stream, pcm->rcvr[rx].ch_outsize, pcm->rcvr[rx].audio[j], error);
+#endif
+		}
 		xpipe (stream, 1, pcm->rcvr[rx].audio);
 		for (j = 0; j < pcm->cmSubRCVR; j++)
 		{

@@ -4,8 +4,9 @@ KymoSDR is the public project name. The initial solution, project namespaces and
 native library names still use `Thetis`; commands below intentionally retain
 those names.
 
-This implements discovery and offline DSP checks from the [port plan](CROSS_PLATFORM_IMPLEMENTATION_PLAN.md).
-It does **not** open radio streams, play audio or transmit.
+This implements discovery, offline DSP checks and simulator-to-native receive
+from the [port plan](CROSS_PLATFORM_IMPLEMENTATION_PLAN.md).
+It does **not** open hardware radio streams, play audio or transmit.
 The legacy Windows solution remains separate.
 
 ## Prerequisites and build
@@ -33,7 +34,7 @@ and do not require a separately running simulator. Test packages are
 pinned in the project and `packages.lock.json` files; ordinary restores must not
 silently update those locks.
 
-The twelve native integration tests are explicitly skipped unless
+The eighteen native integration tests are explicitly skipped unless
 `THETIS_NATIVE_DIR` is set. Managed discovery/help still work without a native
 library. To build and test WDSP, follow [native DSP instructions](NATIVE_DSP.md).
 
@@ -78,6 +79,17 @@ These test a standalone peer on loopback with no native library or hardware.
 creates. Interactive TX simulation requires `serve --tx-mode sink`; it is off by
 default and does not authorize physical G2 TX. See [G2 simulator instructions](G2_SIMULATOR.md)
 for tones/noise, packet-loss injection, TX metrics and supported protocol limits.
+
+To connect the simulator to the native P2/ChannelMaster/WDSP work, first build the
+[native module](NATIVE_DSP.md), then run:
+
+```sh
+dotnet run --project src/Thetis.Headless -c Release --no-build -- receive-selftest --native-dir ABSOLUTE_NATIVE_STAGE_DIRECTORY
+```
+
+This creates its own loopback peer and verifies recovered USB audio before and
+after retuning. It does not play audio or use TX. See [receive integration](P2_RECEIVE_INTEGRATION.md)
+for the command, API, counters and remaining hardware/spectrum gates.
 
 ## P1 simulator (optional; macOS/Linux host)
 

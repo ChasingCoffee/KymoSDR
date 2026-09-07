@@ -37,6 +37,8 @@ typedef struct _cmb
 #ifdef THETIS_CM_HEADLESS
 	cm_thread worker;
 	int worker_started;
+	int queued_samples; /* protected with ring contents by csIN */
+	volatile LONG overruns;
 #endif
 	int   id;
 	int   max_in_size;							// max input number of complex samples

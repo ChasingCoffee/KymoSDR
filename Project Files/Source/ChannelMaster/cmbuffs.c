@@ -71,9 +71,10 @@ void stop_cmbuffs(int id)
 	EnterCriticalSection(&a->csIN);
 	InterlockedBitTestAndReset(&a->run, 0);
 	ReleaseSemaphore(a->Sem_BuffReady, 1, 0);
+	/* The consumer also takes csIN while copying; never join while holding it. */
+	LeaveCriticalSection(&a->csIN);
 	cm_join_thread(a->worker);
 	a->worker_started = 0;
-	LeaveCriticalSection(&a->csIN);
 }
 #endif
 
@@ -107,6 +108,9 @@ void flush_cmbuffs (int id)
 	a->r1_inidx = 0;
 	a->r1_outidx = 0;
 	a->r1_unqueuedsamps = 0;
+#ifdef THETIS_CM_HEADLESS
+	a->queued_samples = 0;
+#endif
 	while (!WaitForSingleObject (a->Sem_BuffReady, 1)) ;
 }
 
@@ -120,6 +124,16 @@ void Inbound (int id, int nsamples, double* in)
 	if (_InterlockedAnd (&a->accept, 1))
 	{
 		EnterCriticalSection (&a->csIN);
+#ifdef THETIS_CM_HEADLESS
+		if (!_InterlockedAnd(&a->accept, 1) || nsamples < 1 || nsamples > a->max_in_size ||
+			nsamples > a->r1_active_buffsize - a->queued_samples)
+		{
+			InterlockedIncrement(&a->overruns);
+			LeaveCriticalSection(&a->csIN);
+			return;
+		}
+		a->queued_samples += nsamples;
+#endif
 		if (nsamples > (a->r1_active_buffsize - a->r1_inidx))
 		{
 			first = a->r1_active_buffsize - a->r1_inidx;
@@ -149,10 +163,16 @@ void cmdata (int id, double* out)
 {
 	int first, second;
 	CMB a = pcm->pdbuff[id];
+#ifdef THETIS_CM_HEADLESS
+	EnterCriticalSection(&a->csIN);
+#endif
 	EnterCriticalSection (&a->csOUT);
 	if (!_InterlockedAnd (&a->run, 1)) 
 	{
 		LeaveCriticalSection (&a->csOUT);
+#ifdef THETIS_CM_HEADLESS
+		LeaveCriticalSection(&a->csIN);
+#endif
 		_endthread();
 		return; //MW0LGE_21k5
 	}
@@ -171,6 +191,10 @@ void cmdata (int id, double* out)
 	if ((a->r1_outidx += a->r1_outsize) >= a->r1_active_buffsize)
 		a->r1_outidx -= a->r1_active_buffsize;
 	LeaveCriticalSection (&a->csOUT);
+#ifdef THETIS_CM_HEADLESS
+	a->queued_samples -= a->r1_outsize;
+	LeaveCriticalSection(&a->csIN);
+#endif
 }
 
 void cm_main (void *pargs)
@@ -200,6 +224,15 @@ void cm_main (void *pargs)
 void SetCMRingOutsize (int id, int size)
 {
 	CMB a = pcm->pcbuff[id];
+#ifdef THETIS_CM_HEADLESS
+	stop_cmbuffs(id);
+	flush_cmbuffs(id);
+	a->r1_outsize = size;
+	InterlockedBitTestAndSet(&a->run, 0);
+	start_cmthread(id);
+	InterlockedBitTestAndSet(&a->accept, 0);
+	return;
+#else
 	InterlockedBitTestAndReset(&a->accept, 0);		// shut the Inbound() gate to prevent new infusions
 	EnterCriticalSection (&a->csIN);				// wait until the current Inbound() infusion is finished
 	EnterCriticalSection (&a->csOUT);				// block the CM thread before cmdata()
@@ -207,15 +240,12 @@ void SetCMRingOutsize (int id, int size)
 	InterlockedBitTestAndReset(&a->run, 0);			// set a trap for the CM thread
 	ReleaseSemaphore(a->Sem_BuffReady, 1, 0);		// be sure the CM thread can pass WaitForSingleObject in cm_main()									// 
 	LeaveCriticalSection (&a->csOUT);				// let the thread pass to the trap in cmdata()
-#ifdef THETIS_CM_HEADLESS
-	cm_join_thread(a->worker);
-#else
 	Sleep (2);										// wait for the CM thread to die
-#endif
 	flush_cmbuffs(id);								// restore ring to pristine condition
 	a->r1_outsize = size;							// set its new outsize
 	InterlockedBitTestAndSet(&a->run,0);			// remove the CM thread trap
 	start_cmthread(id);								// start the CM thread
 	LeaveCriticalSection (&a->csIN);				// enable Inbound() processing
 	InterlockedBitTestAndSet(&a->accept, 0);		// open the Inbound() gate
+#endif
 }

@@ -57,6 +57,11 @@ typedef struct _iobf
 	volatile LONG exec_bypass;
 	volatile LONG flush_bypass;
 	HANDLE Sem_Flush;
+#ifdef _WIN32
+	HANDLE flush_thread;
+#else
+	pthread_t flush_thread;
+#endif
 	struct
 	{
 		int ustate;

@@ -13,5 +13,6 @@
     <PackageReference Include="MSTest.TestAdapter" Version="4.4.0" />
     <PackageReference Include="MSTest.TestFramework" Version="4.4.0" />
     <ProjectReference Include="../../src/Thetis.Engine/Thetis.Engine.csproj" />
+    <ProjectReference Include="../../src/Thetis.Headless/Thetis.Headless.csproj" />
   </ItemGroup>
 </Project>

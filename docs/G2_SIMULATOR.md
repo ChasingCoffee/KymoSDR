@@ -26,7 +26,8 @@ dotnet run --project src/Thetis.Simulator -c Release --no-build -- tx-selftest
 discovery, configures DDC2, receives 100 sequenced I/Q packets plus status and
 mic silence, stops RX and closes both owners. It has a five-second deadline.
 The JSON result identifies it as loopback-only. It does not use the native
-radio receiver, so this does not yet demonstrate I/Q reaching WDSP.
+radio receiver. Use the separate headless [receive integration test](P2_RECEIVE_INTEGRATION.md)
+to send simulated I/Q through native P2 decoding, ChannelMaster and WDSP.
 
 `tx-selftest` creates its own loopback server with TX simulation enabled, sends
 100 TX packets (24,000 samples) containing an analytic 1 kHz complex tone,

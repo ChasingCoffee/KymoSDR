@@ -103,6 +103,11 @@ failed:
 }
 int cm_socket_receive_loopback(cm_socket sock, void *buffer, int capacity, int timeout_ms)
 {
+    return cm_socket_receive_peer(sock, buffer, capacity, timeout_ms, NULL, NULL);
+}
+int cm_socket_receive_peer(cm_socket sock, void *buffer, int capacity, int timeout_ms,
+    uint32_t *address, int *port)
+{
     if (!buffer || capacity < 1 || timeout_ms < 0) return -3;
 #ifdef _WIN32
     WSAPOLLFD pollfd = {sock, POLLRDNORM, 0};
@@ -135,5 +140,14 @@ int cm_socket_receive_loopback(cm_socket sock, void *buffer, int capacity, int t
     if (message.msg_flags & MSG_TRUNC) return -2;
 #endif
     if ((ntohl(source.sin_addr.s_addr) >> 24) != 127) return -4;
+    if (address) *address = source.sin_addr.s_addr;
+    if (port) *port = ntohs(source.sin_port);
     return count;
+}
+int cm_socket_send_loopback(cm_socket sock, uint32_t address, int port, const void *buffer, int length)
+{
+    if ((ntohl(address) >> 24) != 127 || port < 1 || port > 65535 || !buffer || length < 0 || length > 1444) return -1;
+    struct sockaddr_in target = {0};
+    target.sin_family = AF_INET; target.sin_addr.s_addr = address; target.sin_port = htons((uint16_t)port);
+    return (int)sendto(sock, (const char *)buffer, length, 0, (struct sockaddr *)&target, sizeof(target));
 }

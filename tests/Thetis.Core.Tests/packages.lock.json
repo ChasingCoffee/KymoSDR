@@ -102,7 +102,8 @@
         "type": "Project",
         "dependencies": {
           "Thetis.Core": "[1.0.0, )",
-          "Thetis.Engine": "[1.0.0, )"
+          "Thetis.Engine": "[1.0.0, )",
+          "Thetis.Simulator": "[1.0.0, )"
         }
       },
       "thetis.simulator": {

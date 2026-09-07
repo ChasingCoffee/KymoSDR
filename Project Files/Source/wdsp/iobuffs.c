@@ -26,6 +26,14 @@ warren@wpratt.com
 
 #include "comm.h"
 
+#ifdef _WIN32
+static unsigned __stdcall run_flush_thread(void *argument)
+{
+	flushChannel(argument);
+	return 0;
+}
+#endif
+
 /********************************************************************************************************
 *																										*
 *										    Begin Slew Code												*
@@ -419,7 +427,12 @@ void create_iobuffs (int channel)
 
 	InterlockedBitTestAndReset(&a->flush_bypass, 0);
 	a->Sem_Flush = CreateSemaphore(0, 0, 1, 0);
-	_beginthread(flushChannel, 0, (void*)(uintptr_t)a->channel);
+#ifdef _WIN32
+	a->flush_thread = (HANDLE)_beginthreadex(NULL, 0, run_flush_thread, (void*)(uintptr_t)a->channel, 0, NULL);
+	if (!a->flush_thread) abort();
+#else
+	a->flush_thread = wdsp_start_joinable(flushChannel, (void*)(uintptr_t)a->channel);
+#endif
 }
 
 void destroy_iobuffs (int channel)
@@ -428,7 +441,12 @@ void destroy_iobuffs (int channel)
 
 	InterlockedBitTestAndSet(&a->flush_bypass, 0);
 	ReleaseSemaphore(a->Sem_Flush, 1, 0);
-	while (InterlockedAnd(&a->flush_bypass, 0xffffffff)) Sleep(1);
+#ifdef _WIN32
+	if (WaitForSingleObject(a->flush_thread, INFINITE) != WAIT_OBJECT_0) abort();
+	CloseHandle(a->flush_thread);
+#else
+	wdsp_join(a->flush_thread);
+#endif
 	CloseHandle(a->Sem_Flush);
 
 	destroy_slews (a);

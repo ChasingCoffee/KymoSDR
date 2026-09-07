@@ -156,6 +156,12 @@ no-packet test. See [the M3a boundary and tests](CHANNELMASTER_OFFLINE.md) and t
 [M3b loopback checkpoint](TRANSPORT_LOOPBACK.md). The latter exercises RNet and
 the socket initializer, not yet the real P1/P2 packet workers.
 
+A subsequent [simulator-to-native receive checkpoint](P2_RECEIVE_INTEGRATION.md)
+connects a narrow single-DDC P2 decoder/control worker to the real CM router,
+input ring and WDSP. It qualifies active loopback receive separately from the
+offline/probe tests; full legacy network-engine and live-radio qualification
+remain outside this checkpoint.
+
 - Correct PORT-1's radio-init ABI on both managed and native sides, covering default and custom P2 port selection with focused tests before invoking it in the harness.
 - Adapt ChannelMaster's native sockets, workers, synchronization and allocation; retain packet-processing/routing algorithms. Define a non-Windows no-ASIO path and explicit no-device audio behavior.
 - Extract the needed setup sequence from `cmaster.cs`, `radio.cs`, `NetworkIO.cs` and `audio.cs` into the session owner. Replace form reads with validated options and explicit errors.
@@ -165,6 +171,10 @@ the socket initializer, not yet the real P1/P2 packet workers.
 **Exit:** a no-radio/no-audio-device harness can initialize and dispose the engine at least 100 times without hangs, crashes or continuing resource growth after warm-up. No WinForms startup or Windows DLL loading occurs on macOS. Do not interpret this as live RX proof.
 
 ### M4 — G2/P2 receive and P1 simulated receive
+
+Initial progress: `receive-selftest` recovers and retunes USB audio from its own
+loopback G2 simulator through native CM/WDSP. The next integration step is RX
+spectrum frames. This does not satisfy the hardware/P1/soak exit gate below.
 
 - Add bounded `receive` operation to the CLI: select discovered radio/interface, start RX1 at one confirmed supported rate, tune, set mode/filter, read spectrum and stop.
 - Preserve G2-specific capability, routing and port handling. Do not treat all P2 boards as interchangeable. Compare control sequences and observable receive behavior with the Windows reference.
@@ -290,4 +300,4 @@ Repository setup and the three static audits are complete. The first implementat
 
 M0/M1 acceptance is still partial: managed CI now passes on Windows, macOS and Linux, but the legacy Windows reference build and Windows live G2/simulator comparisons remain unverified. The G2's raw discovery fields are recorded; installed server/FPGA release versions still need separate recording. Discovery is checkpointed at `77792260`.
 
-M2's initial cross-platform offline gate passes on Windows x64, macOS arm64 and Linux x64; see [CI results](NATIVE_CI_RESULTS.md), [initial local M2 results](M2_NATIVE_RESULTS.md) and [native build instructions](NATIVE_DSP.md). M3a's offline ChannelMaster DSP/pipe lifecycle passes cross-platform tests with a .NET owner, 100-cycle checks, cancellation/rollback and no-device audio. Its qualification and limits are tracked in [ChannelMaster offline](CHANNELMASTER_OFFLINE.md). M3b's [RNet/socket loopback checkpoint](TRANSPORT_LOOPBACK.md) now also passes three-OS CI: actual radio-init integration, checked allocation, partial startup rollback and joined probe workers. Full M3 remains partial: real P1/P2 packet-worker shutdown, active-stream safety and longer-run resource/performance qualification are still required; M4–M11 remain pending. No radio streaming or live TX capability has been implemented or tested. The G2 is restricted to receive-only use on ANT1; current transport tests use loopback only.
+M2's initial cross-platform offline gate passes on Windows x64, macOS arm64 and Linux x64; see [CI results](NATIVE_CI_RESULTS.md), [initial local M2 results](M2_NATIVE_RESULTS.md) and [native build instructions](NATIVE_DSP.md). M3a's offline ChannelMaster DSP/pipe lifecycle passes cross-platform tests with a .NET owner, 100-cycle checks, cancellation/rollback and no-device audio. Its qualification and limits are tracked in [ChannelMaster offline](CHANNELMASTER_OFFLINE.md). M3b's [RNet/socket loopback checkpoint](TRANSPORT_LOOPBACK.md) also passes three-OS CI: actual radio-init integration, checked allocation, partial startup rollback and joined probe workers. The new [P2 receive integration](P2_RECEIVE_INTEGRATION.md) connects simulated I/Q through native CM/WDSP with measured USB audio and retuning. Full M3/M4 remain partial: broader packet-worker coverage, spectrum, P1, hardware and longer-run resource/performance qualification are still required; M5–M11 remain pending. No hardware streaming or live TX capability has been implemented or tested. The G2 is restricted to receive-only use on ANT1; current streaming tests use loopback only.

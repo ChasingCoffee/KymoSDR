@@ -1,16 +1,19 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Offline lifecycle boundary extracted from CMCreateCMaster/CreateRadio.
- * Not a radio transport: no network units are linked, and no packet input or
- * transmit operation is exposed by this API. The full 8/5/2/1 topology remains.
+ * This API exposes no transport or transmit operation. The separate P2 receive
+ * owner can borrow the core and its native audio tap. Full 8/5/2/1 topology.
  */
 #include "cmcomm.h"
 #include "cm_session.h"
 #include "radio_ports.h"
+#include "cm_receive_core.h"
 
 extern void SetRadioStructure(int, int, int, int, int, int *, int *, int, int, int);
 extern void set_cmdefault_rates(int *, int, int *, int *);
 static volatile LONG command_busy;
 static int stage;
+static int receive_owner;
+static cm_audio_observer audio_observer;
 static int scope_creates, play_creates, record_creates;
 
 static void __stdcall create_scope(int id) { (void)id; ++scope_creates; }
@@ -34,13 +37,14 @@ static void close_stages(void)
     if (stage >= 2) destroy_pipe();
     if (stage >= 1) destroy_cmaster();
     stage = 0;
+    receive_owner = 0; audio_observer = NULL;
     /* Clear callback addresses only after every owner has stopped. */
     memset(pcm, 0, sizeof(*pcm));
     memset(ppip, 0, sizeof(*ppip));
     memset(psyn, 0, sizeof(*psyn));
 }
-CM_API int ThetisCmOpen(int abi, int rx_rate, int audio_mode, int allow_transmit,
-                       cm_checkpoint checkpoint, void *context)
+static int open_core(int abi, int rx_rate, int audio_mode, int allow_transmit,
+                       cm_checkpoint checkpoint, void *context, int receiver, cm_audio_observer observer)
 {
     if (abi != 1 || allow_transmit != 0) return -1;
     if (audio_mode != 0) return -3;
@@ -48,6 +52,7 @@ CM_API int ThetisCmOpen(int abi, int rx_rate, int audio_mode, int allow_transmit
         rx_rate != 384000 && rx_rate != 768000 && rx_rate != 1536000) return -1;
     if (!enter_command()) return -2;
     if (stage) { leave_command(); return -2; }
+    receive_owner = receiver; audio_observer = observer;
     int spc[] = {2};
     int inbound[] = {240, 240, 240, 240, 240, 720, 240, 240};
     int rates[] = {rx_rate, rx_rate, rx_rate, rx_rate, rx_rate, 48000, rx_rate, rx_rate};
@@ -81,9 +86,28 @@ CM_API int ThetisCmOpen(int abi, int rx_rate, int audio_mode, int allow_transmit
     leave_command();
     return 0;
 }
+CM_API int ThetisCmOpen(int abi, int rx_rate, int audio_mode, int allow_transmit,
+                       cm_checkpoint checkpoint, void *context)
+{ return open_core(abi, rx_rate, audio_mode, allow_transmit, checkpoint, context, 0, NULL); }
+int cm_receive_core_open(int rate, cm_audio_observer observer)
+{ return open_core(1, rate, 0, 0, NULL, NULL, 1, observer); }
+int cm_receive_core_close(void)
+{
+    /* Owner-only teardown: a racing short core-status query must not make the
+     * receive owner free its observer lock while CM consumers still exist.
+     * No core callback can reach here while holding this gate. */
+    while (!enter_command()) Sleep(1);
+    if (stage && !receive_owner) { leave_command(); return -2; }
+    close_stages(); leave_command(); return 0;
+}
+void cm_observe_rx(int stream, int count, const double *samples, int error)
+{
+    if (stream == 0 && audio_observer) audio_observer(count, samples, error);
+}
 CM_API int ThetisCmClose(void)
 {
     if (!enter_command()) return -2;
+    if (receive_owner) { leave_command(); return -2; }
     close_stages();
     leave_command();
     return 0;

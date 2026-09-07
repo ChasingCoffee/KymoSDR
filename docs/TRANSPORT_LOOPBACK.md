@@ -5,6 +5,10 @@ real seven-argument `nativeInitMetis` socket initializer. A new .NET owner and C
 exercise this lifecycle with real UDP loopback datagrams. This is **not** a P1/P2
 packet engine, radio simulator or live receive session; full M3 remains partial.
 
+The subsequent [P2 receive integration](P2_RECEIVE_INTEGRATION.md) has a separate
+native owner and validated single-DDC decoder/control worker. The probe described
+here remains discard-only and sends no commands.
+
 The G2 currently has a receive-only antenna on ANT1. No transmit testing,
 PTT/MOX, tune, CW keying or transmit-enabling commands are authorized. This
 checkpoint does not contact the G2 at all.
@@ -56,9 +60,9 @@ it must not be confused with discovery board ID 10 (Saturn).
   legacy close preserves model/protocol settings. Legacy project/filter lists
   include the extracted units, but the full Windows UI remains unqualified.
 
-The portable module links no P1/P2 command encoder, `StartAudioNative`, original
-read/keepalive loop or outbound-ring worker. Packet-processing/routing functions
-remain in the inherited files unchanged; they are not replaced with a new parser.
+At this checkpoint the module linked no P1/P2 encoder, `StartAudioNative`, original
+read/keepalive loop or outbound-ring worker. The newer receive owner adds only a
+narrow loopback P2 subset; it does not replace the inherited Windows packet engine.
 
 ## Probe ownership and tests
 

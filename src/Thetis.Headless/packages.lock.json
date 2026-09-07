@@ -7,6 +7,9 @@
       },
       "thetis.engine": {
         "type": "Project"
+      },
+      "thetis.simulator": {
+        "type": "Project"
       }
     }
   }

@@ -16,13 +16,14 @@ Nereid of Thetis.
 - Source-built native WDSP 2.0 baseline with offline signal, ABI, noise-reduction
   and lifecycle checks. Windows x64, macOS arm64 and Linux x64 CI pass, including
   Linux sanitizer/leak checks. See the [validation record](docs/NATIVE_CI_RESULTS.md).
-- The portable harness does **not** stream radio I/Q, play audio or transmit.
+- The portable harness does **not** stream from hardware, play audio or transmit.
   The cross-platform UI, rendering and VST3 hosting are still planned work.
 - ChannelMaster's [offline DSP/pipe lifecycle](docs/CHANNELMASTER_OFFLINE.md)
   now has a .NET session owner and 100-cycle tests passing on all three OSes.
   A separate [RNet/socket loopback probe](docs/TRANSPORT_LOOPBACK.md) now tests
-  allocation, binding and joined shutdown. Radio packet streaming is still being
-  ported; this is not yet a usable radio receiver.
+  allocation, binding and joined shutdown. A new [loopback receive integration](docs/P2_RECEIVE_INTEGRATION.md)
+  connects simulated P2 I/Q through ChannelMaster to WDSP audio, with retuning and
+  packet/buffer diagnostics. This is not yet a usable hardware receiver.
 - The inherited Windows application remains in the tree as the source/reference
   implementation. Its features are not a claim of portable feature parity.
 - A standalone [.NET G2/P2 simulator](docs/G2_SIMULATOR.md) provides

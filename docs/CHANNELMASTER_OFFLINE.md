@@ -4,6 +4,10 @@ The portable harness now constructs and disposes ChannelMaster's DSP/pipe core
 without WinForms, sockets, audio devices or transmit commands. This is the first
 part of M3, **not** the complete native radio/transport port or live RX proof.
 
+The separate [P2 receive integration](P2_RECEIVE_INTEGRATION.md) now borrows this
+core to exercise simulated I/Q through the router, input worker and WDSP. The
+offline API and the 100-cycle results below still describe a no-stream test.
+
 ## Run
 
 Build native and managed code as described in [Native DSP](NATIVE_DSP.md), then:
