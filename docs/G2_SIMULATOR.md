@@ -116,7 +116,7 @@ handshakes, so it is not a real-time pacing benchmark.
 
 RX tones/noise continue independently while virtually keyed. Status cadence
 changes from 200 ms to a best-effort 1 ms during PTT. Physical input bits remain
-zero: outgoing status PTT is a **hardware input**, not a software-MOX echo.
+zero: outgoing status PTT describes **hardware/keyer state**, not a software-MOX echo.
 Analog/power and FIFO fields remain zero. Software PTT is observable in JSON,
 not an invented RF status bit. No wire-extension telemetry is introduced.
 
@@ -189,6 +189,7 @@ Wire layout references were inspected at Saturn revision
 - [Incoming DUC I/Q framing](https://github.com/laurencebarker/Saturn/blob/4b0b76f345961cfeeb447abc6d8b0373f5743245/sw_projects/P2_app/InDUCIQ.c)
 - [TX-specific controls](https://github.com/laurencebarker/Saturn/blob/4b0b76f345961cfeeb447abc6d8b0373f5743245/sw_projects/P2_app/IncomingDUCSpecific.c)
 - [Status input bits and TX cadence](https://github.com/laurencebarker/Saturn/blob/4b0b76f345961cfeeb447abc6d8b0373f5743245/sw_projects/P2_app/OutHighPriority.c)
+- [Hardware/keyer status versus software MOX](https://github.com/laurencebarker/Saturn/blob/4b0b76f345961cfeeb447abc6d8b0373f5743245/sw_projects/common/saturnregisters.c)
 
 The inherited Thetis command/receive layouts were also checked. No Saturn
 FPGA/DMA/PA control code is compiled, imported or executed. The existing pinned
@@ -200,13 +201,26 @@ The virtual TX extension passes 110 tests locally on macOS, including existing
 native regressions. Fifteen new tests cover literal TX payloads, signed endpoints,
 phase-word tuning, sequence wrap/gaps/duplicates, PTT cycles, opt-in/handshake
 gates, malformed packets, unsupported modes, ownership, lease expiry, status
-semantics and real cancellation while keyed. The standalone `tx-selftest`
-also passes. Hosted TX qualification is pending.
+semantics and real cancellation while keyed. Ten consecutive standalone
+`tx-selftest` runs pass, and real Ctrl-C in `serve --tx-mode sink` exits 130 after
+closing the worker and sockets.
+
+Validated TX source: `fd05b91876c98fc7e46891f0b0f7ce324150021f`, recorded 2026-09-07.
+The [managed CI workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34154757832)
+passes on Windows x64, macOS arm64 and Linux x64: 98 tests pass, 12 native-only
+tests skip as expected, and both standalone RX and TX self-tests pass. Each TX
+run observes 100 packets / 24,000 keyed samples, no sequence errors, RMS/peak
+approximately 0.25, one discarded unkeyed packet, and PTT off at completion.
+The [native regression workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34154757862)
+also passes on all three OSes: 110 managed tests without skips, the existing
+native DSP/lifecycle tests and CLIs, and six Linux sanitizer tests. See the
+[native regression record](NATIVE_CI_RESULTS.md). TX tests use the simulator's
+own synthetic client, not the application's native TX engine.
 
 ### Prior RX-only checkpoint
 
-The earlier RX-only revision passed 95 managed tests locally (including existing native integration
-checks). Simulator tests include literal header/signed-sample checks, analytic
+The earlier RX-only revision passed 95 managed tests locally (including existing
+native integration checks). Simulator tests include literal header/signed-sample checks, analytic
 tone phase across packet boundaries, four rates, multiple DDCs, seeded noise,
 drops, malformed/unsupported controls, ownership/watchdog/reconnect, real
 discovery, active/idle cancellation, partial bind rollback, bounded automatic

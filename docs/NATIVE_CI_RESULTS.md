@@ -1,5 +1,31 @@
 # Native cross-platform CI results
 
+## Virtual TX sink checkpoint — simulator-only transmission
+
+Validated source: `fd05b91876c98fc7e46891f0b0f7ce324150021f`, recorded 2026-09-07.
+The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34154757862)
+passes on Windows x64, macOS arm64 and Linux x64. Each runs 110 managed tests
+with no skips (95 Core/simulator plus 15 Engine), the 11-check DSP CLI, and
+100-cycle CM and loopback transport CLIs. Native CTest passes 5/5 on Windows and
+6/6 on macOS/Linux. The separate
+[Linux sanitizer job](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34154757862/job/101844167672)
+passes all six existing native tests with ASan/UBSan and leak detection.
+
+The [managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34154757832)
+also passes on all three OSes: 98 tests pass, 12 native-only checks skip, and both
+standalone RX and virtual TX self-tests pass without native libraries. Each TX
+test sends 100 packets / 24,000 synthetic keyed samples, checks the expected
+normalized levels and zero sequence errors, deasserts PTT, checks unkeyed sample
+discard and stops. Local macOS also passes 110 tests and ten consecutive TX CLI
+tests; real Ctrl-C closes an opt-in sink with exit 130.
+
+The extension changes no native implementation and does not exercise the
+application's native transmit path, a live radio or an audio device. All TX packets target only the
+simulator-created loopback peer. The physical G2 remains receive-only on ANT1;
+simulator TX approval does not authorize hardware TX. See
+[virtual TX scope and limits](G2_SIMULATOR.md#virtual-transmit-sink): no RF power,
+CW keyer, EER, PureSignal, FIFO model or TX-to-RX feedback qualification.
+
 ## G2 simulator checkpoint — existing native regressions
 
 Validated source: `acc1638fd06a5ed6b3ed0c5ec04950b60e8fe4cf`, recorded 2026-09-07.
