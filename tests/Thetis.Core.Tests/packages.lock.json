@@ -104,6 +104,9 @@
           "Thetis.Core": "[1.0.0, )",
           "Thetis.Engine": "[1.0.0, )"
         }
+      },
+      "thetis.simulator": {
+        "type": "Project"
       }
     }
   }

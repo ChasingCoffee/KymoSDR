@@ -54,6 +54,8 @@ jobs:
         run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --logger "trx;LogFileName=discovery.trx"
       - name: CLI help (no sockets)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- --help
+      - name: G2 receive simulator self-test (loopback only, no native libraries)
+        run: dotnet run --project src/Thetis.Simulator -c Release --no-build --no-restore -- selftest
       - name: Local NIC enumeration (no discovery packets)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- nics --allow-loopback --json
 

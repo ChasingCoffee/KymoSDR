@@ -26,7 +26,11 @@ The audits are static evidence, not proof of successful builds or operation. Mil
 | Linux x64 | Managed CI immediately; native CI as libraries are adapted; simulator and desktop smoke checks as those features arrive. | Experimental until audio, desktop, packaging and hardware tests pass on a named distribution. |
 | Intel Mac, Windows ARM64, Linux ARM64 | Avoid unnecessary architectural barriers, but do not add these to the initial delivery matrix. | Later qualification if requested and test hardware is available. |
 
-The available live radio is the user's **ANAN G2 headless, Protocol 2**. P1 development uses a pinned `hpsdrsim` version with its Hermes Lite 2 profile. Simulator coverage is not a claim of full P1 hardware support.
+The live hardware target is the user's **ANAN G2 headless, Protocol 2**. It is
+temporarily unavailable as of 2026-09-07, so a [lightweight G2/P2 receive
+simulator](G2_SIMULATOR.md) supports the next packet/engine work. P1 development
+uses a pinned `hpsdrsim` version with its Hermes Lite 2 profile. Neither simulator
+qualifies physical hardware behavior.
 
 **Current hardware constraint (2026-09-04):** the G2 has a receive-only antenna
 connected to **ANT1**. The user has explicitly prohibited transmit testing for

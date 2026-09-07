@@ -13,7 +13,8 @@ The legacy Windows solution remains separate.
 Install the .NET 10 SDK for the host architecture. `global.json` selects SDK
 10.0.400, allowing servicing patches within that SDK feature band, not previews
 or a different major version. Neither Visual Studio nor native DSP libraries are
-needed to build this solution. The optional simulator needs Git and a C compiler.
+needed to build this solution. The [G2/P2 receive simulator](G2_SIMULATOR.md) uses
+only .NET; the optional external P1 simulator needs Git and a C compiler.
 
 Run from the repository root on Windows, macOS or Linux:
 
@@ -26,12 +27,13 @@ dotnet run --project src/Thetis.Headless -c Release --no-build -- --help
 
 On this Mac the SDK executable is `/usr/local/share/dotnet/dotnet`; use that full
 path if an already-running terminal has not picked up the installer's PATH entry.
-Offline tests use synthetic packets and an injected transport: they send no
-discovery packets and do not require a radio or simulator. Test packages are
+Offline tests use synthetic packets and injected transports; simulator tests
+also start their own real loopback sockets. They contact no radio or LAN peer
+and do not require a separately running simulator. Test packages are
 pinned in the project and `packages.lock.json` files; ordinary restores must not
 silently update those locks.
 
-The three native integration tests are explicitly skipped unless
+The twelve native integration tests are explicitly skipped unless
 `THETIS_NATIVE_DIR` is set. Managed discovery/help still work without a native
 library. To build and test WDSP, follow [native DSP instructions](NATIVE_DSP.md).
 
@@ -63,6 +65,16 @@ radio/interface addresses and diagnostics. Version/capability fields are raw
 discovery bytes; zero may mean not reported, not “zero receivers.” The installed
 G2 server/firmware version should also be recorded separately. Discovery success
 does not validate native initialization, RX, TX or custom P2 streaming ports.
+
+## G2/P2 simulator (Windows, macOS and Linux)
+
+```sh
+dotnet run --project src/Thetis.Simulator -c Release --no-build -- selftest
+```
+
+This tests a standalone receive-only peer on loopback, with no native library or
+hardware. See [G2 simulator instructions](G2_SIMULATOR.md) for interactive use,
+synthetic tones/noise, packet-loss injection and supported protocol limits.
 
 ## P1 simulator (optional; macOS/Linux host)
 

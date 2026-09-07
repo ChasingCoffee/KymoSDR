@@ -3,6 +3,7 @@
     <Project Path="src/Thetis.Core/Thetis.Core.csproj" />
     <Project Path="src/Thetis.Engine/Thetis.Engine.csproj" />
     <Project Path="src/Thetis.Headless/Thetis.Headless.csproj" />
+    <Project Path="src/Thetis.Simulator/Thetis.Simulator.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Thetis.Core.Tests/Thetis.Core.Tests.csproj" />

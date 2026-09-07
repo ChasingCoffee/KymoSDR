@@ -14,6 +14,7 @@
     <PackageReference Include="MSTest.TestFramework" Version="4.4.0" />
     <ProjectReference Include="../../src/Thetis.Core/Thetis.Core.csproj" />
     <ProjectReference Include="../../src/Thetis.Headless/Thetis.Headless.csproj" />
+    <ProjectReference Include="../../src/Thetis.Simulator/Thetis.Simulator.csproj" />
     <None Include="../fixtures/discovery/*.hex" Link="fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

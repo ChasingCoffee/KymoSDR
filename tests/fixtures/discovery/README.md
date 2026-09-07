@@ -13,7 +13,8 @@ Field offsets follow the existing parser at SDR-VST3 `3518930b`. Tests mutate
 copies to exercise busy status, P1 model mappings, malformed lengths, invalid
 headers/MACs and protocol/subnet/target filtering. The socket seam injects
 duplicates, quiet polls, errors, cancellation and continuous unrelated traffic.
-No ordinary unit test opens a network socket or contacts a radio.
+These parser fixtures do not contact a radio. Separate simulator integration
+tests now exercise the same discovery parser over real loopback sockets.
 
 These fixtures test preservation of the existing parser; independent simulator
 and real-radio comparisons remain necessary to validate protocol compatibility.
