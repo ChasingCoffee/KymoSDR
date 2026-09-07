@@ -8,7 +8,7 @@ namespace Thetis.Headless;
 
 internal static class ReceiveCli
 {
-    private const string Help = "Usage: Thetis.Headless receive-selftest --native-dir ABSOLUTE_PATH\nStarts its own loopback simulator, feeds native P2/ChannelMaster/WDSP and measures RX audio. No hardware, TX or audio devices.";
+    private const string Help = "Usage: Thetis.Headless receive-selftest --native-dir ABSOLUTE_PATH\nStarts its own loopback simulator, feeds native P2/ChannelMaster/WDSP and measures RX audio and spectrum. No hardware, TX or audio devices.";
     internal static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error, CancellationToken token = default,
         Func<string, CancellationToken, Task<ReceiveSelfTestResult>>? runner = null)
     {
@@ -31,8 +31,13 @@ internal static class ReceiveCli
 }
 
 public sealed record ReceiveMeasurement(double Rms, double ToneHz, long Frames);
+public sealed record ReceiveSpectrumMeasurement(long Sequence, long TuningGeneration, int RequestedCenterFrequencyHz,
+    double PeakFrequencyHz, double PeakOffsetHz, double PeakDb, double BinWidthHz, long PublishedMonotonicMilliseconds,
+    long CoalescedFrames);
 public sealed record ReceiveSelfTestResult(int SchemaVersion, bool Passed, bool LoopbackOnly, bool TransmitAllowed,
-    ReceiveMeasurement BeforeTuning, ReceiveMeasurement AfterTuning, P2ReceiveState Native, SimulatorState Simulator,
+    ReceiveMeasurement BeforeTuning, ReceiveMeasurement AfterTuning,
+    ReceiveSpectrumMeasurement SpectrumBeforeTuning, ReceiveSpectrumMeasurement SpectrumAfterTuning,
+    P2ReceiveState Native, SimulatorState Simulator,
     long ElapsedMilliseconds);
 
 public static class ReceiveSelfTest
@@ -43,8 +48,13 @@ public static class ReceiveSelfTest
         await using var simulator = G2Simulator.Open(new(BasePort: 0), token);
         using var session = P2ReceiveSession.Open(nativeDirectory, new(simulator.BasePort), token);
         var first = Measure(session, 1000, token);
+        var firstSpectrum = MeasureSpectrum(session, 14_199_000, 14_200_000, 1, token);
         session.Tune(14_198_500);
         var second = Measure(session, 1500, token);
+        var secondSpectrum = MeasureSpectrum(session, 14_198_500, 14_200_000, 2, token);
+        if (secondSpectrum.Sequence <= firstSpectrum.Sequence ||
+            secondSpectrum.PublishedMonotonicMilliseconds <= firstSpectrum.PublishedMonotonicMilliseconds)
+            throw new InvalidOperationException("Spectrum sequence/time did not advance across tuning.");
         var native = session.State;
         session.Dispose(); // stop/join native producer and CM consumers before simulator disposal
         var stopWait = Stopwatch.StartNew();
@@ -58,7 +68,46 @@ public static class ReceiveSelfTest
             native.SocketErrors != 0 || native.DspErrors != 0 || native.InputOverruns != 0 ||
             native.MicPacketsDiscarded == 0 || native.StatusPackets == 0)
             throw new InvalidOperationException("Receive safety, routing or bounded-buffer check failed.");
-        return new(1, true, true, false, first, second, native, peer, clock.ElapsedMilliseconds);
+        return new(2, true, true, false, first, second, firstSpectrum, secondSpectrum, native, peer, clock.ElapsedMilliseconds);
+    }
+    public static ReceiveSpectrumMeasurement MeasureSpectrum(P2ReceiveSession session, int centerHz, double rfHz,
+        long generation, CancellationToken token = default)
+    {
+        var deadline = Stopwatch.StartNew();
+        ReceiveSpectrumFrame? previous = null;
+        double[] audio = new double[4096];
+        while (true)
+        {
+            token.ThrowIfCancellationRequested();
+            if (deadline.Elapsed > TimeSpan.FromSeconds(5)) throw new TimeoutException("Native receive spectrum did not advance.");
+            var state = session.State;
+            if (state.SocketErrors != 0 || state.DspErrors != 0) throw new IOException("Native packet/DSP worker reported an error.");
+            session.ReadAudio(audio);
+            var frame = session.ReadSpectrum();
+            if (frame is null) { Thread.Sleep(5); continue; }
+            if (frame.TuningGeneration != generation || frame.RequestedCenterFrequencyHz != centerHz)
+                throw new InvalidOperationException("Spectrum belongs to the wrong tuning generation.");
+            var levels = frame.LevelsDb.Span;
+            int peak = 0;
+            for (int i = 0; i < levels.Length; ++i)
+            {
+                if (!float.IsFinite(levels[i])) throw new InvalidDataException("Non-finite spectrum pixel.");
+                if (levels[i] > levels[peak]) peak = i;
+            }
+            double frequency = frame.FrequencyAt(peak);
+            // The simulator's unit-complex amplitude is 0.25. Hann scalloping
+            // permits up to ~1.5 dB below the coherent-bin value, not RF dBm.
+            if (Math.Abs(frequency - rfHz) > frame.BinWidthHz || Math.Abs(levels[peak] - 20 * Math.Log10(0.25)) > 1.6)
+                throw new InvalidOperationException($"Unexpected spectrum peak: {frequency:F2} Hz, {levels[peak]:F2} dB.");
+            if (previous is not null)
+            {
+                if (frame.Sequence <= previous.Sequence || frame.PublishedMonotonicMilliseconds <= previous.PublishedMonotonicMilliseconds)
+                    throw new InvalidOperationException("Spectrum returned a duplicate or non-advancing frame.");
+                return new(frame.Sequence, frame.TuningGeneration, frame.RequestedCenterFrequencyHz, frequency,
+                    frequency - centerHz, levels[peak], frame.BinWidthHz, frame.PublishedMonotonicMilliseconds, frame.CoalescedFrames);
+            }
+            previous = frame;
+        }
     }
     public static ReceiveMeasurement Measure(P2ReceiveSession session, double expectedHz, CancellationToken token = default)
     {

@@ -7,6 +7,7 @@
 #include "cmcomm.h"
 #include "cm_p2_receive.h"
 #include "cm_receive_core.h"
+#include "cm_spectrum.h"
 #include "p2_rx_packet.h"
 
 #define AUDIO_CAPACITY 16384
@@ -20,6 +21,11 @@ static uint32_t frequency_hz, high_sequence;
 static int64_t state[24];
 static double audio[2 * AUDIO_CAPACITY];
 static int audio_read, audio_write, audio_count;
+static double spectrum_iq[2 * CM_SPECTRUM_FFT_SIZE];
+static float spectrum_pixels[CM_SPECTRUM_PIXELS];
+static int64_t spectrum_meta[12], spectrum_sequence, spectrum_generation, spectrum_coalesced;
+static int spectrum_count, spectrum_skip, spectrum_ready;
+static uint64_t spectrum_resume_ms;
 #ifdef THETIS_TESTING
 static int fault;
 #define FAIL_AT(s) (fault == (s))
@@ -56,6 +62,38 @@ static void observe_audio(int frames, const double *samples, int error)
     state[20] += frames;
     LeaveCriticalSection(&state_lock);
 }
+static void observe_iq(int samples, const double *iq)
+{
+    EnterCriticalSection(&state_lock);
+    if (now_ms() < spectrum_resume_ms) { LeaveCriticalSection(&state_lock); return; }
+    for (int i = 0; i < samples; ++i)
+    {
+        if (spectrum_skip) { --spectrum_skip; continue; }
+        spectrum_iq[2 * spectrum_count] = iq[2 * i];
+        spectrum_iq[2 * spectrum_count + 1] = iq[2 * i + 1];
+        if (++spectrum_count != CM_SPECTRUM_FFT_SIZE) continue;
+        int error = cm_spectrum_transform(spectrum_iq, spectrum_pixels);
+        for (int p = 0; !error && p < CM_SPECTRUM_PIXELS; ++p)
+            if (!isfinite(spectrum_pixels[p])) error = -1;
+        if (error) { ++state[21]; spectrum_ready = 0; }
+        else
+        {
+            if (spectrum_ready) ++spectrum_coalesced;
+            spectrum_meta[0] = 1; spectrum_meta[1] = ++spectrum_sequence;
+            spectrum_meta[2] = spectrum_generation; spectrum_meta[3] = (int64_t)now_ms();
+            spectrum_meta[4] = frequency_hz; spectrum_meta[5] = selected_ddc;
+            spectrum_meta[6] = sample_rate; spectrum_meta[7] = CM_SPECTRUM_FFT_SIZE;
+            spectrum_meta[8] = CM_SPECTRUM_PIXELS; spectrum_meta[9] = spectrum_coalesced;
+            spectrum_meta[10] = state[9];
+            spectrum_meta[11] = InterlockedAnd(&pcm->pcbuff[0]->overruns, -1);
+            spectrum_ready = 1;
+        }
+        spectrum_count = 0;
+        int hop = sample_rate / 20; // <=20 frames per input-sample second, no overlap
+        spectrum_skip = hop > CM_SPECTRUM_FFT_SIZE ? hop - CM_SPECTRUM_FFT_SIZE : 0;
+    }
+    LeaveCriticalSection(&state_lock);
+}
 static int send_control(int offset, const unsigned char *packet, int length)
 {
     int sent = cm_socket_send_loopback(listenSock, MetisAddr, base_port + offset, packet, length);
@@ -65,9 +103,18 @@ static int send_control(int offset, const unsigned char *packet, int length)
 static int send_high(int run)
 {
     unsigned char packet[1444];
-    EnterCriticalSection(&state_lock); uint32_t frequency = frequency_hz; LeaveCriticalSection(&state_lock);
+    EnterCriticalSection(&state_lock);
+    uint32_t frequency = frequency_hz; int64_t generation = spectrum_generation;
+    LeaveCriticalSection(&state_lock);
     p2_rx_high(packet, selected_ddc, frequency, run, high_sequence++);
-    return send_control(3, packet, 1444);
+    int result = send_control(3, packet, 1444);
+    EnterCriticalSection(&state_lock);
+    // There is no sample-accurate P2 tuning acknowledgement. Wait after the
+    // matching command was sent; metadata remains REQUESTED center frequency.
+    if (!result && run && generation == spectrum_generation && spectrum_resume_ms == UINT64_MAX)
+        spectrum_resume_ms = now_ms() + 250;
+    LeaveCriticalSection(&state_lock);
+    return result;
 }
 static void receive_main(void *unused)
 {
@@ -138,6 +185,7 @@ static void close_owned(void)
     if (lock_owned) DeleteCriticalSection(&state_lock);
     lock_owned = opened = 0;
     memset(state, 0, sizeof(state)); audio_count = audio_read = audio_write = 0;
+    spectrum_ready = spectrum_count = spectrum_skip = 0;
 }
 CM_API int ThetisP2ReceiveOpen(int abi, const char *remote, int base, int ddc, int rate,
     int frequency, cm_checkpoint checkpoint, void *context)
@@ -151,15 +199,19 @@ CM_API int ThetisP2ReceiveOpen(int abi, const char *remote, int base, int ddc, i
     int result = -3;
     memset(state, 0, sizeof(state));
     audio_read = audio_write = audio_count = 0;
+    spectrum_ready = spectrum_count = spectrum_skip = 0;
+    spectrum_sequence = spectrum_coalesced = 0; spectrum_generation = 1;
+    spectrum_resume_ms = UINT64_MAX;
     InitializeCriticalSectionAndSpinCount(&state_lock, 2500); lock_owned = 1;
     base_port = base; selected_ddc = ddc; sample_rate = rate; frequency_hz = (uint32_t)frequency; high_sequence = 0;
     for (int stage = 1; stage <= 5; ++stage)
     {
         if (stage == 1)
         {
-            result = cm_receive_core_open(rate, observe_audio);
+            result = cm_receive_core_open(rate, observe_audio, observe_iq);
             if (result) goto failed;
             core_owned = 1; result = -3;
+            cm_spectrum_configure(rate);
             int streams[10], functions[10] = {0}, calls[10] = {0};
             for (int i = 0; i < 10; ++i) streams[i] = 1; // no divide-by-zero for inactive DDC routes
             functions[ddc] = 1; // selected DDC -> Inbound(CM RX0)
@@ -199,7 +251,11 @@ CM_API int ThetisP2ReceiveTune(int frequency)
     if (frequency < 0 || frequency > 61440000) return -1;
     if (!enter()) return -2;
     if (!opened || WaitForSingleObject(stop_event, 0) != WAIT_TIMEOUT) { leave(); return -3; }
-    EnterCriticalSection(&state_lock); frequency_hz = (uint32_t)frequency; LeaveCriticalSection(&state_lock);
+    EnterCriticalSection(&state_lock);
+    frequency_hz = (uint32_t)frequency; ++spectrum_generation;
+    spectrum_ready = spectrum_count = spectrum_skip = 0;
+    spectrum_resume_ms = UINT64_MAX;
+    LeaveCriticalSection(&state_lock);
     leave(); return 0;
 }
 CM_API int ThetisP2ReceiveGetState(int64_t *values, int capacity)
@@ -229,6 +285,22 @@ CM_API int ThetisP2ReceiveReadAudio(double *samples, int capacity_frames)
         audio_read = (audio_read + 1) % AUDIO_CAPACITY;
     }
     audio_count -= count;
+    LeaveCriticalSection(&state_lock); leave(); return count;
+}
+CM_API int ThetisP2ReceiveSpectrumAbi(void) { return 1; }
+CM_API int ThetisP2ReceiveReadSpectrum(int abi, float *pixels, int capacity, int64_t *metadata, int metadata_capacity)
+{
+    if (abi != 1 || !pixels || capacity < CM_SPECTRUM_PIXELS || !metadata || metadata_capacity < 12) return -1;
+    if (!enter()) return -2;
+    if (!opened) { leave(); return -3; }
+    EnterCriticalSection(&state_lock);
+    int count = 0;
+    if (spectrum_ready)
+    {
+        memcpy(pixels, spectrum_pixels, sizeof(spectrum_pixels));
+        memcpy(metadata, spectrum_meta, sizeof(spectrum_meta));
+        spectrum_ready = 0; count = CM_SPECTRUM_PIXELS;
+    }
     LeaveCriticalSection(&state_lock); leave(); return count;
 }
 #ifdef THETIS_TESTING

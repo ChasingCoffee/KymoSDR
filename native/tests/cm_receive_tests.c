@@ -4,6 +4,7 @@
  */
 #include "cm_p2_receive.h"
 #include "cm_transport.h"
+#include "cm_spectrum.h"
 #include "radio_socket.h"
 #include <math.h>
 #include <stdio.h>
@@ -19,6 +20,7 @@ extern void init_impulse_cache(int);
 extern void destroy_impulse_cache(void);
 extern void ThetisWdspSetPlanningTimeLimit(double);
 extern int ThetisTestCMInputRing(void);
+extern int ThetisTestCMSpectrum(void);
 extern int test_process_threads(void);
 extern int test_process_threads_after_join(int);
 extern int test_peer_send(cm_socket, int, const void *, int);
@@ -82,6 +84,17 @@ int main(void)
     CHECK(ThetisP2ReceiveOpen(1, "127.0.0.1", 51024, 2, 768000, 14199000, NULL, NULL) == -1);
     CHECK(ThetisP2ReceiveOpen(1, "127.0.0.1", 51024, 2, 192000, -1, NULL, NULL) == -1);
     CHECK(ThetisP2ReceiveGetState(NULL, 24) == -1);
+    float spectrum[CM_SPECTRUM_PIXELS + 1]; int64_t metadata[13];
+    spectrum[0] = spectrum[CM_SPECTRUM_PIXELS] = 12345;
+    metadata[0] = metadata[12] = 1234567;
+    CHECK(ThetisP2ReceiveSpectrumAbi() == 1);
+    CHECK(ThetisP2ReceiveReadSpectrum(2, spectrum, CM_SPECTRUM_PIXELS, metadata, 12) == -1);
+    CHECK(ThetisP2ReceiveReadSpectrum(1, spectrum, CM_SPECTRUM_PIXELS - 1, metadata, 12) == -1);
+    CHECK(ThetisP2ReceiveReadSpectrum(1, spectrum, CM_SPECTRUM_PIXELS, metadata, 11) == -1);
+    CHECK(ThetisP2ReceiveReadSpectrum(1, NULL, CM_SPECTRUM_PIXELS, metadata, 12) == -1);
+    CHECK(ThetisP2ReceiveReadSpectrum(1, spectrum, CM_SPECTRUM_PIXELS, NULL, 12) == -1);
+    CHECK(ThetisP2ReceiveReadSpectrum(1, spectrum, CM_SPECTRUM_PIXELS, metadata, 12) == -3);
+    CHECK(spectrum[0] == 12345 && metadata[0] == 1234567);
     CHECK(ThetisP2ReceiveClose() == 0); closed();
     init_impulse_cache(0); ThetisWdspSetPlanningTimeLimit(0);
     CHECK(ThetisCmOpen(1, 192000, 0, 0, NULL, NULL) == 0);
@@ -89,6 +102,9 @@ int main(void)
     int ring_result = ThetisTestCMInputRing();
     if (ring_result) fprintf(stderr, "Input ring failure at helper line %d\n", ring_result);
     CHECK(ring_result == 0);
+    int spectrum_result = ThetisTestCMSpectrum();
+    if (spectrum_result) fprintf(stderr, "Spectrum failure at helper line %d\n", spectrum_result);
+    CHECK(spectrum_result == 0);
     CHECK(ThetisCmClose() == 0); closed();
     for (int target = -5; target <= 5; ++target)
     {
@@ -128,6 +144,9 @@ int main(void)
         CHECK(ThetisP2ReceiveGetState(state, 23) == -1);
         CHECK(ThetisP2ReceiveGetState(state, 24) == 24 && state[24] == 1234567);
         int port = (int)state[2], sample = 0;
+        CHECK(ThetisP2ReceiveReadSpectrum(1, spectrum, CM_SPECTRUM_PIXELS, metadata, 12) == 0);
+        int64_t last_spectrum = 0, last_publication = 0, coalesced = 0;
+        int spectrum_frames = 0;
         memset(packet, 0, sizeof(packet));
         CHECK(test_peer_send(peer[1], port, packet, 60) == 60);
         CHECK(test_peer_send(peer[2], port, packet, 132) == 132);
@@ -143,6 +162,29 @@ int main(void)
             CHECK(test_peer_send(peer[4], port, packet, 1444) == 1444);
             Sleep(5);
             CHECK(!high_controls(peer[3]));
+            if (block % 30 == 0) // deliberately slower than production: bounded latest-frame mailbox
+            {
+                int pixels = ThetisP2ReceiveReadSpectrum(1, spectrum, CM_SPECTRUM_PIXELS, metadata, 12);
+                CHECK(pixels == 0 || pixels == CM_SPECTRUM_PIXELS);
+                if (pixels)
+                {
+                    CHECK(metadata[0] == 1 && metadata[1] > last_spectrum && metadata[2] == 1 && metadata[3] > last_publication);
+                    CHECK(metadata[4] == 14199000 && metadata[5] == 9 && metadata[6] == 48000);
+                    CHECK(metadata[7] == CM_SPECTRUM_FFT_SIZE && metadata[8] == CM_SPECTRUM_PIXELS);
+                    CHECK(metadata[9] >= coalesced && metadata[10] == 1 && metadata[11] == 0);
+                    CHECK(spectrum[CM_SPECTRUM_PIXELS] == 12345 && metadata[12] == 1234567);
+                    int peak = 0;
+                    for (int p = 0; p < pixels; ++p)
+                    {
+                        CHECK(isfinite(spectrum[p]));
+                        if (spectrum[p] > spectrum[peak]) peak = p;
+                    }
+                    CHECK(fabs(-24000 + (peak + 1) * (48000.0 / CM_SPECTRUM_FFT_SIZE) - 1000) < 12);
+                    CHECK(fabs(spectrum[peak] + 20) < 1.6);
+                    last_spectrum = metadata[1]; last_publication = metadata[3]; coalesced = metadata[9];
+                    ++spectrum_frames;
+                }
+            }
             int count = ThetisP2ReceiveReadAudio(audio, 2048); CHECK(count >= 0);
             for (int i = 0; i < count; ++i)
             {
@@ -163,8 +205,14 @@ int main(void)
         CHECK(state[7] == 328 && state[8] == 328 * 238 && state[9] == 1 && state[10] == 2);
         CHECK(state[11] == 2 && state[12] == 1 && state[13] == 1 && state[14] == 1);
         CHECK(state[15] == 0 && state[17] == 0 && state[19] == 0 && state[21] == 0);
+        CHECK(spectrum_frames >= 5 && coalesced > 0);
+        printf("Spectrum: %d pulls, sequence=%lld coalesced=%lld, signed frequency/level and bounded ABI passed\n",
+            spectrum_frames, (long long)last_spectrum, (long long)coalesced);
         CHECK(ThetisP2ReceiveReadAudio(audio, 16385) == -1);
         CHECK(ThetisP2ReceiveTune(14198500) == 0);
+        spectrum[0] = 12345; metadata[0] = 1234567;
+        CHECK(ThetisP2ReceiveReadSpectrum(1, spectrum, CM_SPECTRUM_PIXELS, metadata, 12) == 0);
+        CHECK(spectrum[0] == 12345 && metadata[0] == 1234567); // no pre-tune frame or buffer writes
         CHECK(ThetisP2ReceiveClose() == 0 && ThetisP2ReceiveClose() == 0); closed();
         CHECK(high_controls(peer[3])); // worker's final RUN0 reached the peer before close returned
         cm_socket rebound = CM_INVALID_SOCKET; int rebound_port;

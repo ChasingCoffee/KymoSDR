@@ -14,6 +14,7 @@ static volatile LONG command_busy;
 static int stage;
 static int receive_owner;
 static cm_audio_observer audio_observer;
+static cm_iq_observer iq_observer;
 static int scope_creates, play_creates, record_creates;
 
 static void __stdcall create_scope(int id) { (void)id; ++scope_creates; }
@@ -37,14 +38,14 @@ static void close_stages(void)
     if (stage >= 2) destroy_pipe();
     if (stage >= 1) destroy_cmaster();
     stage = 0;
-    receive_owner = 0; audio_observer = NULL;
+    receive_owner = 0; audio_observer = NULL; iq_observer = NULL;
     /* Clear callback addresses only after every owner has stopped. */
     memset(pcm, 0, sizeof(*pcm));
     memset(ppip, 0, sizeof(*ppip));
     memset(psyn, 0, sizeof(*psyn));
 }
 static int open_core(int abi, int rx_rate, int audio_mode, int allow_transmit,
-                       cm_checkpoint checkpoint, void *context, int receiver, cm_audio_observer observer)
+                       cm_checkpoint checkpoint, void *context, int receiver, cm_audio_observer observer, cm_iq_observer spectrum)
 {
     if (abi != 1 || allow_transmit != 0) return -1;
     if (audio_mode != 0) return -3;
@@ -52,7 +53,7 @@ static int open_core(int abi, int rx_rate, int audio_mode, int allow_transmit,
         rx_rate != 384000 && rx_rate != 768000 && rx_rate != 1536000) return -1;
     if (!enter_command()) return -2;
     if (stage) { leave_command(); return -2; }
-    receive_owner = receiver; audio_observer = observer;
+    receive_owner = receiver; audio_observer = observer; iq_observer = spectrum;
     int spc[] = {2};
     int inbound[] = {240, 240, 240, 240, 240, 720, 240, 240};
     int rates[] = {rx_rate, rx_rate, rx_rate, rx_rate, rx_rate, 48000, rx_rate, rx_rate};
@@ -88,9 +89,9 @@ static int open_core(int abi, int rx_rate, int audio_mode, int allow_transmit,
 }
 CM_API int ThetisCmOpen(int abi, int rx_rate, int audio_mode, int allow_transmit,
                        cm_checkpoint checkpoint, void *context)
-{ return open_core(abi, rx_rate, audio_mode, allow_transmit, checkpoint, context, 0, NULL); }
-int cm_receive_core_open(int rate, cm_audio_observer observer)
-{ return open_core(1, rate, 0, 0, NULL, NULL, 1, observer); }
+{ return open_core(abi, rx_rate, audio_mode, allow_transmit, checkpoint, context, 0, NULL, NULL); }
+int cm_receive_core_open(int rate, cm_audio_observer observer, cm_iq_observer spectrum)
+{ return open_core(1, rate, 0, 0, NULL, NULL, 1, observer, spectrum); }
 int cm_receive_core_close(void)
 {
     /* Owner-only teardown: a racing short core-status query must not make the
@@ -103,6 +104,10 @@ int cm_receive_core_close(void)
 void cm_observe_rx(int stream, int count, const double *samples, int error)
 {
     if (stream == 0 && audio_observer) audio_observer(count, samples, error);
+}
+void cm_observe_iq(int stream, int count, const double *samples)
+{
+    if (stream == 0 && iq_observer) iq_observer(count, samples);
 }
 CM_API int ThetisCmClose(void)
 {

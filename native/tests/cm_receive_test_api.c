@@ -3,7 +3,39 @@
  * Requires an offline core, with all DSP channels disabled and no producer.
  */
 #include "cmcomm.h"
+#include "cm_spectrum.h"
 #define CHECK(x) do { if (!(x)) return __LINE__; } while (0)
+PORT int ThetisTestCMSpectrum(void)
+{
+    double iq[2 * CM_SPECTRUM_FFT_SIZE];
+    float pixels[CM_SPECTRUM_PIXELS + 2];
+    const int bins[] = {85, -85, 0, -2047, 2047};
+    cm_spectrum_configure(192000);
+    pixels[0] = pixels[CM_SPECTRUM_PIXELS + 1] = 12345;
+    for (int test = 0; test < 5; ++test)
+    {
+        for (int i = 0; i < CM_SPECTRUM_FFT_SIZE; ++i)
+        {
+            double phase = 6.283185307179586 * bins[test] * i / CM_SPECTRUM_FFT_SIZE;
+            iq[2 * i] = 0.125 * cos(phase); iq[2 * i + 1] = 0.125 * sin(phase);
+        }
+        CHECK(cm_spectrum_transform(iq, pixels + 1) == 0);
+        CHECK(pixels[0] == 12345 && pixels[CM_SPECTRUM_PIXELS + 1] == 12345);
+        int peak = 0;
+        for (int i = 0; i < CM_SPECTRUM_PIXELS; ++i)
+        {
+            CHECK(isfinite(pixels[1 + i]));
+            if (pixels[1 + i] > pixels[1 + peak]) peak = i;
+        }
+        CHECK(peak == CM_SPECTRUM_FFT_SIZE / 2 - 1 + bins[test]);
+        CHECK(fabs(pixels[1 + peak] - 20 * log10(0.125)) < 0.01);
+        CHECK(pdisp[0]->dispatcher == 0 && *pdisp[0]->pnum_threads == 0);
+    }
+    memset(iq, 0, sizeof(iq));
+    CHECK(cm_spectrum_transform(iq, pixels + 1) == 0);
+    for (int i = 1; i <= CM_SPECTRUM_PIXELS; ++i) CHECK(isfinite(pixels[i]) && pixels[i] < -100);
+    return 0;
+}
 PORT int ThetisTestCMInputRing(void)
 {
     CMB a = pcm->pcbuff[0];

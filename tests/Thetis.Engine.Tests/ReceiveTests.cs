@@ -40,6 +40,11 @@ public sealed class ReceiveTests
         Assert.AreEqual(1000, result.BeforeTuning.ToneHz, 20);
         Assert.AreEqual(1500, result.AfterTuning.ToneHz, 20);
         Assert.AreEqual(0.25 / Math.Sqrt(2), result.BeforeTuning.Rms, 0.005);
+        Assert.AreEqual(2, result.SchemaVersion);
+        Assert.AreEqual(14_200_000, result.SpectrumBeforeTuning.PeakFrequencyHz, result.SpectrumBeforeTuning.BinWidthHz);
+        Assert.AreEqual(14_200_000, result.SpectrumAfterTuning.PeakFrequencyHz, result.SpectrumAfterTuning.BinWidthHz);
+        Assert.AreEqual(2, result.SpectrumAfterTuning.TuningGeneration);
+        Assert.IsTrue(result.SpectrumAfterTuning.Sequence > result.SpectrumBeforeTuning.Sequence);
         Assert.IsFalse(result.Simulator.Running || result.Simulator.Transmit.Ptt);
         Assert.AreEqual(0, result.Simulator.Transmit.Packets);
         AssertClosed();
@@ -55,6 +60,8 @@ public sealed class ReceiveTests
             using var session = P2ReceiveSession.Open(directory, new(simulator.BasePort, ddc, rate));
             var measurement = ReceiveSelfTest.Measure(session, 1000);
             Assert.AreEqual(0.25 / Math.Sqrt(2), measurement.Rms, 0.005);
+            var spectrum = ReceiveSelfTest.MeasureSpectrum(session, 14_199_000, 14_200_000, 1);
+            Assert.AreEqual(rate / 4096.0, spectrum.BinWidthHz);
             var state = session.State;
             Assert.AreEqual(ddc, state.Ddc); Assert.AreEqual(rate, state.InputRate);
             Assert.IsTrue(state.IqPackets > 0 && state.AudioProduced > 0);
@@ -67,11 +74,48 @@ public sealed class ReceiveTests
             Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => session.Tune(-1));
             session.Dispose(); session.Dispose();
             Assert.ThrowsExactly<ObjectDisposedException>(() => _ = session.State);
+            Assert.ThrowsExactly<ObjectDisposedException>(() => session.ReadSpectrum());
             AssertClosed();
             await WaitUntil(() => !simulator.State.Running);
             using var rebound = new UdpClient(new IPEndPoint(IPAddress.Loopback, state.LocalPort));
         }
         using var offline = OfflineRadioSession.Open(directory); // ownership returns to the old API
+    }
+
+    [TestMethod, TestCategory("Native")]
+    public async Task SpectrumCoalescesOwnsItsStorageAndTracksRapidRetunesToNegativeOffsets()
+    {
+        await using var simulator = G2Simulator.Open(new(BasePort: 0));
+        using var session = P2ReceiveSession.Open(NativeDirectory(), new(simulator.BasePort));
+        await WaitUntil(() => session.State.AudioProduced > 48000);
+        var first = session.ReadSpectrum(); Assert.IsNotNull(first);
+        Assert.IsTrue(first.CoalescedFrames > 0);
+        Assert.AreEqual(2, first.Ddc); Assert.AreEqual(4095, first.LevelsDb.Length);
+        var copy = first.LevelsDb.ToArray();
+        session.Tune(14_198_500);
+        Assert.IsNull(session.ReadSpectrum()); // Tune invalidates the unread and partial FFT, not just its label
+        session.Tune(14_201_000);
+        Assert.IsNull(session.ReadSpectrum());
+        var negative = ReceiveSelfTest.MeasureSpectrum(session, 14_201_000, 14_200_000, 3);
+        Assert.IsTrue(negative.PeakOffsetHz < 0 && negative.Sequence > first.Sequence);
+        CollectionAssert.AreEqual(copy, first.LevelsDb.ToArray());
+        Assert.AreEqual(1, first.TuningGeneration); Assert.AreEqual(14_199_000, first.RequestedCenterFrequencyHz);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => first.FrequencyAt(-1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => first.FrequencyAt(first.LevelsDb.Length));
+        session.Dispose();
+        CollectionAssert.AreEqual(copy, first.LevelsDb.ToArray());
+        AssertClosed();
+    }
+
+    [TestMethod]
+    public void SpectrumFrameAxisAndAbiAreRendererIndependent()
+    {
+        var frame = new ReceiveSpectrumFrame(new float[4095], [1, 7, 2, 5000, 14_200_000, 9, 192000, 4096, 4095, 3, 1, 0]);
+        Assert.AreEqual(14_104_000 + frame.BinWidthHz, frame.FrequencyAt(0));
+        Assert.AreEqual(14_200_000, frame.FrequencyAt(2047));
+        Assert.AreEqual(14_296_000 - frame.BinWidthHz, frame.FrequencyAt(4094));
+        Assert.AreEqual(3, frame.CoalescedFrames); Assert.AreEqual(1, frame.MissingPackets);
+        Assert.ThrowsExactly<NotSupportedException>(() => new ReceiveSpectrumFrame([], new long[12]));
     }
 
     [TestMethod, TestCategory("Native")]
@@ -147,7 +191,7 @@ public sealed class ReceiveTests
             double[] buffer = new double[128];
             for (int i = 0; i < 1000; ++i)
             {
-                try { session.ReadAudio(buffer); _ = session.State; }
+                try { session.ReadAudio(buffer); session.ReadSpectrum(); _ = session.State; }
                 catch (ObjectDisposedException) { return; }
             }
         });

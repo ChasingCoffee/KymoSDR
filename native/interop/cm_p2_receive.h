@@ -16,6 +16,17 @@ CM_API int ThetisP2ReceiveTune(int frequency);
 CM_API int ThetisP2ReceiveGetState(int64_t *values, int capacity);
 /* Pull interleaved L/R from the post-WDSP RX0/sub0 tap; no managed callback. */
 CM_API int ThetisP2ReceiveReadAudio(double *samples, int capacity_frames);
+/* Separate spectrum ABI 1 leaves the existing receive state ABI unchanged.
+ * Pull latest unread frame: 4095 floats, or 0 without modifying either buffer.
+ * Hann FFT4096, no averaging, uncalibrated dB relative to unit complex amplitude
+ * (NOT dBm or dB/Hz). Pixel p: requested_center - rate/2 + (p+1)*rate/4096.
+ * Metadata: ABI, sequence, tuning generation, host monotonic publish ms,
+ * requested center Hz, DDC, sample rate, FFT size, pixel count, coalesced frames,
+ * cumulative missing packets, cumulative CM input overruns. Counters are per
+ * session, not per tune. Tune discards any pending/partial frame. No hardware
+ * tuning acknowledgement or sample timestamp is implied by this metadata. */
+CM_API int ThetisP2ReceiveSpectrumAbi(void);
+CM_API int ThetisP2ReceiveReadSpectrum(int abi, float *pixels, int capacity, int64_t *metadata, int metadata_capacity);
 #ifdef THETIS_TESTING
 CM_API int ThetisP2ReceiveTestFault(int stage);
 #endif

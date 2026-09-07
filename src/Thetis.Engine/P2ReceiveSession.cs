@@ -26,11 +26,13 @@ public sealed record P2ReceiveState(int LocalPort, int BasePort, int Ddc, int In
     long ForeignPackets, long MicPacketsDiscarded, long StatusPackets, long SocketErrors, long CommandsSent,
     long InputOverruns, long AudioQueued, long AudioDropped, long AudioProduced, long DspErrors);
 
-/// <summary>Loopback P2 -> native router/CM buffer -> RX0/sub0 WDSP USB audio. No hardware or TX operation.</summary>
+/// <summary>Loopback P2 -> native router/CM buffer -> WDSP spectrum and USB audio. No hardware or TX operation.</summary>
 public sealed class P2ReceiveSession : IDisposable
 {
     private static bool active;
     private readonly ReceiveHandle handle = new();
+    private readonly float[] spectrumPixels = new float[ReceiveSpectrumFrame.NativePixelCount];
+    private readonly long[] spectrumMetadata = new long[12];
     private P2ReceiveSession() { }
 
     public static P2ReceiveSession Open(string nativeDirectory, P2ReceiveOptions options,
@@ -44,6 +46,8 @@ public sealed class P2ReceiveSession : IDisposable
         lock (DspRuntime.Gate)
         {
             OfflineRadioSession.RequireIdle(); token.ThrowIfCancellationRequested(); ReadNativeState();
+            if (P2ReceiveNative.ThetisP2ReceiveSpectrumAbi() != 1)
+                throw new NotSupportedException("Native receive spectrum ABI is incompatible.");
             var session = new P2ReceiveSession();
             Exception? callbackError = null;
             ChannelMasterNative.Checkpoint callback = (stage, _) =>
@@ -105,6 +109,21 @@ public sealed class P2ReceiveSession : IDisposable
         }
     }
     private void CheckOpen() => ObjectDisposedException.ThrowIf(handle.IsClosed || handle.IsInvalid, this);
+    /// <summary>Returns the latest unread spectrum, or null without waiting for new input.
+    /// Slow readers coalesce frames; neither native nor managed code queues a history.</summary>
+    public ReceiveSpectrumFrame? ReadSpectrum()
+    {
+        lock (DspRuntime.Gate)
+        {
+            CheckOpen();
+            int count = P2ReceiveNative.ThetisP2ReceiveReadSpectrum(1, spectrumPixels, spectrumPixels.Length,
+                spectrumMetadata, spectrumMetadata.Length);
+            GC.KeepAlive(handle);
+            if (count == 0) return null;
+            if (count != spectrumPixels.Length) throw new InvalidOperationException($"Native spectrum pull failed ({count}).");
+            return new((float[])spectrumPixels.Clone(), spectrumMetadata);
+        }
+    }
     internal static long[] ReadNativeState()
     {
         long[] state = new long[24];
@@ -144,4 +163,9 @@ internal static class P2ReceiveNative
     internal static extern int ThetisP2ReceiveGetState([Out] long[] values, int capacity);
     [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     internal static extern int ThetisP2ReceiveReadAudio([Out] double[] samples, int capacityFrames);
+    [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int ThetisP2ReceiveSpectrumAbi();
+    [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int ThetisP2ReceiveReadSpectrum(int abi, [Out] float[] pixels, int capacity,
+        [Out] long[] metadata, int metadataCapacity);
 }

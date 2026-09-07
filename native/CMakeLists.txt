@@ -53,7 +53,7 @@ foreach(unit IN LISTS cm_units)
   target_sources(wdsp PRIVATE "${CM_SOURCE_DIR}/${unit}.c")
   set_source_files_properties("${CM_SOURCE_DIR}/${unit}.c" PROPERTIES COMPILE_DEFINITIONS THETIS_CM_HEADLESS)
 endforeach()
-target_sources(wdsp PRIVATE platform/cm_thread.c platform/cm_no_audio.c interop/cm_session.c interop/cm_transport.c interop/cm_p2_receive.c interop/p2_rx_packet.c)
+target_sources(wdsp PRIVATE platform/cm_thread.c platform/cm_no_audio.c interop/cm_session.c interop/cm_transport.c interop/cm_p2_receive.c interop/cm_spectrum.c interop/p2_rx_packet.c)
 set_source_files_properties(platform/cm_no_audio.c interop/cm_session.c interop/cm_transport.c interop/cm_p2_receive.c PROPERTIES COMPILE_DEFINITIONS THETIS_CM_HEADLESS)
 target_include_directories(wdsp PRIVATE "${CM_SOURCE_DIR}" interop
   "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/lib/portaudio-19.7.0/include")

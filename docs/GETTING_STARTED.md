@@ -87,9 +87,11 @@ To connect the simulator to the native P2/ChannelMaster/WDSP work, first build t
 dotnet run --project src/Thetis.Headless -c Release --no-build -- receive-selftest --native-dir ABSOLUTE_NATIVE_STAGE_DIRECTORY
 ```
 
-This creates its own loopback peer and verifies recovered USB audio before and
-after retuning. It does not play audio or use TX. See [receive integration](P2_RECEIVE_INTEGRATION.md)
-for the command, API, counters and remaining hardware/spectrum gates.
+This creates its own loopback peer and verifies recovered USB audio and advancing
+spectrum peaks before and after retuning. JSON schema 2 includes both audio and
+spectrum measurements. It does not play audio, draw a UI or use TX.
+See [receive integration](P2_RECEIVE_INTEGRATION.md) for the command, frame API,
+uncalibrated spectrum units, counters and remaining hardware/soak gates.
 
 ## P1 simulator (optional; macOS/Linux host)
 

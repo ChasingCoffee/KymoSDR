@@ -394,6 +394,9 @@ void xcmaster (int stream)
 		xpipe (stream, 0, pcm->in);
 		xanb (pcm->rcvr[rx].panb);																// nb
 		xnob (pcm->rcvr[rx].pnob);																// nb2
+#ifdef THETIS_CM_HEADLESS
+		cm_observe_iq(stream, pcm->xcm_insize[stream], pcm->in[stream]);
+#endif
 		Spectrum0 (_InterlockedAnd (&pcm->rcvr[rx].run_pan, 0xffffffff), rx, 0, 0,				// panadapter 
 			pcm->in[stream]);
 

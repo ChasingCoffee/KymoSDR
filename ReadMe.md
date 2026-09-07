@@ -22,8 +22,9 @@ Nereid of Thetis.
   now has a .NET session owner and 100-cycle tests passing on all three OSes.
   A separate [RNet/socket loopback probe](docs/TRANSPORT_LOOPBACK.md) now tests
   allocation, binding and joined shutdown. A new [loopback receive integration](docs/P2_RECEIVE_INTEGRATION.md)
-  connects simulated P2 I/Q through ChannelMaster to WDSP audio, with retuning and
-  packet/buffer diagnostics. This is not yet a usable hardware receiver.
+  connects simulated P2 I/Q through ChannelMaster to WDSP audio and advancing,
+  renderer-independent spectrum frames, with retuning and packet/buffer diagnostics.
+  This is not yet a usable hardware receiver.
 - The inherited Windows application remains in the tree as the source/reference
   implementation. Its features are not a claim of portable feature parity.
 - A standalone [.NET G2/P2 simulator](docs/G2_SIMULATOR.md) provides
