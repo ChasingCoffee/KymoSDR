@@ -112,8 +112,8 @@ frame-read gap, signal-check counts, native/simulator snapshots and cleanup flag
   native socket teardown. Native socket errors are forbidden during observation;
   only the explicit peer-disappearance check permits them after observation.
 - `pacingResyncs` records simulator clock rebases after host scheduling pauses.
-  The simulator limits catch-up to eight packets and rebases before sending when
-  farther behind; it does not dump a long replay burst into CM. Rebases can lower
+  The simulator limits catch-up to eight packets, then rebases when farther
+  behind; it does not dump a long replay burst into CM. Rebases can lower
   wall-time throughput and remain visible; no native input-overrun allowance is
   introduced to make such failures pass.
 
@@ -127,6 +127,10 @@ interrupt arbitrary native code safely.
 The short campaign, input/error policy tests and real cancellation/observer-error
 cleanup tests supplement the existing receive regressions. Source-specific
 platform and long-run results are recorded in [CI results](NATIVE_CI_RESULTS.md).
+The first Linux short run exposed substantial RSS growth between reconnect
+phases despite passing native leak checks; see the [open memory investigation](NATIVE_CI_RESULTS.md#open-follow-up-linux-reconnect-memory).
+Long Linux reconnect campaigns can need much more memory than a steady session;
+the optional long mode is not a claim of memory qualification.
 Simulator endurance is not live-radio qualification or completion of M4: P1
 streaming, real G2 RX, Windows-reference comparisons and hardware performance
 checks remain pending. Desktop/audio output and native TX integration remain

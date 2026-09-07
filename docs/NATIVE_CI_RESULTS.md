@@ -18,13 +18,21 @@ packets and audio drops remained zero. Cleanup still disposed both owners,
 observed STOP and rebound the native port. A deterministic 100 ms clock-jump
 test reproduces the 32-packet burst without sockets.
 
-The simulator now rebases **before** emitting an over-budget replay, with a
-maximum eight-packet catch-up for small jitter. The clock-jump regression now
-expects one packet, contiguous sequence numbers and continuous synthetic signal
-phase; another test retains normal small-jitter catch-up. Pacing resyncs remain
-visible in reports. Native input-overrun assertions and ring capacity are
-unchanged. A fresh 30-minute qualification and cross-platform CI are pending;
-the failed run is not endurance qualification.
+The first fix at `c755f191` rebased before replaying a large pause, emitting one
+packet in that case and allowing eight for smaller jitter. That revision passes
+the local 30-minute campaign, but a later hosted macOS 384 kHz regression exposes
+starvation under repeated coarse wakeups: 46,336 audio frames produced in eight
+seconds, below the smoke test's 56,192-frame requirement, with no socket/DSP
+errors or overruns. A deterministic sequence of ten 10 ms wakeups reproduces
+only ten packets rather than the safe 80-packet budget.
+
+The final pacing policy emits **at most eight packets per DDC per tick**, then
+rebases if still behind. That is 1904 I/Q samples, well within CM's 6144-sample
+ring, without the one-packet starvation. Clock-jump tests check the bound,
+contiguous sequences, phase continuity and continued progress under repeated
+coarse high-rate wakeups; ordinary small jitter still catches up normally.
+Resync counters remain visible; native overrun assertions, ring capacity and
+signal-measurement deadlines are unchanged. Final-source validation is pending.
 
 ### POSIX post-join OS thread observations
 
@@ -52,6 +60,28 @@ At `c755f191`, the isolated probe records 10/1000 transient counts on the hosted
 Linux sanitizer runner, and 992/1000 locally on macOS (932/1000 under ASan).
 Every cycle settles to one thread. The Linux sanitizer job passes all eight
 tests with ASan, UBSan and leak detection enabled, without suppressions.
+
+### Open follow-up: Linux reconnect memory
+
+The short campaign at `c755f191` passes its signal, fault and cleanup checks on
+Linux, but its process RSS increases from 1,255,747,584 bytes at the steady
+baseline to 6,445,428,736 bytes at the end of the second reconnect. Most of that
+growth occurs between separately opened phases, not within the 10-second
+steady window (+13,201,408 bytes). The approximate managed heap remains small.
+The same runner's synchronous 100-cycle native CM fixture is nearly flat after
+warm-up (1,251,774,464 → 1,251,782,656 bytes); the managed offline lifecycle CLI
+also remains near its warm baseline (1,285,849,088 → 1,289,093,120 bytes).
+
+This is **unresolved reconnect memory growth**, not a proven leak or harmless
+cache. Native fixture LeakSanitizer success does not qualify the asynchronous
+managed campaign's memory behavior. Allocator arena reuse and allocation/free
+thread placement are hypotheses to compare with retained live native blocks;
+[glibc's allocator controls](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html)
+provide diagnostic levers, not an established fix. No allocator override,
+forced trim/GC, topology reduction or memory-limit relaxation was added.
+Profile repeated asynchronous open/close before treating long Linux reconnect
+runs as memory-qualified; opt-in runs can require substantially more memory
+than one steady session. This is the next resource-qualification task.
 
 ## Renderer-independent P2 receive spectrum frames
 
