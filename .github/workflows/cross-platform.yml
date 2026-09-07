@@ -56,6 +56,8 @@ jobs:
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- --help
       - name: G2 receive simulator self-test (loopback only, no native libraries)
         run: dotnet run --project src/Thetis.Simulator -c Release --no-build --no-restore -- selftest
+      - name: G2 virtual transmit sink self-test (loopback only, no radio)
+        run: dotnet run --project src/Thetis.Simulator -c Release --no-build --no-restore -- tx-selftest
       - name: Local NIC enumeration (no discovery packets)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- nics --allow-loopback --json
 

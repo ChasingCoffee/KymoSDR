@@ -25,9 +25,10 @@ Nereid of Thetis.
   ported; this is not yet a usable radio receiver.
 - The inherited Windows application remains in the tree as the source/reference
   implementation. Its features are not a claim of portable feature parity.
-- A standalone [.NET G2/P2 receive simulator](docs/G2_SIMULATOR.md) provides
+- A standalone [.NET G2/P2 simulator](docs/G2_SIMULATOR.md) provides
   loopback discovery, synthetic I/Q and repeatable packet-loss tests without
-  hardware or native DSP libraries. It is not a complete radio emulator.
+  hardware or native DSP libraries, plus an opt-in virtual TX I/Q sink with
+  PTT and sample metrics. It cannot transmit RF and is not a complete radio emulator.
 
 The initial solution, project namespaces and native library names still use
 `Thetis`; the public project name is KymoSDR. See the

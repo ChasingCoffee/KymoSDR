@@ -27,18 +27,25 @@ The audits are static evidence, not proof of successful builds or operation. Mil
 | Intel Mac, Windows ARM64, Linux ARM64 | Avoid unnecessary architectural barriers, but do not add these to the initial delivery matrix. | Later qualification if requested and test hardware is available. |
 
 The live hardware target is the user's **ANAN G2 headless, Protocol 2**. It is
-temporarily unavailable as of 2026-09-07, so a [lightweight G2/P2 receive
+temporarily unavailable as of 2026-09-07, so a [lightweight G2/P2
 simulator](G2_SIMULATOR.md) supports the next packet/engine work. P1 development
 uses a pinned `hpsdrsim` version with its Hermes Lite 2 profile. Neither simulator
 qualifies physical hardware behavior.
 
 **Current hardware constraint (2026-09-04):** the G2 has a receive-only antenna
 connected to **ANT1**. The user has explicitly prohibited transmit testing for
-now. Do not assert PTT/MOX, tune, key CW, or send transmit-enabling commands.
+now. Do not assert PTT/MOX, tune, key CW, or send transmit-enabling commands to
+the physical radio.
 M3 transport lifecycle checks must use offline/loopback fixtures, not the G2.
 Later live G2 work is receive-only; transmit testing requires fresh explicit
 user approval and confirmation of a suitable transmit test setup. Reaching M6
 does not itself authorize transmission.
+
+**Simulator-only exception (2026-09-07):** the user authorized virtual TX testing
+in the loopback-only G2 simulator. Its opt-in TX sink and self-contained
+`tx-selftest` may accept/send synthetic TX I/Q and PTT on 127.0.0.1. They cannot
+target an external radio. This does not enable the application's native TX
+engine or relax the physical ANT1 restriction above.
 
 Exact minimum OS versions, Linux distribution and package versions will be pinned during implementation. Avalonia documents Windows, macOS and Linux desktop support, with version-specific support tiers; our support promise must also account for .NET, native dependencies and our own tests. [Avalonia platform documentation](https://docs.avaloniaui.net/docs/supported-platforms).
 

@@ -13,7 +13,7 @@ The legacy Windows solution remains separate.
 Install the .NET 10 SDK for the host architecture. `global.json` selects SDK
 10.0.400, allowing servicing patches within that SDK feature band, not previews
 or a different major version. Neither Visual Studio nor native DSP libraries are
-needed to build this solution. The [G2/P2 receive simulator](G2_SIMULATOR.md) uses
+needed to build this solution. The [G2/P2 simulator](G2_SIMULATOR.md) uses
 only .NET; the optional external P1 simulator needs Git and a C compiler.
 
 Run from the repository root on Windows, macOS or Linux:
@@ -70,11 +70,14 @@ does not validate native initialization, RX, TX or custom P2 streaming ports.
 
 ```sh
 dotnet run --project src/Thetis.Simulator -c Release --no-build -- selftest
+dotnet run --project src/Thetis.Simulator -c Release --no-build -- tx-selftest
 ```
 
-This tests a standalone receive-only peer on loopback, with no native library or
-hardware. See [G2 simulator instructions](G2_SIMULATOR.md) for interactive use,
-synthetic tones/noise, packet-loss injection and supported protocol limits.
+These test a standalone peer on loopback with no native library or hardware.
+`selftest` covers RX; `tx-selftest` sends synthetic I/Q only to the virtual sink it
+creates. Interactive TX simulation requires `serve --tx-mode sink`; it is off by
+default and does not authorize physical G2 TX. See [G2 simulator instructions](G2_SIMULATOR.md)
+for tones/noise, packet-loss injection, TX metrics and supported protocol limits.
 
 ## P1 simulator (optional; macOS/Linux host)
 

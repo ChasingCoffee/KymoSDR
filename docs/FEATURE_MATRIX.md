@@ -14,6 +14,7 @@ simulator coverage without any hardware validation. Last updated 2026-09-07.
 | ChannelMaster lifecycle | M3a offline checks pass cross-platform | 100-cycle native/CLI tests, 68 managed tests, sanitizer checks and separate zero-leak scan | 100-cycle native/CLI tests and 68 managed tests pass; Linux sanitizer/leak checks pass | [M3a boundary](CHANNELMASTER_OFFLINE.md); real packet-worker shutdown and resource/performance budgets remain unqualified. |
 | Radio streams / RX1 spectrum | Not started | None | None in new app | M4. |
 | G2/P2 receive simulator | Standalone .NET loopback peer | Discovery, synthetic I/Q, controls/faults and 100 lifecycle cycles pass | Managed tests and standalone I/Q self-test pass on both | [Simulator scope](G2_SIMULATOR.md); not native RX/WDSP or hardware qualification. |
+| G2/P2 virtual TX sink | Opt-in PTT and 192 kHz TX I/Q metrics | 15 new tests and standalone TX self-test pass | Hosted TX checks pending | [TX subset](G2_SIMULATOR.md#virtual-transmit-sink); no RF, CW keyer, EER, PureSignal or application TX engine. |
 | RNet / socket lifecycle probe | Loopback checks pass cross-platform | Native/managed cycles, rollback, sanitizer and zero-leak scans pass | 100-cycle native/CLI tests and 68 managed tests pass; Linux sanitizer/leak checks pass | [Probe boundary](TRANSPORT_LOOPBACK.md); real P1/P2 packet-worker shutdown still pending. |
 | Audio / shared desktop UI | Not started | None | None in new app | M5. |
 | TX / PTT / CW | Not started | None | None in new app | M6 and mode-specific hardware checks. |

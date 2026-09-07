@@ -13,6 +13,7 @@ internal sealed class P2Device
     internal static readonly int[] SocketOffsets = [0, 1, 2, 3, 4, 5, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
     private static readonly (int Field, int Offset)[] PortFields = [(5, 1), (7, 2), (9, 3), (11, 1), (13, 4), (15, 5), (17, 11), (19, 2)];
     private readonly SimulatorOptions options;
+    private readonly TransmitSink transmit;
     private readonly Ddc[] receivers = Enumerable.Range(0, DdcCount).Select(_ => new Ddc()).ToArray();
     private readonly byte[] mic = new byte[132], status = new byte[60];
     private IPEndPoint? client;
@@ -27,17 +28,19 @@ internal sealed class P2Device
         options.Validate();
         if (options.BasePort == 0) throw new ArgumentException("Resolve the bound base port first.");
         this.options = options;
+        transmit = new(options.SimulateTransmit);
     }
 
     internal SimulatorState Snapshot() => new(client is not null, running, client?.ToString(), discoveries,
         controls, rejected, unsafeRequests, iqPackets, micPackets, statusPackets, injectedDrops, watchdogStops,
-        starts, pacingResyncs, socketErrors, receivers.Select((r, i) => new ReceiverState(i, r.Enabled, r.Rate, r.Frequency)).ToArray());
+        starts, pacingResyncs, socketErrors, receivers.Select((r, i) => new ReceiverState(i, r.Enabled, r.Rate, r.Frequency)).ToArray(), transmit.Snapshot());
     internal bool Running => running;
     internal void SocketFailure() { ++socketErrors; Release(); }
     internal void Shutdown() => Release();
     private void Release()
     {
         client = null; running = receiverConfigured = false;
+        transmit.Release();
         foreach (var receiver in receivers) receiver.Enabled = false;
     }
     private void Expire(double now)
@@ -74,6 +77,7 @@ internal sealed class P2Device
             phaseWords = (packet[37] & 8) != 0;
             if (newClient)
             {
+                transmit.Release(); transmit.Start();
                 receiverConfigured = false;
                 foreach (var receiver in receivers) receiver.Enabled = false;
             }
@@ -97,7 +101,9 @@ internal sealed class P2Device
         if (offset == 3)
         {
             if (packet.Length != IqPacketSize) { ++rejected; return; }
-            if ((packet[4] & 0xfe) != 0 || (packet[5] & 7) != 0)
+            bool nextPtt = (packet[4] & 2) != 0;
+            if ((packet[4] & 0xfc) != 0 || (packet[5] & 7) != 0 ||
+                (nextPtt && (!options.SimulateTransmit || !transmit.Configured)))
             { ++unsafeRequests; ++rejected; Release(); return; }
             bool nextRunning = (packet[4] & 1) != 0;
             if (nextRunning && !receiverConfigured) { ++rejected; return; }
@@ -111,13 +117,27 @@ internal sealed class P2Device
                 ++starts;
                 for (int i = 0; i < DdcCount; ++i) receivers[i].Restart(now, options.Seed, i);
                 micDue = statusDue = now; micSequence = statusSequence = 0;
+                transmit.Start();
             }
+            bool ptt = nextRunning && nextPtt;
+            if (ptt != transmit.Ptt) statusDue = now;
+            uint txWord = BinaryPrimitives.ReadUInt32BigEndian(packet[329..]);
+            transmit.Control(ptt, phaseWords ? txWord * (122_880_000.0 / 4_294_967_296.0) : txWord, packet[345]);
             running = nextRunning; lastControl = now; ++controls; return;
         }
-        // Receive clients can send these setup/audio packets; no device or TX
-        // processing is attached. They deliberately do not keep a lease alive.
+        if (offset == 2 && options.SimulateTransmit)
+        {
+            if (!transmit.Configure(packet)) { ++rejected; return; }
+            lastControl = now; ++controls; return;
+        }
+        // Default RX mode preserves ignored TX setup. Audio never keeps a lease alive.
         if ((offset == 2 && packet.Length == 60) || (offset == 4 && packet.Length == 260)) return;
-        if (offset == 5) { ++unsafeRequests; Release(); }
+        if (offset == 5)
+        {
+            // TX samples never refresh the control lease, even while keyed.
+            if (options.SimulateTransmit && transmit.Accept(packet, running)) return;
+            if (!options.SimulateTransmit) { ++unsafeRequests; Release(); }
+        }
         ++rejected;
     }
 
@@ -180,8 +200,9 @@ internal sealed class P2Device
         if (running && statusDue <= now)
         {
             BinaryPrimitives.WriteUInt32BigEndian(status, statusSequence++);
-            // All telemetry/PTT/CW/power fields stay zero; no fake RF readings.
-            send(1, status, client!); ++statusPackets; statusDue = now + 0.2;
+            // PTT/key fields describe physical inputs, NOT echoed software MOX.
+            // No fake RF power, physical inputs or FIFO model. TX state is in JSON.
+            send(1, status, client!); ++statusPackets; statusDue = now + (transmit.Ptt ? 0.001 : 0.2);
         }
     }
 

@@ -35,6 +35,45 @@ public sealed class SimulatorSocketTests
     }
 
     [TestMethod]
+    public async Task TransmitSelfTestUsesOnlyItsOwnVirtualSink()
+    {
+        var result = await TransmitDiagnostics.RunAsync();
+        Assert.IsTrue(result.Passed && result.LoopbackOnly && result.TransmitSimulated);
+        Assert.IsFalse(result.HardwareContacted || result.Transmit.Ptt);
+        Assert.AreEqual(24000L, result.Transmit.Samples);
+        Assert.AreEqual(1L, result.Transmit.UnkeyedPackets);
+    }
+
+    [TestMethod]
+    public async Task CancellationWhileKeyedDisarmsTheSinkAndReleasesEverySocket()
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cancellation = new CancellationTokenSource();
+        await using var simulator = G2Simulator.Open(new(BasePort: 0, SimulateTransmit: true), cancellation.Token);
+        using var peer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        int port = simulator.BasePort;
+        await Send(0, SimulatorProtocolTests.General(port));
+        await SimulatorDiagnostics.WaitFor(() => simulator.State.Configured, deadline.Token);
+        await Send(1, SimulatorProtocolTests.Rx());
+        await SimulatorDiagnostics.WaitFor(() => simulator.State.Receivers[2].Enabled, deadline.Token);
+        await Send(2, SimulatorTransmitTests.Setup());
+        await SimulatorDiagnostics.WaitFor(() => simulator.State.Transmit.Configured, deadline.Token);
+        await Send(3, SimulatorTransmitTests.High());
+        await SimulatorDiagnostics.WaitFor(() => simulator.State.Transmit.Ptt, deadline.Token);
+        await Send(5, SimulatorTransmitTests.Iq());
+        await SimulatorDiagnostics.WaitFor(() => simulator.State.Transmit.Packets == 1, deadline.Token);
+        cancellation.Cancel();
+        await simulator.Completion.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.IsFalse(simulator.State.Transmit.Configured || simulator.State.Transmit.Ptt);
+        foreach (int offset in P2Device.SocketOffsets)
+        {
+            using var rebound = new UdpClient(new IPEndPoint(IPAddress.Loopback, port + offset));
+        }
+        async Task Send(int offset, byte[] bytes) =>
+            await peer.SendAsync(bytes, new IPEndPoint(IPAddress.Loopback, port + offset), deadline.Token);
+    }
+
+    [TestMethod]
     public async Task ExistingDiscoveryServiceFindsSimulatorOnRealLoopbackSocket()
     {
         await using var simulator = G2Simulator.Open(new(BasePort: 0));

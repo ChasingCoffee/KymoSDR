@@ -16,10 +16,12 @@ public sealed class SimulatorCliTests
         foreach (string[] args in new string[][]
         {
             ["serve", "--bind", "0.0.0.0"], ["serve", "--tx", "true"], ["serve", "--base-port", "65516"],
+            ["serve", "--tx-mode", "hardware"], ["tx-selftest", "--target", "127.0.0.1"],
             ["serve", "--tone-hz", "NaN"], ["serve", "--noise", "1"], ["serve", "--base-port"],
             ["serve", "--base-port", "0", "--base-port", "1"], ["selftest", "--base-port", "1024"]
         }) Assert.AreEqual(2, await SimulatorCli.RunAsync(args, TextWriter.Null, TextWriter.Null));
         Assert.AreEqual(130, await SimulatorCli.RunAsync(["serve"], TextWriter.Null, TextWriter.Null, new(true)));
+        Assert.AreEqual(130, await SimulatorCli.RunAsync(["tx-selftest"], TextWriter.Null, TextWriter.Null, new(true)));
     }
 
     [TestMethod]
@@ -46,5 +48,18 @@ public sealed class SimulatorCliTests
         using var stopped = JsonDocument.Parse(lines[1]);
         Assert.AreEqual("stopped", stopped.RootElement.GetProperty("eventType").GetString());
         Assert.IsFalse(stopped.RootElement.GetProperty("state").GetProperty("running").GetBoolean());
+    }
+
+    [TestMethod]
+    public async Task TxSinkMustBeExplicitAndIsNeverAdvertisedAsHardwareTransmit()
+    {
+        Assert.IsFalse(SimulatorCli.Parse(["serve"]).Options.SimulateTransmit);
+        Assert.IsFalse(SimulatorCli.Parse(["serve", "--tx-mode", "off"]).Options.SimulateTransmit);
+        using var output = new StringWriter();
+        Assert.AreEqual(0, await SimulatorCli.RunAsync(["serve", "--base-port", "0", "--duration-seconds", "1", "--tx-mode", "sink"], output, TextWriter.Null));
+        using var ready = JsonDocument.Parse(output.ToString().Split('\n')[0]);
+        Assert.AreEqual("sink", ready.RootElement.GetProperty("transmitMode").GetString());
+        Assert.IsTrue(ready.RootElement.GetProperty("transmitSupported").GetBoolean());
+        Assert.IsFalse(ready.RootElement.GetProperty("hardwareTransmitSupported").GetBoolean());
     }
 }

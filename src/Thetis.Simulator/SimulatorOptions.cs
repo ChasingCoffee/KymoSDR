@@ -2,7 +2,7 @@ namespace Thetis.Simulator;
 
 public sealed record SimulatorOptions(int BasePort = 51024, double ToneFrequencyHz = 14_200_000,
     double Amplitude = 0.25, double NoiseAmplitude = 0, uint Seed = 1,
-    int DropEvery = 0, int LeaseTimeoutMilliseconds = 2000)
+    int DropEvery = 0, int LeaseTimeoutMilliseconds = 2000, bool SimulateTransmit = false)
 {
     internal void Validate()
     {
@@ -21,4 +21,10 @@ public sealed record ReceiverState(int Ddc, bool Enabled, int Rate, double Frequ
 public sealed record SimulatorState(bool Configured, bool Running, string? Client, long Discoveries,
     long AcceptedControls, long RejectedPackets, long UnsafeRequests, long IqPackets, long MicPackets,
     long StatusPackets, long InjectedDrops, long WatchdogStops, long Starts, long PacingResyncs,
-    long SocketErrors, ReceiverState[] Receivers);
+    long SocketErrors, ReceiverState[] Receivers, TransmitState Transmit);
+
+/// <summary>Virtual sink observations, never calibrated RF power. Sample metrics count keyed, in-order packets only.</summary>
+public sealed record TransmitState(bool Enabled, bool Configured, bool Ptt, int Rate, double FrequencyHz,
+    byte Drive, long Bursts, long Packets, long Samples, long UnkeyedPackets, long MissingPackets,
+    long OutOfOrderPackets, long FullScaleComponents, double PeakMagnitude, double RmsMagnitude,
+    double MeanI, double MeanQ, uint? LastSequence);
