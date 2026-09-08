@@ -73,8 +73,12 @@ dotnet run --project src/Thetis.Desktop -c Release --no-build --no-restore -- \
 The first command uses Avalonia's headless platform **with real Skia drawing**:
 actual controls connect/tune/apply/mute/reconnect both protocols, validate bad
 input, resize, and close during startup. Set `THETIS_DESKTOP_CAPTURE_DIR` to save
-PNG captures. Await asynchronous headless-session disposal; blocking disposal
-can wait on its own dispatch continuation.
+PNG captures. The test harness owns one headless application/UI thread per test
+process, serializes UI bodies, closes each window/controller and joins the thread
+at assembly cleanup. It avoids two hazards encountered with manual
+`HeadlessUnitTestSession` use: blocking disposal from its own continuation and a
+12.1.2 startup race that can publish the session before its task field is assigned.
+The framework dependency itself is not patched.
 
 `--smoke` opens a native window, connects only its P2 simulator with muted
 no-device output, waits for rendered frames, retunes, reports JSON and exits.
@@ -82,6 +86,12 @@ Optional `--screenshot ABSOLUTE_PNG` saves a rendered window capture. Linux CI
 uses `xvfb-run -a`; this tests X11, not Wayland. Smoke waits have deadlines, and
 CI adds a three-minute process timeout. No smoke command can select physical
 audio or unmute.
+
+Source `e9c352ce2f90a686460a3aeb590915f068b70616` passes both headless tests and
+published native-window launches on Windows x64, macOS 26 arm64 and Ubuntu
+24.04 x64/X11 in CI. All three also verify exit 4 for missing native libraries.
+See [exact hosted results](NATIVE_CI_RESULTS.md). No physical audio stream is
+opened by these checks.
 
 On the initial local macOS agent session, no attached display was reported and
 Avalonia's native render timer failed with code −6661 before window startup.

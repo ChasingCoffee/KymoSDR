@@ -356,4 +356,18 @@ Repository setup and the three static audits are complete. The first implementat
 
 M0/M1 acceptance is still partial: managed CI now passes on Windows, macOS and Linux, but the legacy Windows reference build and Windows live G2/simulator comparisons remain unverified. The G2's raw discovery fields are recorded; installed server/FPGA release versions still need separate recording. Discovery is checkpointed at `77792260`.
 
-M2's initial cross-platform offline gate passes on Windows x64, macOS arm64 and Linux x64; see [CI results](NATIVE_CI_RESULTS.md), [initial local M2 results](M2_NATIVE_RESULTS.md) and [native build instructions](NATIVE_DSP.md). M3a's offline ChannelMaster DSP/pipe lifecycle passes cross-platform tests with a .NET owner, 100-cycle checks, cancellation/rollback and no-device audio. Its qualification and limits are tracked in [ChannelMaster offline](CHANNELMASTER_OFFLINE.md). M3b's [RNet/socket loopback checkpoint](TRANSPORT_LOOPBACK.md) also passes three-OS CI: actual radio-init integration, checked allocation, partial startup rollback and joined probe workers. The [P2 receive integration](P2_RECEIVE_INTEGRATION.md) connects simulated I/Q through native CM/WDSP with measured USB audio, renderer-independent spectrum frames and retuning. Full M3/M4 remain partial: broader packet-worker coverage, P1, hardware and longer-run resource/performance qualification are still required; M5–M11 remain pending. No hardware streaming or live TX capability has been implemented or tested. The G2 is restricted to receive-only use on ANT1; current streaming tests use loopback only.
+M2's initial cross-platform offline gate passes on Windows x64, macOS arm64 and
+Linux x64; see [CI results](NATIVE_CI_RESULTS.md) and [native build instructions](NATIVE_DSP.md).
+[ChannelMaster lifecycle](CHANNELMASTER_OFFLINE.md) and the
+[RNet/socket checkpoint](TRANSPORT_LOOPBACK.md) pass three-OS offline tests.
+Both [P2](P2_RECEIVE_INTEGRATION.md) and [P1](P1_RECEIVE_INTEGRATION.md) now route
+simulated I/Q through native CM/WDSP with measured audio, spectrum, retuning,
+USB/LSB filters and [gain/mute/AGC](RECEIVE_GAIN.md).
+
+M5 is in progress with [playback](AUDIO_PLAYBACK.md) and the
+[simulator receiver desktop](DESKTOP_PREVIEW.md). Full M3/M4 still require broader
+packet-worker, hardware and long-run resource/performance qualification. The
+M5 audible-G2/device/performance gate and M6–M11 remain open. No hardware
+streaming or live TX capability has been implemented or tested. The G2 is
+restricted to receive-only use on ANT1; current streaming tests use owned loopback
+simulators only.

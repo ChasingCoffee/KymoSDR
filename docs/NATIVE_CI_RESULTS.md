@@ -1,5 +1,73 @@
 # Native cross-platform CI results
 
+## Simulator receiver desktop and playback checkpoint
+
+Validated runtime source: `e9c352ce2f90a686460a3aeb590915f068b70616`, recorded
+2026-09-07 Pacific. The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34184773806)
+passes all four jobs, including Linux ASan/UBSan/LeakSanitizer with all twelve
+native tests, leak detection enabled and no suppressions. The
+[managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34184773795)
+passes on all three OSes with 138 passes / 44 explicit native-dependent skips;
+the legacy Windows-reference job was not dispatched.
+
+| Target | Native CTest | Full managed suite | Playback campaign | Published native window |
+| --- | --- | --- | --- | --- |
+| Windows x64, Windows 2025 / VS 2026 image | 11/11 | 181 pass / 1 reference skip | 15.091 s, pass | 20 rendered frames, 2.729 s, exit 0 |
+| macOS 26 arm64 | 12/12 | 181 pass / 1 reference skip | 16.763 s, pass | 20 rendered frames, 4.989 s, exit 0 |
+| Ubuntu 24.04 x64 | 12/12 | 181 pass / 1 reference skip | 15.039 s, pass | 20 rendered frames, 3.021 s, exit 0 under Xvfb/X11 |
+
+The full suite contains 124 core, 53 engine and 5 desktop cases. The independent
+pinned P1 reference also passes in a separate POSIX step, giving 182 distinct
+passing cases on macOS/Linux. Windows still has 181 without that independent
+comparison. Seven focused playback and five desktop cases run early and again
+in the full suite; these are repeat executions, not additional distinct tests.
+
+Both-protocol playback recovers a 1000 Hz tone at AF −20 dB with AGC off. P1 RMS
+is 0.01767763735 on all three platforms; P2 RMS is 0.01767783924 on Windows,
+0.01767784079 on macOS and 0.01767758876 on Linux. Campaign counters show zero
+receive gaps, socket/DSP errors, CM overruns/audio drops, playback rejections,
+underruns, nonfinite input and output clipping. Priming/flush silence is tracked
+separately. Startup, mute and conservative muted reconnect pass.
+
+Published framework-dependent desktops load their copied, source-built native
+libraries, open an actual window, receive from an owned P2 simulator, retune and
+draw advancing frames before shutdown. All use muted no-device output. A second
+launch with a deliberately missing native directory must return exit 4; that
+negative check passes on every OS. These short launch measurements are not a
+steady-state rendering, GPU, latency or performance qualification.
+
+Native playback coverage includes three-rate signal checks, bounded concurrent
+SPSC operation, explicit starvation/re-prime, flush, finite/clipped samples,
+simulated output loss and 100 no-device output lifecycles. A managed regression
+feeds 250 varying-size batches with flushes at each output rate, preserving a
+1,024-frame reserve. Removing the reserve fails all three cases; restoring it
+passes. The correction prevents a silent monitor from draining FIR look-ahead
+or rendering wall-clock catch-up silence while PCM awaits draining; it does not
+relax underrun counters or qualify physical hardware clocks.
+
+The first Windows build exposed an internal `terminate()` helper name collision
+with MSVC's runtime; explicit audio lifecycle names fix it. Hosted testing also
+exposed the silent-monitor scheduling/reserve bugs and a race in Avalonia's
+manual headless-session disposal. Tests now own a single explicitly joined UI
+thread, with per-window/controller cleanup; the pinned framework is not patched.
+The [desktop](DESKTOP_PREVIEW.md) and [audio](AUDIO_PLAYBACK.md) documents describe
+the contracts, negative controls and local measurements.
+
+Existing native DSP, independent P1 reference, P1/P2 receive/controls/gain,
+short endurance/fault campaigns, 100-cycle CM/transport CLIs and Linux reconnect
+memory guards all pass with their previous thresholds unchanged. Local macOS
+passes 182 managed cases and twelve normal/instrumented native tests. Production
+playback (`BUILD_TESTING=OFF`), device enumeration without opening a stream,
+missing-library exit 3 and real Ctrl-C exit 130 also pass locally.
+
+No physical audio stream, microphone, G2/LAN radio or hardware TX was used.
+The local agent session reported no attached display and could not start the
+native macOS render timer; headless drawing passed locally, while the actual
+macOS window passed on the hosted graphical runner. Real-device listening,
+clock drift, device unplug, sleep/wake, G2 RX, full M5 endurance/performance and
+packaged release qualification remain open. The G2's RX-only ANT1 constraint is
+unchanged.
+
 ## Shared receive gain, mute and AGC checkpoint
 
 Validated runtime source: `e49104decdff79a4773a0818cf15165919279add`, recorded

@@ -15,7 +15,8 @@ complete manifest for future plugin or FreeDV builds. See [native results](M2_NA
 | Recovered RNNoise headers | Xiph RNNoise `70f1d256acd4b34a572f999a05c87bf00b67730d` | Two missing headers only; [provenance and retained notices](../native/third_party/rnnoise/README.md). |
 | ChannelMaster / PortAudio types | ChannelMaster and `Project Files/lib/portaudio-19.7.0/include` at the adopted baseline | M3a compiles the offline core in place and uses PortAudio headers only; no PortAudio/ASIO device library or native network transport is linked. |
 | Playback PortAudio | Tracked `Project Files/lib/portaudio-19.7.0` source at the adopted baseline | Separate `thetis_audio` statically links CoreAudio / WASAPI / ALSA; PortAudio MIT-style notices retained. Directory says 19.7.0 but vendored CMake declares 19.8: this is repository-pinned content, not a verified stock upstream release. No ASIO SDK/backend. |
-| Avalonia Desktop / Fluent / Inter | NuGet 12.1.2, content hashes in project lock files | MIT framework, platform and drawing assets for `Thetis.Desktop`; no Accelerate UI/tools dependency. |
+| Avalonia Desktop / Fluent / Inter wrapper | NuGet 12.1.2, content hashes in project lock files | MIT framework packages for `Thetis.Desktop`; no Accelerate UI/tools dependency. Embedded font and transitive drawing-library notices remain separate. |
+| Inter font | Embedded by the pinned Avalonia.Fonts.Inter package | SIL Open Font License 1.1, not MIT; [font copyright and license](https://github.com/rsms/inter/blob/master/LICENSE.txt) must accompany distributed fonts. |
 | Avalonia Headless | NuGet 12.1.2 | MIT, desktop tests with real Skia rendering and no display/device requirement. |
 | .NET SDK | `global.json`: 10.0.400, `latestPatch`, prereleases disabled | New managed solution. Root SDK selection also applies when using dotnet in the legacy tree. |
 | Microsoft.NET.Test.Sdk | 18.9.0 | Test project only. |

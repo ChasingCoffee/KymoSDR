@@ -2,18 +2,23 @@
 
 This builds the project's modified WDSP 2.00 source in place, plus the
 [M3a offline ChannelMaster core](CHANNELMASTER_OFFLINE.md) and a separate
-[RNet/socket loopback probe](TRANSPORT_LOOPBACK.md). It does not build the radio
-packet engines, contact a radio, open an audio device, or transmit.
+[RNet/socket loopback probe](TRANSPORT_LOOPBACK.md). It now also builds the
+loopback-only P1/P2 receive path and separate [PortAudio playback](AUDIO_PLAYBACK.md)
+library. Building and automated tests do not contact a radio, open a physical
+audio stream or transmit.
 See the [baseline review](WDSP_BASELINE_REVIEW.md) before substituting upstream
 WDSP APIs or source files.
 
 ## Build
 
-Requirements: .NET SDK selected by `global.json`, CMake 3.24+, and a C11 compiler.
+Requirements: .NET SDK selected by `global.json`, CMake 3.24+, C11 and C++17 compilers.
 On macOS, Xcode/Command Line Tools must provide the SDK and Clang. On Windows,
 install Visual Studio's C++ desktop build tools and Windows SDK. On Linux,
-install GCC/Clang and the usual C development tools. No system FFTW, RNNoise or
-libspecbleach installation is required.
+install GCC/Clang, the usual development tools, and ALSA headers
+(`sudo apt-get install libasound2-dev` on Ubuntu). No system FFTW, RNNoise,
+PortAudio or libspecbleach installation is required; PortAudio is source-built.
+Set `AVALONIA_TELEMETRY_OPTOUT=1` before full-solution restore/build/test/publish
+(PowerShell: `$env:AVALONIA_TELEMETRY_OPTOUT = '1'`).
 
 From the repository root:
 
@@ -83,8 +88,8 @@ cmake --build artifacts/native-asan --parallel 4
 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ASAN_OPTIONS=halt_on_error=1 ctest --test-dir artifacts/native-asan -C RelWithDebInfo --output-on-failure
 ```
 
-This instruments WDSP, RNNoise, libspecbleach, the POSIX adaptation and native
-tests. The external FFTW archives are not instrumented. macOS checks here do
+This instruments WDSP, RNNoise, libspecbleach, PortAudio/the output bridge,
+the POSIX adaptation and native tests. The external FFTW archives are not instrumented. macOS checks here do
 not establish leak freedom or data-race freedom. Linux CI additionally requests
 LeakSanitizer; ThreadSanitizer and long-running resource/real-time tests remain
 future work. Do not load the sanitizer library into the normal CLI without the

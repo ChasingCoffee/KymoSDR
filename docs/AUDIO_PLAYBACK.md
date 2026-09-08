@@ -37,7 +37,9 @@ the application reconnects muted with AF gain no higher than −40 dB.
 
 The no-device backend runs the same queue and resampler but **never initializes
 PortAudio**. It advances in 10 ms sample blocks as PCM is recovered (at most five
-blocks per read), and measures tone frequency/RMS. It does not advance a fake
+blocks per pump iteration), retaining 1,024 source frames for prefill/FIR
+look-ahead and pacing from actual queue occupancy, including after flush.
+It measures tone frequency/RMS and does not advance a fake
 wall clock while PCM awaits draining: host scheduling delays must not synthesize
 test-only starvation. Native tests still explicitly exercise actual queue
 starvation/overflow behavior. This is deterministic signal/lifecycle coverage,
@@ -78,9 +80,35 @@ and TX options. The [desktop](DESKTOP_PREVIEW.md) uses the same owner.
 
 ## Coverage and remaining checks
 
+Local macOS arm64 source `e9c352ce2f90a686460a3aeb590915f068b70616`
+(2026-09-07 Pacific) passes locked restore, a zero-warning managed build,
+182 managed tests (124 core / 53 engine including the confined independent P1
+reference / 5 desktop), 12 Release native tests and 12 ASan/UBSan native tests.
+The production-library (`BUILD_TESTING=OFF`) playback campaign passes in 11.425 s:
+P1 RMS 0.01767763735 and P2 RMS 0.01767783921, both 1000 Hz, with zero input
+overruns, audio drops, output rejections, underruns, nonfinite or clipped samples.
+Priming/flush silence is counted separately from underrun events. Actual Ctrl-C
+exits 130 after owner cleanup; missing native libraries return 3. CoreAudio
+enumeration succeeds without opening a stream. The vendored PortAudio build has
+macOS deprecation warnings; the zero-warning claim applies only to managed code.
+
+The old silent monitor could render up to 3,840 catch-up frames after draining
+only 2,048 input frames following a host scheduling delay. Hosted macOS exposed
+an output underrun despite zero CM overruns/drops, and a separate 790 Hz/low-RMS
+window containing silence. Input-credit pacing alone also allowed a large first
+batch to drain the FIR look-ahead, which hosted macOS exposed. Queue-based pacing
+with a sample reserve addresses both paths without relaxing signal tolerances or
+reclassifying real queue underruns. A 250-batch/flush regression covers each output
+rate; removing the reserve makes all three cases fail, restoring it makes them
+pass. Physical callback timing remains a distinct, unqualified gate.
+
+See [the CI record](NATIVE_CI_RESULTS.md) for hosted source/results; do not infer
+physical-device playback from a no-device or native-window test.
+
 Native tests cover ABI/capacity canaries, three-rate 1 kHz amplitude/frequency,
-mute, queue overflow, nonfinite/clipping, flush, simulated output loss and
-concurrent producer/consumer wrap. Managed tests cover P1/P2 tone recovery,
+mute, queue overflow, explicit starvation/re-prime, nonfinite/clipping, flush,
+simulated output loss, 100 no-device output lifecycles and concurrent
+producer/consumer wrap. Managed tests cover P1/P2 tone recovery,
 rollback, invalid controls, cancelled startup, interrupted output, concurrent
 dispose and reopening. Linux CI includes ASan/UBSan with leak detection; local
 macOS sanitizers do not enable leak detection.
