@@ -22,7 +22,12 @@ public sealed record ReceiverState(int Ddc, bool Enabled, int Rate, double Frequ
 public sealed record SimulatorState(bool Configured, bool Running, string? Client, long Discoveries,
     long AcceptedControls, long RejectedPackets, long UnsafeRequests, long IqPackets, long MicPackets,
     long StatusPackets, long InjectedDrops, long WatchdogStops, long Starts, long PacingResyncs,
-    long SocketErrors, ReceiverState[] Receivers, TransmitState Transmit);
+    long SocketErrors, ReceiverState[] Receivers, TransmitState Transmit)
+{
+    public long IqPacingResyncs { get; init; }
+    /// <summary>Ungenerated I/Q clock time summed over DDCs; excludes mic rebases and wire loss.</summary>
+    public long IqPacingLostNanoseconds { get; init; }
+}
 
 /// <summary>Virtual sink observations, never calibrated RF power. Sample metrics count keyed, in-order packets only.</summary>
 public sealed record TransmitState(bool Enabled, bool Configured, bool Ptt, int Rate, double FrequencyHz,

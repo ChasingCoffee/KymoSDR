@@ -59,8 +59,9 @@ output samples, applies a one-second low-pass filter, and aims for 3,072 source
 frames (64 ms). Proportional/integral gains are 2 ppm/frame and
 0.05 ppm/(frame·second). Correction is limited to ±2,000 ppm and slewed at no
 more than 200 ppm/second, with conditional integration to prevent wind-up.
-Positive correction consumes source PCM faster. No sample insertion/deletion,
-wall-clock queries, allocation or locking is added to the callback.
+Positive correction consumes source PCM faster using fractional interpolation,
+not ad-hoc whole-sample drops/repeats. No wall-clock queries, allocation or locking
+are added to the callback.
 
 Initial prefill, starvation and flush do not train the estimator. Flush and
 starvation clear its history/correction and require fresh prefill. Muting alone
@@ -83,6 +84,8 @@ similarly named output, no automatic reconnect, and no restored unmute/high gain
 A driver close failure retains callback-owned memory and prevents reopening in
 the managed process; restart is required. Driver calls themselves are not given
 an unsafe forced timeout: an indefinitely hung driver can still block cleanup.
+OS-level rerouting inside an otherwise-active logical device is not detected by
+this watchdog; actual device/default-route changes still need platform testing.
 
 Tests can explicitly open a **clocked no-device fixture** with the same adaptive
 renderer/watchdog and an independently paced consumer. It never initializes
@@ -148,8 +151,20 @@ artifacts/native/stage/Release/playback_clock_tests --soak
 
 The second command uses `.exe` on Windows. It renders a virtual hour without a
 device. Managed playback regressions also include a 60-second **wall-clock** P2
-session with an independently paced +1,000 ppm simulated output, mute/flush,
-retune and output loss, plus automatic cleanup/reconnect for both protocols.
+session at 48 kHz I/Q with an independently paced +1,000 ppm simulated output,
+mute/flush, retune and output loss, plus automatic cleanup/reconnect for both
+protocols. This gate requires zero underruns **and zero I/Q source-clock rebases**.
+
+The initial 192 kHz version of that wall-clock test failed on hosted macOS: its
+source had 21 scheduler rebases by 3.2 seconds, losing much more time than the
+injected 1,000 ppm offset. The simulator deliberately drops overdue clock time
+beyond eight replay packets, which at 192 kHz covers only 9.9 ms. The clock test
+uses 48 kHz I/Q (39.7 ms replay budget) and retains the strict output assertions;
+it does not widen the drift actuator, hide underruns or enlarge native queues.
+Explicit `iqPacingResyncs`/`iqPacingLostNanoseconds` diagnostics quantify the
+source limitation. The preview's default 192 kHz profile and all existing
+higher-rate transport tests are unchanged; scheduling starvation is still a
+real limitation of this host-paced simulator, not a hardware radio-clock claim.
 
 ### Previous simulator preview checkpoint
 

@@ -174,6 +174,15 @@ loss or advancing the tone through ungenerated samples. Sustained host stalls
 therefore reduce sample throughput versus wall time; this is not a hard-real-time
 radio clock. Public state is an immutable snapshot/copy.
 
+`iqPacingResyncs` separates I/Q rebases from microphone rebases;
+`iqPacingLostNanoseconds` sums ungenerated source-clock time over enabled DDCs.
+These are not missing wire sequence numbers. Independent audio-clock validation
+uses one 48 kHz P2 receiver (eight packets cover about 39.7 ms of scheduling
+jitter), and requires zero I/Q rebases. At 192 kHz the same replay budget is only
+9.9 ms; a slow host can lose source time much faster than an audio drift corrector
+should compensate. Existing burst limits and higher-rate transport gates are
+unchanged. Neither profile is a hard-real-time hardware clock.
+
 On Windows, each open simulator owns a 1 ms `timeBeginPeriod` request, balanced
 by `timeEndPeriod` when its worker exits (including cancellation/failure), or on
 worker-start failure. This improves short socket-wait timing without busy-spinning

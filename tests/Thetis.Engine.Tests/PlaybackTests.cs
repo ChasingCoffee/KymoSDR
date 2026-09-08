@@ -127,7 +127,11 @@ public sealed class PlaybackTests
     public async Task IndependentOutputClockPlaysForSixtySecondsThroughMuteFlushAndLoss()
     {
         await using var peer = G2Simulator.Open(new(BasePort:0));
-        using var rx = P2ReceiveSession.Open(NativeDirectory(),new(peer.BasePort,Gain:new(-40,false,ReceiveAgcMode.Off)));
+        // The simulator intentionally discards overdue I/Q beyond eight packets.
+        // At 192 kHz that budget is <10 ms; hosted scheduling rebases are NOT a
+        // 1000 ppm clock. Use its 48 kHz/39.7 ms replay budget for this audio-clock
+        // gate. Existing 192/384 kHz transport gates and replay limits stay intact.
+        using var rx = P2ReceiveSession.Open(NativeDirectory(),new(peer.BasePort,InputRate:48000,Gain:new(-40,false,ReceiveAgcMode.Off)));
         using var output = PlaybackOutput.OpenClockedNull(NativeDirectory());
         await using var pump = new ReceivePlayback(rx,output);
         using var stopping = new CancellationTokenSource();
@@ -157,7 +161,8 @@ public sealed class PlaybackTests
                 Assert.IsNull(pump.Error); var state = output.State;
                 if (elapsed.Elapsed.TotalSeconds >= nextHistory || state.Underruns != 0 || state.Rejected != 0)
                 {
-                    history.Enqueue($"{elapsed.Elapsed.TotalSeconds:F3}s queue={state.Queued} ppm={state.CorrectionPpm:F3} submitted={state.Submitted} rendered={state.Rendered} underruns={state.Underruns} rejected={state.Rejected} produced={rx.State.AudioProduced} simulatorResyncs={peer.State.PacingResyncs} maxCallbackDelayUs={Volatile.Read(ref maximumCallbackDelayUs)}");
+                    var source = peer.State;
+                    history.Enqueue($"{elapsed.Elapsed.TotalSeconds:F3}s queue={state.Queued} ppm={state.CorrectionPpm:F3} submitted={state.Submitted} rendered={state.Rendered} underruns={state.Underruns} rejected={state.Rejected} produced={rx.State.AudioProduced} simulatorResyncs={source.PacingResyncs} iqResyncs={source.IqPacingResyncs} iqLostMs={source.IqPacingLostNanoseconds/1e6:F3} maxCallbackDelayUs={Volatile.Read(ref maximumCallbackDelayUs)}");
                     if (history.Count > 12) history.Dequeue(); nextHistory = elapsed.Elapsed.TotalSeconds+1;
                 }
                 Assert.IsTrue(state.Active && !state.Physical && state.ClockTracking);
@@ -171,11 +176,12 @@ public sealed class PlaybackTests
             }
             Assert.IsTrue(output.State.Rendered >= 60*48000);
             Assert.IsTrue(output.State.Reprimes >= 2);
+            Assert.AreEqual(0,peer.State.IqPacingResyncs,"An independent clock test requires a source that did not rebase its sample clock.");
             var final = pump.Snapshot!;
             foreach (long errors in new[] {final.Receive.SocketErrors,final.Receive.DspErrors,final.Receive.MissingPackets,
                 final.Receive.InputOverruns,final.Receive.AudioDropped,final.Output.DriverUnderruns,final.Output.NonfiniteSamples,final.Output.ClippedSamples})
                 Assert.AreEqual(0,errors);
-            Console.WriteLine($"60 s independent +1000 ppm output clock: {output.State}");
+            Console.WriteLine($"60 s independent +1000 ppm output clock: {output.State}; I/Q lost ns={peer.State.IqPacingLostNanoseconds}; max callback delay us={Volatile.Read(ref maximumCallbackDelayUs)}");
             output.InterruptNull();
             await pump.Completion.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.IsInstanceOfType<IOException>(pump.Error); Assert.IsTrue(output.State.Muted);

@@ -23,6 +23,7 @@ internal sealed class P2Device
     private uint micSequence, statusSequence;
     private long discoveries, controls, rejected, unsafeRequests, iqPackets, micPackets, statusPackets;
     private long injectedDrops, watchdogStops, starts, pacingResyncs, socketErrors;
+    private long iqPacingResyncs, iqPacingLostNanoseconds;
 
     internal P2Device(SimulatorOptions options)
     {
@@ -34,7 +35,8 @@ internal sealed class P2Device
 
     internal SimulatorState Snapshot() => new(client is not null, running, client?.ToString(), discoveries,
         controls, rejected, unsafeRequests, iqPackets, micPackets, statusPackets, injectedDrops, watchdogStops,
-        starts, pacingResyncs, socketErrors, receivers.Select((r, i) => new ReceiverState(i, r.Enabled, r.Rate, r.Frequency)).ToArray(), transmit.Snapshot());
+        starts, pacingResyncs, socketErrors, receivers.Select((r, i) => new ReceiverState(i, r.Enabled, r.Rate, r.Frequency)).ToArray(), transmit.Snapshot())
+        { IqPacingResyncs = iqPacingResyncs, IqPacingLostNanoseconds = iqPacingLostNanoseconds };
     internal bool Running => running;
     internal void SocketFailure() { ++socketErrors; Release(); }
     internal void Shutdown() => Release();
@@ -193,7 +195,13 @@ internal sealed class P2Device
                 else { send(11 + i, r.Packet, client!); ++iqPackets; }
                 r.Due += interval;
             }
-            if (r.Due <= now) { r.Due = now + interval; ++pacingResyncs; }
+            if (r.Due <= now)
+            {
+                // Lost source-clock time, not missing wire sequence numbers.
+                // Sum over DDCs; microphone rebases are excluded.
+                iqPacingLostNanoseconds += (long)Math.Round((now+interval-r.Due)*1e9);
+                ++iqPacingResyncs; r.Due = now + interval; ++pacingResyncs;
+            }
         }
         int micBatch = 0;
         while (running && micDue <= now && micBatch++ < CatchUpPackets)

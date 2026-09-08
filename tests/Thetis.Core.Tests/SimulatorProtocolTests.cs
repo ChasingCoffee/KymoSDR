@@ -95,6 +95,8 @@ public sealed class SimulatorProtocolTests
         Assert.AreEqual(1u, BinaryPrimitives.ReadUInt32BigEndian(iq[0].Data));
         Assert.HasCount(8, output.Where(p => p.Port == 2));
         Assert.AreEqual(2, device.Snapshot().PacingResyncs); // RX and mic clocks each rebased
+        Assert.AreEqual(1,device.Snapshot().IqPacingResyncs);
+        Assert.AreEqual(90_083_333,device.Snapshot().IqPacingLostNanoseconds);
         Assert.AreEqual(0, device.Snapshot().InjectedDrops);
         output.Clear(); device.Tick(0.1, Capture); Assert.IsEmpty(output);
         device.Tick(0.1 + 238.0 / 192000 + 0.000001, Capture);
@@ -123,6 +125,8 @@ public sealed class SimulatorProtocolTests
         device.Tick(0.008, Capture);
         Assert.HasCount(6, output.Where(p => p.Port == 13));
         Assert.AreEqual(0, device.Snapshot().PacingResyncs);
+        Assert.AreEqual(0,device.Snapshot().IqPacingResyncs);
+        Assert.AreEqual(0,device.Snapshot().IqPacingLostNanoseconds);
     }
 
     [TestMethod]
