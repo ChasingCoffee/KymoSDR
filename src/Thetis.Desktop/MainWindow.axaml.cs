@@ -17,7 +17,7 @@ namespace Thetis.Desktop;
 
 public partial class MainWindow : Window
 {
-    internal PreviewController Controller { get; } = new();
+    internal PreviewController Controller { get; }
     private readonly PreviewLaunchOptions options;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly List<object> outputs = ["No device (silent monitor)"];
@@ -25,9 +25,10 @@ public partial class MainWindow : Window
     internal bool Busy => busy;
     internal long DisplayedFrames => Control<SpectrumView>("SpectrumDisplay").FramesDisplayed;
     public MainWindow() : this(new(PreviewLaunchOptions.DefaultDirectory)) { }
-    public MainWindow(PreviewLaunchOptions options)
+    public MainWindow(PreviewLaunchOptions options) : this(options,new()) { }
+    internal MainWindow(PreviewLaunchOptions options,PreviewController controller)
     {
-        this.options = options; AvaloniaXamlLoader.Load(this);
+        this.options = options; Controller = controller; AvaloniaXamlLoader.Load(this);
         Control<TextBox>("NativeDirectoryInput").Text = options.NativeDirectory;
         Control<ComboBox>("OutputInput").ItemsSource = outputs; Control<ComboBox>("OutputInput").SelectedIndex = 0;
         Control<Slider>("GainInput").PropertyChanged += (_,e) =>
@@ -106,7 +107,16 @@ public partial class MainWindow : Window
         if (Controller.Error is { } fault && !handlingFault)
         {
             handlingFault = true;
-            try { await Controller.DisconnectAsync(); Control<CheckBox>("MuteInput").IsChecked = true; Status($"Stopped safely: {fault.Message}"); Enabled(); }
+            try
+            {
+                await Controller.DisconnectAsync();
+                Control<CheckBox>("MuteInput").IsChecked = true;
+                // A removed/reordered device is never silently selected again.
+                outputs.Clear(); outputs.Add("No device (silent monitor)");
+                Control<ComboBox>("OutputInput").ItemsSource = outputs.ToArray();
+                Control<ComboBox>("OutputInput").SelectedIndex = 0;
+                Status($"Stopped safely: {fault.Message}"); Enabled();
+            }
             catch (Exception ex) { Status($"Shutdown error: {ex.Message}"); }
             finally { handlingFault = false; }
             return;
@@ -119,7 +129,8 @@ public partial class MainWindow : Window
         Control<TextBlock>("PacketText").Text = $"I/Q packets   {snapshot.Receive.IqPackets:N0}";
         Control<TextBlock>("QueueText").Text = $"Audio queue   {snapshot.Output.Queued:N0} / 8,192";
         Control<TextBlock>("ErrorText").Text = $"Gaps / overruns   {snapshot.Receive.MissingPackets} / {snapshot.Receive.InputOverruns}";
-        Control<TextBlock>("OutputHealthText").Text = $"Underruns / drops   {snapshot.Output.Underruns+snapshot.Output.DriverUnderruns} / {snapshot.Output.Rejected}\n{(snapshot.Output.Physical ? "Device" : "Silent monitor")} · {(settings.Muted ? "muted" : "unmuted")}";
+        string correction = snapshot.Output.ClockTracking ? $"Clock correction   {snapshot.Output.CorrectionPpm:+0.0;-0.0;0.0} ppm" : "Clock correction   sample-driven";
+        Control<TextBlock>("OutputHealthText").Text = $"Underruns / drops   {snapshot.Output.Underruns+snapshot.Output.DriverUnderruns} / {snapshot.Output.Rejected}\n{correction}\n{(snapshot.Output.Physical ? "Device" : "Silent monitor")} · {(settings.Muted ? "muted" : "unmuted")}";
         Control<SpectrumView>("SpectrumDisplay").Update(snapshot.Spectrum);
     }
     private async void OnClosing(object? sender,WindowClosingEventArgs e)

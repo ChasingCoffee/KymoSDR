@@ -6,6 +6,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Thetis.Audio;
+using Thetis.Preview;
 
 namespace Thetis.Desktop.Tests;
 
@@ -110,6 +112,50 @@ public sealed class DesktopTests
                 while (!ready())
                 {
                     if (clock.Elapsed.TotalSeconds > 20) Assert.Fail(window.Control<TextBlock>("StatusText").Text ?? "Desktop timed out.");
+                    await Task.Delay(25);
+                }
+            }
+        });
+    }
+    [TestMethod,TestCategory("Native")]
+    public async Task LostOutputClearsSelectionAndRequiresExplicitMutedReconnect()
+    {
+        string? directory = Environment.GetEnvironmentVariable("THETIS_NATIVE_DIR");
+        if (string.IsNullOrWhiteSpace(directory)) Assert.Inconclusive("Requires native libraries; no physical devices.");
+        await UiTestHost.RunAsync(async () =>
+        {
+            PlaybackOutput? output = null;
+            var controller = new PreviewController((path,_) => output = PlaybackOutput.OpenNull(path));
+            var window = new MainWindow(new(directory),controller); window.Show();
+            try
+            {
+                // UI selection is a fixture; the injected factory can only open
+                // a no-device owner. No enumeration or physical stream is used.
+                window.Control<ComboBox>("OutputInput").ItemsSource = new object[] {"No device",new PlaybackDevice(99,"Fixture output","Fixture",48000,2)};
+                window.Control<ComboBox>("OutputInput").SelectedIndex = 1;
+                await window.Connect();
+                await Wait(() => controller.Snapshot?.Output.Rendered > 4800);
+                await controller.ApplyAsync(controller.Settings with { Muted = false,AudioGainDb = -20 });
+                output!.InterruptNull();
+                await Wait(() => !controller.Connected && window.Control<TextBlock>("StatusText").Text?.StartsWith("Stopped safely:",StringComparison.Ordinal) == true);
+                Assert.IsTrue(window.Control<Button>("RefreshButton").IsEnabled);
+                Assert.AreEqual(0,window.Control<ComboBox>("OutputInput").SelectedIndex);
+                Assert.AreEqual(1,window.Control<ComboBox>("OutputInput").ItemCount);
+                Assert.AreEqual(true,window.Control<CheckBox>("MuteInput").IsChecked);
+                Assert.IsFalse(window.Control<Button>("ApplyButton").IsEnabled);
+                await window.Connect();
+                await Wait(() => controller.Snapshot?.Output.Rendered > 4800);
+                Assert.IsTrue(controller.Settings.Muted); Assert.IsTrue(controller.Settings.AudioGainDb <= -40);
+                Assert.IsTrue(controller.Snapshot!.Output.Muted); Assert.IsFalse(controller.Snapshot.Output.Physical);
+                Assert.IsNull(controller.Error);
+            }
+            finally { await controller.DisposeAsync(); window.Close(); }
+            async Task Wait(Func<bool> ready)
+            {
+                var clock = Stopwatch.StartNew();
+                while (!ready())
+                {
+                    if (clock.Elapsed.TotalSeconds > 20) Assert.Fail(window.Control<TextBlock>("StatusText").Text ?? "Fault recovery timed out.");
                     await Task.Delay(25);
                 }
             }

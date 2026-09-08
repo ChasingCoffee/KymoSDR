@@ -45,7 +45,7 @@ public sealed class ReceivePlayback : IAsyncDisposable
                 int frames = receiver.ReadAudio(input);
                 if (frames > 0) output.Write(input,frames);
                 double now = clock.Elapsed.TotalSeconds;
-                if (!device.Physical)
+                if (!device.ClockTracking)
                 {
                     // Sample-driven with an explicit reserve for native prefill
                     // and FIR look-ahead. Queue occupancy also handles flush:
@@ -66,7 +66,7 @@ public sealed class ReceivePlayback : IAsyncDisposable
                 {
                     spectrum = receiver.ReadSpectrum() ?? spectrum;
                     var state = receiver.State; device = output.State;
-                    if (!device.Active) throw new IOException("The audio output stopped or was disconnected. Reconnect and select an available output.");
+                    if (!device.Active) throw OutputFailure(device);
                     if (state.SocketWorkers != 1 || state.SocketErrors != 0 || state.DspErrors != 0)
                         throw new IOException("The receive worker stopped or reported a transport/DSP error.");
                     Volatile.Write(ref snapshot,new(state,device,spectrum,receiver.Demodulation,receiver.Gain,rms,hz));
@@ -75,12 +75,20 @@ public sealed class ReceivePlayback : IAsyncDisposable
                 if (frames == 0) Thread.Sleep(2);
             }
         }
-        catch (Exception ex) { Volatile.Write(ref error,ex); }
+        catch (Exception ex)
+        {
+            // A write can observe the native fault before the next snapshot.
+            // Preserve the specific latched reason instead of a generic write error.
+            try { var state = output.State; if (!state.Active) ex = OutputFailure(state); } catch { /* retain original failure */ }
+            Volatile.Write(ref error,ex);
+        }
         finally
         {
             try { output.SetMuted(true); } catch (Exception ex) { Interlocked.CompareExchange(ref error,ex,null); }
         }
     }
+    private static IOException OutputFailure(PlaybackState state) => new(
+        $"Audio output stopped: {state.Fault} (driver status {state.DriverStatus}). Refresh devices, select an output and reconnect; playback will start muted.");
     internal static bool RenderMonitorBlock(PlaybackOutput output,float[] samples,int block)
     {
         // One 10 ms output block consumes 480 source frames at all supported

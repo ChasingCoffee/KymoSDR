@@ -89,8 +89,16 @@ jobs:
       # All existing full-suite, sanitizer and memory-budget gates remain below.
       - name: Focused playback and desktop regressions (loopback/no-device)
         run: |
+          ctest --test-dir artifacts/native -C Release --verbose -R receive_playback
           dotnet test tests/Thetis.Engine.Tests -c Release --no-build --no-restore --filter FullyQualifiedName~PlaybackTests --blame-hang-timeout 2m
           dotnet test tests/Thetis.Desktop.Tests -c Release --no-build --no-restore --blame-hang-timeout 2m
+      - name: One virtual hour of real PCM clock recovery (no physical output)
+        shell: pwsh
+        run: |
+          $clockTest = Join-Path $env:THETIS_NATIVE_DIR 'playback_clock_tests'
+          if ($IsWindows) { $clockTest += '.exe' }
+          & $clockTest --soak
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: P1/P2 playback, mute and reconnect (no physical audio devices)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- playback-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Publish framework-dependent desktop with source-built native libraries

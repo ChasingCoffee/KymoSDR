@@ -25,18 +25,23 @@ public sealed record PreviewSettings(int FrequencyHz = 14_199_000, ReceiveMode M
 /// Owns exactly one IPv4 loopback simulator; there is no address/TX/radio-selection API.</summary>
 public sealed class PreviewController : IAsyncDisposable
 {
+    private readonly Func<string,PlaybackDevice?,PlaybackOutput> openOutput;
+    public PreviewController() : this((directory,device) => device is null ? PlaybackOutput.OpenNull(directory) : PlaybackOutput.OpenDevice(directory,device)) { }
+    internal PreviewController(Func<string,PlaybackDevice?,PlaybackOutput> openOutput) => this.openOutput = openOutput;
     private readonly SemaphoreSlim gate = new(1,1);
     private readonly object cancellationGate = new();
     private CancellationTokenSource? connecting;
     private bool disposed;
     private ReceiveSession? receiver;
     private ReceivePlayback? playback;
+    private Task? observation;
+    private Exception? lastError;
     private G2Simulator? p2;
     private P1Simulator? p1;
     private PreviewSettings settings = new();
     public PreviewSettings Settings => Volatile.Read(ref settings);
     public PlaybackSnapshot? Snapshot => Volatile.Read(ref playback)?.Snapshot;
-    public Exception? Error => Volatile.Read(ref playback)?.Error;
+    public Exception? Error => Volatile.Read(ref lastError) ?? Volatile.Read(ref playback)?.Error;
     public bool Connected => Volatile.Read(ref playback) is not null;
 
     public async Task ConnectAsync(string directory,int protocol = 2,PlaybackDevice? device = null,
@@ -62,16 +67,31 @@ public sealed class PreviewController : IAsyncDisposable
                     {
                         if (protocol == 1) { p1 = P1Simulator.Open(); receiver = P1ReceiveSession.Open(directory,new(p1.Port,initial.FrequencyHz,Demodulation:initial.Demodulation,Gain:initial.Gain),startup.Token); }
                         else { p2 = G2Simulator.Open(new(BasePort:0)); receiver = P2ReceiveSession.Open(directory,new(p2.BasePort,FrequencyHz:initial.FrequencyHz,Demodulation:initial.Demodulation,Gain:initial.Gain),startup.Token); }
-                        output = device is null ? PlaybackOutput.OpenNull(directory) : PlaybackOutput.OpenDevice(directory,device);
+                        output = openOutput(directory,device);
                         startup.Token.ThrowIfCancellationRequested();
                         playback = new(receiver,output); output = null;
                         Volatile.Write(ref settings,initial);
+                        Volatile.Write(ref lastError,null);
+                        observation = ObservePlayback(playback);
                     }
                     finally { output?.Dispose(); }
                 },startup.Token).ConfigureAwait(false);
             }
             catch { await CloseOwned().ConfigureAwait(false); throw; }
             finally { lock (cancellationGate) connecting = null; }
+        }
+        finally { gate.Release(); }
+    }
+    private async Task ObservePlayback(ReceivePlayback owned)
+    {
+        await owned.Completion.ConfigureAwait(false);
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!ReferenceEquals(playback,owned) || owned.Error is not { } failure) return;
+            Volatile.Write(ref lastError,failure);
+            try { await CloseOwned().ConfigureAwait(false); }
+            catch (Exception ex) { Volatile.Write(ref lastError,new AggregateException("Playback failed and cleanup reported an error.",failure,ex)); }
         }
         finally { gate.Release(); }
     }
@@ -104,7 +124,7 @@ public sealed class PreviewController : IAsyncDisposable
     public async Task DisconnectAsync()
     {
         CancelStartup(); await gate.WaitAsync().ConfigureAwait(false);
-        try { await CloseOwned().ConfigureAwait(false); }
+        try { await CloseOwned().ConfigureAwait(false); Volatile.Write(ref lastError,null); }
         finally { gate.Release(); }
     }
     private void CancelStartup() { lock (cancellationGate) connecting?.Cancel(); }
@@ -114,7 +134,6 @@ public sealed class PreviewController : IAsyncDisposable
         try { if (pump is not null) await pump.DisposeAsync().ConfigureAwait(false); }
         finally
         {
-            Volatile.Write(ref playback,null);
             try { if (receiver is not null) await Task.Run(receiver.Dispose).ConfigureAwait(false); }
             finally
             {
@@ -127,6 +146,9 @@ public sealed class PreviewController : IAsyncDisposable
                     {
                         p1 = null; p2 = null;
                         Volatile.Write(ref settings,Settings with { Muted = true });
+                        // Publish disconnected only after every owned worker
+                        // has joined, not while native receiver close is running.
+                        Volatile.Write(ref playback,null);
                     }
                 }
             }
@@ -137,5 +159,6 @@ public sealed class PreviewController : IAsyncDisposable
         CancelStartup(); await gate.WaitAsync().ConfigureAwait(false);
         try { if (!disposed) { disposed = true; await CloseOwned().ConfigureAwait(false); } }
         finally { gate.Release(); }
+        if (observation is { } pending) await pending.ConfigureAwait(false);
     }
 }

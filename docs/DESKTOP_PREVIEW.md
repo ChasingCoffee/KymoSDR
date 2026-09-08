@@ -24,6 +24,8 @@ PowerShell uses `$env:AVALONIA_TELEMETRY_OPTOUT = '1'` before the same dotnet
 commands. If necessary, append `-- --native-dir ABSOLUTE_NATIVE_DIRECTORY` to
 the launch command. Both `thetis_wdsp` and `thetis_audio` libraries must be in
 that directory, with the same architecture as .NET.
+The clock-recovery increment requires playback ABI 2: rebuild both the native
+audio library and managed app, including copies in any published `native` folder.
 
 The default native-directory search is `THETIS_NATIVE_DIR`, then a `native`
 folder beside the published program, then `artifacts/native/stage/Release`
@@ -46,6 +48,9 @@ macOS `.app`, Windows installer or self-contained release.
    −40 dB. Lower the system/speaker volume before deliberately unmuting.
 5. Disconnect before changing output. Reconnect always restores mute and a
    conservative gain; selections/settings are not persisted to disk.
+6. After an output failure, the app stops the complete simulated receive session
+   and clears the old output selection. Refresh devices, select an output and
+   explicitly reconnect; it will remain muted until you unmute it again.
 
 Tuning is requested frequency, not hardware acknowledgement. Spectrum levels
 are pre-demodulation, uncalibrated dB, **not dBm**. The plot max-pools native bins
@@ -56,7 +61,11 @@ bounded display storage, not a measured 30-fps/CPU/memory performance guarantee.
 
 Disconnect/window close cancels startup, joins the playback pump, closes the
 output, then joins the receiver and simulator. A reported output/receive-worker
-failure mutes the pump and the UI disconnects with an error. Driver close failure
+failure mutes the pump and the controller closes the session even without a UI.
+Stream-finished, driver-status and callback/polling-watchdog faults are latched;
+the UI displays the reason. Independently clocked output automatically adjusts
+the resampler within ±2,000 ppm; current correction is shown with health counters.
+The silent monitor remains sample-driven and needs no correction. Driver close failure
 is surfaced; potentially callback-owned native memory is retained and reconnect
 is refused, requiring restart rather than risking use-after-free.
 
@@ -73,7 +82,9 @@ dotnet run --project src/Thetis.Desktop -c Release --no-build --no-restore -- \
 The first command uses Avalonia's headless platform **with real Skia drawing**:
 actual controls connect/tune/apply/mute/reconnect both protocols, validate bad
 input, resize, and close during startup. Set `THETIS_DESKTOP_CAPTURE_DIR` to save
-PNG captures. The test harness owns one headless application/UI thread per test
+PNG captures. A further test injects output loss, verifies selection clearing and
+explicit muted reconnect without opening a physical device.
+The test harness owns one headless application/UI thread per test
 process, serializes UI bodies, closes each window/controller and joins the thread
 at assembly cleanup. It avoids two hazards encountered with manual
 `HeadlessUnitTestSession` use: blocking disposal from its own continuation and a
@@ -96,7 +107,9 @@ opened by these checks.
 On the initial local macOS agent session, no attached display was reported and
 Avalonia's native render timer failed with code −6661 before window startup.
 Headless rendering passed; it is not evidence of a successful local native
-window. Launch from a logged-in graphical desktop for manual verification.
+window. The user subsequently confirmed that the window works and the simulated
+tone is audible on their Mac. Actual device/rate, unplug/sleep/wake behavior and
+long-session listening remain manual checks; automation does not establish them.
 See [playback](AUDIO_PLAYBACK.md) for the audio contract and qualification limits.
 
 Framework/test setup follows the [Avalonia headless documentation](https://docs.avaloniaui.net/docs/testing/setting-up-the-headless-platform).

@@ -6,5 +6,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
-  <ItemGroup><InternalsVisibleTo Include="Thetis.Engine.Tests" /></ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Thetis.Engine.Tests" />
+    <InternalsVisibleTo Include="Thetis.Desktop.Tests" />
+  </ItemGroup>
 </Project>

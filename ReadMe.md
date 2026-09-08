@@ -19,7 +19,9 @@ Nereid of Thetis.
 - A new [Avalonia receiver preview](docs/DESKTOP_PREVIEW.md) displays live
   simulator spectrum/waterfall with tuning, filter, AGC, gain and mute controls.
   [PortAudio playback](docs/AUDIO_PLAYBACK.md) is opt-in; the default is a muted
-  no-device monitor. Physical playback remains unqualified.
+  no-device monitor. Adaptive output-clock recovery and explicit muted recovery
+  from audio-device failure have simulator/fake-driver tests. The user has heard
+  the simulated tone on Mac; physical-device endurance remains unqualified.
   The portable app does **not** stream from hardware or transmit. VST3 hosting
   remains planned work.
 - ChannelMaster's [offline DSP/pipe lifecycle](docs/CHANNELMASTER_OFFLINE.md)

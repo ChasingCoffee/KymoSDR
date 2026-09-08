@@ -243,6 +243,13 @@ device selection and automated no-device signal/control/render tests. This
 parallel preparation does not bypass M4: hardware receive, actual speaker/device
 qualification and the full M5 exit criteria below remain open.
 
+The next simulator-only increment adds bounded adaptive output-clock recovery,
+callback/driver-loss detection, automatic session cleanup and explicit muted
+reconnect. Independent-clock PCM and fake-driver tests cover drift and failure
+without physical output; see [playback validation](AUDIO_PLAYBACK.md). The user
+confirmed hearing the simulated tone on their Mac. Physical device endurance,
+unplug/sleep/wake and audible G2 receive still require separate qualification.
+
 Deliver two sub-gates, using the proven engine:
 
 1. **Audio:** reuse PortAudio initially where it fits the native integration, with macOS CoreAudio and a tested Windows backend. Enumerate/select outputs, handle rate conversion, expose underrun/overrun counters, and test device change/loss and mute/gain. Add Linux audio smoke coverage using a documented backend. PortAudio supplies a cross-platform audio API; backend behavior still needs our tests. [PortAudio documentation](https://www.portaudio.com/docs/v19-doxydocs/index.html).

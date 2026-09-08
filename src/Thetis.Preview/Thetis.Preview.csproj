@@ -7,6 +7,8 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Thetis.Engine.Tests" />
+    <InternalsVisibleTo Include="Thetis.Desktop.Tests" />
     <ProjectReference Include="../Thetis.Engine/Thetis.Engine.csproj" />
     <ProjectReference Include="../Thetis.Simulator/Thetis.Simulator.csproj" />
   </ItemGroup>

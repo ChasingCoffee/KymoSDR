@@ -10,9 +10,11 @@ public sealed record PlaybackDevice(int Index, string Name, string HostApi, int 
     public int PreferredRate => (SupportedRates & 2) != 0 ? 48000 : (SupportedRates & 1) != 0 ? 44100 : 96000;
     public override string ToString() => $"{Name} ({HostApi})";
 }
+public enum PlaybackFault { None, StreamStopped, DriverError, CallbackTimeout, SimulatedDeviceLoss }
 public sealed record PlaybackState(bool Physical, bool Active, int Rate, bool Muted, long Queued,
     long Submitted, long Rejected, long Rendered, long StarvationFrames, long Underruns,
-    long DriverUnderruns, long NonfiniteSamples, long ClippedSamples, double Peak);
+    long DriverUnderruns, long NonfiniteSamples, long ClippedSamples, double Peak,
+    bool ClockTracking, double CorrectionPpm, long TargetFrames, long Reprimes, PlaybackFault Fault, int DriverStatus);
 
 /// <summary>One output-only native owner. No-device output never initializes a hardware backend.
 /// Device callbacks remain entirely native; Write accepts stereo 48 kHz PCM.</summary>
@@ -23,7 +25,7 @@ public sealed class PlaybackOutput : IDisposable
     private static string? loadedPath;
     private static bool active;
     private readonly OutputHandle handle = new();
-    private readonly long[] stateBuffer = new long[16]; // accessed only under Gate
+    private readonly long[] stateBuffer = new long[22]; // accessed only under Gate
     private PlaybackOutput() { }
     static PlaybackOutput() => NativeLibrary.SetDllImportResolver(typeof(PlaybackOutput).Assembly, Resolve);
     private static nint Resolve(string name, Assembly _, DllImportSearchPath? __) => name == "thetis_audio"
@@ -38,7 +40,7 @@ public sealed class PlaybackOutput : IDisposable
         {
             if (loadedPath is not null && loadedPath != path) throw new InvalidOperationException("Playback is already loaded from a different directory.");
             if (library == 0) { library = NativeLibrary.Load(path); loadedPath = path; }
-            if (AudioNative.ThetisAudioAbi() != 1) throw new NotSupportedException("Native playback ABI is incompatible.");
+            if (AudioNative.ThetisAudioAbi() != 2) throw new NotSupportedException("Native playback ABI is incompatible; rebuild native libraries and the app together.");
         }
     }
     public static IReadOnlyList<PlaybackDevice> EnumerateDevices(string directory)
@@ -58,7 +60,7 @@ public sealed class PlaybackOutput : IDisposable
                     {
                         int[] values = new int[5]; byte[] name = new byte[1024], host = new byte[256];
                         int rc = AudioNative.ThetisAudioDevice(index,values,5,name,name.Length,host,host.Length); Check(rc);
-                        if (rc != 5 || values[0] != 1) throw new NotSupportedException("Native audio device layout is incompatible.");
+                        if (rc != 5 || values[0] != 2) throw new NotSupportedException("Native audio device layout is incompatible.");
                         if (values[2] >= 2 && values[4] != 0) devices.Add(new(index,Decode(name),Decode(host),values[3],values[4]));
                     }
                     return (IReadOnlyList<PlaybackDevice>)devices.AsReadOnly();
@@ -68,9 +70,11 @@ public sealed class PlaybackOutput : IDisposable
         });
     }
     public static PlaybackOutput OpenNull(string directory,int rate = 48000) => Open(directory,null,rate);
+    // Test-owned independent clock only; never initializes an audio backend.
+    internal static PlaybackOutput OpenClockedNull(string directory,int rate = 48000) => Open(directory,null,rate,true);
     public static PlaybackOutput OpenDevice(string directory,PlaybackDevice device)
     { ArgumentNullException.ThrowIfNull(device); return Open(directory,device,device.PreferredRate); }
-    private static PlaybackOutput Open(string directory,PlaybackDevice? device,int rate)
+    private static PlaybackOutput Open(string directory,PlaybackDevice? device,int rate,bool clockedNull = false)
     {
         if (rate is not (44100 or 48000 or 96000)) throw new ArgumentOutOfRangeException(nameof(rate));
         if (device is not null && (device.Index < 0 || string.IsNullOrWhiteSpace(device.Name) || string.IsNullOrWhiteSpace(device.HostApi)))
@@ -82,7 +86,7 @@ public sealed class PlaybackOutput : IDisposable
             {
                 if (active) throw new InvalidOperationException("One playback output may be open at a time.");
                 var result = new PlaybackOutput();
-                Check(AudioNative.ThetisAudioOpen(1,device?.Index ?? -1,rate,device?.Name,device?.HostApi));
+                Check(clockedNull ? AudioNative.ThetisAudioOpenClockedNull(2,rate) : AudioNative.ThetisAudioOpen(2,device?.Index ?? -1,rate,device?.Name,device?.HostApi));
                 result.handle.MarkOpen(); active = true; return result;
             }
         });
@@ -94,7 +98,8 @@ public sealed class PlaybackOutput : IDisposable
             lock (Gate)
             {
                 ReadState(); long[] s = stateBuffer;
-                return new(s[2] == 1,s[3] == 1,(int)s[4],s[5] == 1,s[6],s[7],s[8],s[9],s[10],s[11],s[12],s[13],s[14],s[15]/1e6);
+                return new(s[2] == 1,s[3] == 1,(int)s[4],s[5] == 1,s[6],s[7],s[8],s[9],s[10],s[11],s[12],s[13],s[14],s[15]/1e6,
+                    s[16] == 1,s[17]/1000.0,s[18],s[19],(PlaybackFault)s[20],(int)s[21]);
             }
         }
     }
@@ -104,7 +109,7 @@ public sealed class PlaybackOutput : IDisposable
     private void ReadState()
     {
         CheckOpen(); int rc = AudioNative.ThetisAudioState(stateBuffer,stateBuffer.Length); GC.KeepAlive(handle); Check(rc);
-        if (rc != 16 || stateBuffer[0] != 1 || stateBuffer[1] != 1) throw new NotSupportedException("Native playback state is incompatible.");
+        if (rc != 22 || stateBuffer[0] != 2 || stateBuffer[1] != 1) throw new NotSupportedException("Native playback state is incompatible.");
     }
     public int Write(double[] stereo,int frames)
     {
@@ -182,6 +187,7 @@ internal static class AudioNative
     [DllImport(Library,CallingConvention=CallingConvention.Cdecl)] internal static extern int ThetisAudioDeviceCount();
     [DllImport(Library,CallingConvention=CallingConvention.Cdecl)] internal static extern int ThetisAudioDevice(int index,[Out] int[] values,int capacity,[Out] byte[] name,int nameCapacity,[Out] byte[] host,int hostCapacity);
     [DllImport(Library,CallingConvention=CallingConvention.Cdecl)] internal static extern int ThetisAudioOpen(int abi,int device,int rate,[MarshalAs(UnmanagedType.LPUTF8Str)] string? name,[MarshalAs(UnmanagedType.LPUTF8Str)] string? host);
+    [DllImport(Library,CallingConvention=CallingConvention.Cdecl)] internal static extern int ThetisAudioOpenClockedNull(int abi,int rate);
     [DllImport(Library,CallingConvention=CallingConvention.Cdecl)] internal static extern int ThetisAudioWrite([In] double[] stereo,int frames);
     [DllImport(Library,CallingConvention=CallingConvention.Cdecl)] internal static extern int ThetisAudioMute(int muted);
     [DllImport(Library,CallingConvention=CallingConvention.Cdecl)] internal static extern int ThetisAudioFlush();

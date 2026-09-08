@@ -6,16 +6,16 @@
 #include <thread>
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr,"Playback failure %d: %s\n",__LINE__,#x); std::exit(1); } } while (0)
 int main() {
-    CHECK(ThetisAudioAbi() == 1);
-    int64_t state[17]; state[16] = 12345;
-    CHECK(ThetisAudioState(nullptr,16) == -1 && ThetisAudioState(state,15) == -1);
-    CHECK(ThetisAudioState(state,16) == 16 && state[1] == 0 && state[16] == 12345);
-    CHECK(ThetisAudioOpen(2,-1,48000,nullptr,nullptr) == -1);
-    CHECK(ThetisAudioOpen(1,-2,48000,nullptr,nullptr) == -1);
-    CHECK(ThetisAudioOpen(1,-1,22050,nullptr,nullptr) == -1);
+    CHECK(ThetisAudioAbi() == 2);
+    int64_t state[23]; state[22] = 12345;
+    CHECK(ThetisAudioState(nullptr,22) == -1 && ThetisAudioState(state,21) == -1);
+    CHECK(ThetisAudioState(state,22) == 22 && state[1] == 0 && state[22] == 12345);
+    CHECK(ThetisAudioOpen(1,-1,48000,nullptr,nullptr) == -1);
+    CHECK(ThetisAudioOpen(2,-2,48000,nullptr,nullptr) == -1);
+    CHECK(ThetisAudioOpen(2,-1,22050,nullptr,nullptr) == -1);
     for (int rate : {44100,48000,96000}) {
-        CHECK(ThetisAudioOpen(1,-1,rate,nullptr,nullptr) == 0);
-        CHECK(ThetisAudioOpen(1,-1,rate,nullptr,nullptr) == -2);
+        CHECK(ThetisAudioOpen(2,-1,rate,nullptr,nullptr) == 0);
+        CHECK(ThetisAudioOpen(2,-1,rate,nullptr,nullptr) == -2);
         float out[2*960+2]{}; out[2*960] = 123;
         CHECK(ThetisAudioRenderNull(out,960) == 960);
         for (int i = 0; i < 1920; ++i) CHECK(out[i] == 0);
@@ -34,13 +34,13 @@ int main() {
         double rms = std::sqrt(energy/measured), hz = positive*static_cast<double>(rate)/measured;
         std::printf("Playback %d Hz: RMS %.9f, tone %.3f Hz\n",rate,rms,hz);
         CHECK(std::abs(rms-.2/std::sqrt(2.0)) < .002 && std::abs(hz-1000) < 2);
-        CHECK(ThetisAudioState(state,16) == 16 && state[8] == 0 && state[11] == 0 && state[16] == 12345);
+        CHECK(ThetisAudioState(state,22) == 22 && state[8] == 0 && state[11] == 0 && state[22] == 12345);
         CHECK(ThetisAudioMute(1) == 0 && ThetisAudioRenderNull(out,960) == 960);
         for (int i = 0; i < 1920; ++i) CHECK(out[i] == 0);
         // Exhaust the queue deliberately, then require silence until a fresh
         // prefill exists. Starvation must not repeat the previous tone.
         for (int i = 0; i < 10; ++i) CHECK(ThetisAudioRenderNull(out,960) == 960);
-        CHECK(ThetisAudioState(state,16) == 16 && state[11] > 0);
+        CHECK(ThetisAudioState(state,22) == 22 && state[11] > 0);
         CHECK(ThetisAudioMute(0) == 0);
         double restart[2*1024]; for (double &v : restart) v = .125;
         CHECK(ThetisAudioWrite(restart,512) == 512 && ThetisAudioRenderNull(out,100) == 100);
@@ -48,13 +48,13 @@ int main() {
         CHECK(ThetisAudioWrite(restart,1024) == 1024 && ThetisAudioRenderNull(out,100) == 100);
         for (int i = 0; i < 200; ++i) CHECK(std::abs(out[i]-.125f) < 1e-6);
         CHECK(out[1920] == 123);
-        CHECK(ThetisAudioInterruptNull() == 0 && ThetisAudioState(state,16) == 16 && state[3] == 0 && state[5] == 1);
+        CHECK(ThetisAudioInterruptNull() == 0 && ThetisAudioState(state,22) == 22 && state[3] == 0 && state[5] == 1);
         CHECK(ThetisAudioClose() == 0 && ThetisAudioClose() == 0);
     }
     for (int cycle = 0; cycle < 100; ++cycle) {
         float empty[2] = {1,1};
-        CHECK(ThetisAudioOpen(1,-1,48000,nullptr,nullptr) == 0);
-        CHECK(ThetisAudioState(state,16) == 16 && state[5] == 1 && state[7] == 0);
+        CHECK(ThetisAudioOpen(2,-1,48000,nullptr,nullptr) == 0);
+        CHECK(ThetisAudioState(state,22) == 22 && state[5] == 1 && state[7] == 0);
         CHECK(ThetisAudioRenderNull(empty,1) == 1 && empty[0] == 0 && empty[1] == 0);
         CHECK(ThetisAudioClose() == 0);
     }

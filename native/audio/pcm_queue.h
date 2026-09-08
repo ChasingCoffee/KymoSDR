@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include "clock_recovery.h"
 
 // One producer, one consumer. Callback does no allocation, locking, managed
 // calls, I/O or DSP configuration. Storage and rate tables are prepared on open.
@@ -13,12 +14,18 @@ public:
     static constexpr uint64_t capacity = 8192;
     static constexpr int taps = 32, phases = 1024, prime = 1024;
     static_assert(std::atomic<uint64_t>::is_always_lock_free, "Playback requires lock-free 64-bit atomics");
+    static_assert(std::atomic<int64_t>::is_always_lock_free && std::atomic<int>::is_always_lock_free,
+        "Callback control and diagnostics must be lock-free");
     std::atomic<uint64_t> written{0}, read{0}, submitted{0}, rejected{0}, rendered{0};
     std::atomic<uint64_t> starvation{0}, underruns{0}, driver_underruns{0}, nonfinite{0}, clipped{0}, peak{0};
     std::atomic<int> muted{1}, active{1};
     std::atomic<uint64_t> reset{0};
+    std::atomic<int64_t> correction_ppb{0};
+    std::atomic<uint64_t> reprimes{0};
+    std::atomic<int> fault{0}; // 0 healthy, 1 stopped, 2 driver error, 3 callback timeout, 4 fixture loss
     const int rate;
-    explicit PcmQueue(int output_rate) : rate(output_rate), ratio(48000.0 / output_rate) {
+    const bool clock_tracking;
+    explicit PcmQueue(int output_rate,bool tracking = false) : rate(output_rate), clock_tracking(tracking), ratio(48000.0 / output_rate) {
         const double cutoff = .90 * std::min(1.0,output_rate / 48000.0);
         for (int p = 0; p < phases; ++p) {
             double sum = 0;
@@ -30,6 +37,10 @@ public:
             }
             for (double &c : coefficients[p]) c /= sum;
         }
+    }
+    void fail(int reason) {
+        int expected = 0; fault.compare_exchange_strong(expected,reason);
+        muted.store(1); active.store(0);
     }
     int write(const double *input,int frames) {
         uint64_t w = written.load(std::memory_order_relaxed), r = read.load(std::memory_order_acquire);
@@ -52,11 +63,24 @@ public:
             const uint64_t generation = reset.load(std::memory_order_acquire);
             if (generation != seen_reset) {
                 r = w; fraction = 0; priming = true; seen_reset = generation;
+                reset_clock(); reprimes.fetch_add(1,std::memory_order_relaxed);
             }
-            if (priming && w-r >= prime) priming = false;
+            if (priming && w-r >= static_cast<uint64_t>(clock_tracking ? 4096 : prime)) priming = false;
             if (!active.load(std::memory_order_relaxed) || priming || w-r < taps+2) {
-                if (!priming) { underruns.fetch_add(1,std::memory_order_relaxed); priming = true; r = w; fraction = 0; }
+                if (!priming && active.load(std::memory_order_relaxed)) {
+                    underruns.fetch_add(1,std::memory_order_relaxed); reprimes.fetch_add(1,std::memory_order_relaxed);
+                    priming = true; r = w; fraction = 0; reset_clock();
+                }
                 output[2*i] = output[2*i+1] = 0; ++zeros; continue;
+            }
+            if (clock_tracking) {
+                depth_sum += static_cast<double>(w-r);
+                if (++clock_frames == rate/100) {
+                    double ppm = clock.update(depth_sum/clock_frames);
+                    ratio = (48000.0/rate)*(1+ppm/1e6);
+                    correction_ppb.store(static_cast<int64_t>(std::llround(ppm*1000)),std::memory_order_relaxed);
+                    depth_sum = 0; clock_frames = 0;
+                }
             }
             int phase = static_cast<int>(fraction*phases);
             for (int c = 0; c < 2; ++c) {
@@ -78,6 +102,13 @@ private:
     std::array<double,2*capacity> samples{};
     std::array<std::array<double,taps>,phases> coefficients{};
     double ratio, fraction = 0;
+    ClockRecovery clock;
+    double depth_sum = 0;
+    int clock_frames = 0;
+    void reset_clock() {
+        clock.reset(); depth_sum = 0; clock_frames = 0; ratio = 48000.0/rate;
+        correction_ppb.store(0,std::memory_order_relaxed);
+    }
     bool priming = true;
     uint64_t seen_reset = 0;
 };

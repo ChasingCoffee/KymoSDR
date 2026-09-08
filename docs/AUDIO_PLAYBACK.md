@@ -23,11 +23,17 @@ There is no automatic default-device fallback. Names are not persistent unique
 hardware IDs; refresh and reselect after device changes.
 
 The callback queue has 8,192 stereo source frames (about 171 ms maximum at
-48 kHz), with a 1,024-frame prefill. A 32-tap/1,024-phase windowed-sinc resampler
+48 kHz), with a 4,096-frame prefill for independently clocked output (about
+85 ms source buffering, plus driver latency). The sample-driven silent monitor
+retains its 1,024-frame prefill. A 32-tap/1,024-phase windowed-sinc resampler
 converts to the selected output rate. Callback buffers are supplied by PortAudio;
 coefficients/storage are allocated before starting the stream. Atomic counters
 expose queue depth, submitted/rejected/rendered frames, priming/starvation,
-queue/driver underruns, nonfinite input, clipping and pre-mute peak.
+queue/driver underruns, nonfinite input, clipping and pre-mute peak. Playback
+**ABI 2** adds clock tracking, correction in parts per billion, target queue
+depth, re-primes, latched failure reason and last driver status to the 22-value
+state record. Rebuild/stage the native audio library and managed app together;
+the previous ABI is rejected before opening any stream.
 
 Overflow rejects new frames; starvation emits silence and re-primes rather than
 repeating stale samples. Nonfinite input becomes zero; input is bounded and
@@ -42,11 +48,47 @@ look-ahead and pacing from actual queue occupancy, including after flush.
 It measures tone frequency/RMS and does not advance a fake
 wall clock while PCM awaits draining: host scheduling delays must not synthesize
 test-only starvation. Native tests still explicitly exercise actual queue
-starvation/overflow behavior. This is deterministic signal/lifecycle coverage,
-not a physical device clock or latency qualification. There is no adaptive hardware-clock drift
-correction yet; long sessions with independent radio/device clocks may exhaust
-the queue. Driver hangs, actual unplug, sleep/wake and 60-minute underrun-free
-listening remain manual qualification gates, not simulated-device claims.
+starvation/overflow behavior. This sample-driven monitor deliberately disables
+clock recovery: it has no independent clock to follow.
+
+## Independent clocks and output loss
+
+Physical output now adjusts the existing resampler's fractional step using a
+consumer-owned queue-depth PI controller. It averages occupancy over 10 ms of
+output samples, applies a one-second low-pass filter, and aims for 3,072 source
+frames (64 ms). Proportional/integral gains are 2 ppm/frame and
+0.05 ppm/(frame·second). Correction is limited to ±2,000 ppm and slewed at no
+more than 200 ppm/second, with conditional integration to prevent wind-up.
+Positive correction consumes source PCM faster. No sample insertion/deletion,
+wall-clock queries, allocation or locking is added to the callback.
+
+Initial prefill, starvation and flush do not train the estimator. Flush and
+starvation clear its history/correction and require fresh prefill. Muting alone
+continues consumption and clock tracking. These bounds are not a promise to
+absorb arbitrary scheduling stalls, packet loss or offsets beyond ±2,000 ppm.
+The desktop displays current correction alongside queue/underrun counters.
+
+The native owner latches failure on a stream-finished notification, inactive or
+failed driver status, or one second without callback progress. The watchdog also
+stops an independently clocked owner after a one-second **polling** gap, even if
+callbacks advanced (conservative recovery from a suspended control pump). It is
+polled by the background receive pump, not the UI. A failed owner emits silence,
+rejects further writes/unmute, and cannot revive when callbacks resume.
+The controller observes pump completion and joins output, receiver and simulator
+without requiring a UI poll; it publishes disconnected only after cleanup.
+
+The UI shows the fault, discards the old output selection and requires explicit
+device refresh/reselection/reconnect. There is no auto-switch to a default or
+similarly named output, no automatic reconnect, and no restored unmute/high gain.
+A driver close failure retains callback-owned memory and prevents reopening in
+the managed process; restart is required. Driver calls themselves are not given
+an unsafe forced timeout: an indefinitely hung driver can still block cleanup.
+
+Tests can explicitly open a **clocked no-device fixture** with the same adaptive
+renderer/watchdog and an independently paced consumer. It never initializes
+PortAudio and is not an app/CLI output-selection option. A separate native test
+links production playback code to a fake PortAudio implementation to exercise
+the physical-driver lifecycle without loading any physical backend.
 
 ## Commands
 
@@ -80,6 +122,37 @@ and TX options. The [desktop](DESKTOP_PREVIEW.md) uses the same owner.
 
 ## Coverage and remaining checks
 
+The user confirmed hearing the simulator through the Mac desktop. This is an
+initial manual listening check; device identity/rate, latency, unplug behavior
+and duration were not recorded. It is not a full physical-device qualification.
+
+Clock-recovery tests exercise eight virtual-hour controller scenarios (0,
+±100/500/1,000 ppm and a direction reversal), bounded slew/anti-windup, and
+four minutes of actual stereo PCM at each of three rates and both ±1,000 ppm
+offsets. The fixed-rate negative controls exhaust their queues. A separate full
+PCM virtual-hour run at 48 kHz/+1,000 ppm passed locally with queue depth
+2,053–4,007 frames after settling, mean correction 999.871 ppm, 0.35355123 RMS
+and 1001.0002 Hz, with zero underruns/rejections. This is 60 minutes of sample
+time, **not 60 minutes of wall-clock listening**.
+
+The fake-driver tests cover 100 loss/reopen cycles, finished callbacks, inactive
+and error statuses, stalled callbacks, stale device indices, open/register/start
+rollback, failed-close memory retention, and muted clean reopen. These new tests
+are included in three-OS native CI; actual hosted results are recorded separately
+in [NATIVE_CI_RESULTS.md](NATIVE_CI_RESULTS.md).
+
+```sh
+ctest --test-dir artifacts/native -C Release --verbose -R receive_playback
+artifacts/native/stage/Release/playback_clock_tests --soak
+```
+
+The second command uses `.exe` on Windows. It renders a virtual hour without a
+device. Managed playback regressions also include a 60-second **wall-clock** P2
+session with an independently paced +1,000 ppm simulated output, mute/flush,
+retune and output loss, plus automatic cleanup/reconnect for both protocols.
+
+### Previous simulator preview checkpoint
+
 Local macOS arm64 source `e9c352ce2f90a686460a3aeb590915f068b70616`
 (2026-09-07 Pacific) passes locked restore, a zero-warning managed build,
 182 managed tests (124 core / 53 engine including the confined independent P1
@@ -103,7 +176,8 @@ rate; removing the reserve makes all three cases fail, restoring it makes them
 pass. Physical callback timing remains a distinct, unqualified gate.
 
 See [the CI record](NATIVE_CI_RESULTS.md) for hosted source/results; do not infer
-physical-device playback from a no-device or native-window test.
+physical-device playback from a no-device or native-window test. The counts in
+this historical subsection refer to that earlier source, not the new increment.
 
 Native tests cover ABI/capacity canaries, three-rate 1 kHz amplitude/frequency,
 mute, queue overflow, explicit starvation/re-prime, nonfinite/clipping, flush,
@@ -115,7 +189,7 @@ macOS sanitizers do not enable leak detection.
 
 No physical playback or RF transmission was used for this implementation's
 automated validation. Actual sound quality, stereo routing, device-specific
-latency/rates/loss, resampler wideband response, sustained clock drift, speech,
+latency/rates/loss, resampler wideband response, sustained physical-clock drift, speech,
 noise and calibrated RF levels remain unqualified. Do not connect this preview
 to a G2: hardware streaming is deliberately absent. The existing G2 receive-only
 ANT1 constraint is unchanged.
