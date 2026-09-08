@@ -1,7 +1,7 @@
 # Initial cross-platform feature matrix
 
 Status categories are independent: an implemented feature can have fixture and
-simulator coverage without any hardware validation. Last updated 2026-09-07.
+simulator coverage without any hardware validation. Last updated 2026-09-08.
 
 | Feature | Implementation | macOS arm64 evidence | Windows / Linux | Remaining gate |
 | --- | --- | --- | --- | --- |
@@ -24,6 +24,8 @@ simulator coverage without any hardware validation. Last updated 2026-09-07.
 | RNet / socket lifecycle probe | Loopback checks pass cross-platform | Native/managed cycles, rollback, sanitizer and zero-leak scans pass | 100-cycle native/CLI tests and 68 managed tests pass; Linux sanitizer/leak checks pass | [Probe boundary](TRANSPORT_LOOPBACK.md); real P1/P2 packet-worker shutdown still pending. |
 | Receive playback | PortAudio output, bounded adaptive clock recovery, reserved sample-driven monitor and latched driver/watchdog faults | 189 managed and 14 native/sanitizer cases pass locally; virtual-hour PCM and 60-wall-second controlled-clock P2 tests pass; user heard simulated tone on Mac | 188 managed passes / 1 reference skip per OS; clock, fake-driver, pipeline and signal gates pass; separate POSIX reference and Linux sanitizer/leak checks pass | [Contract/results](AUDIO_PLAYBACK.md); physical device drift/endurance, actual unplug/sleep/wake and latency remain unqualified. |
 | Shared desktop UI | Avalonia simulator receiver, spectrum/waterfall, receive controls and explicit output-loss recovery | Six headless Skia tests pass, including loss/selection clearing/muted reconnect; user confirmed native window and simulated audio | All six headless cases, published native-window rendering and missing-native negative checks pass on all three OSes | [Preview](DESKTOP_PREVIEW.md); M4 hardware and full M5 audible-G2/performance gates remain open. |
+| Desktop diagnostics / endurance | Bounded process/session/render counters, local JSON export and P2/P1/P2 retune/resize/reconnect campaign | New fixture and headless Skia validation in progress | Native-window campaign and retained success/failure reports wired into CI | [Contract](DESKTOP_RELIABILITY.md); native-window cadence, physical audio and full M5 performance remain separate qualifications. |
+| Preview preferences | Versioned allow-list and atomic saves, separate from legacy state | New corruption/future-version/external-edit/atomic-failure and safe-startup tests in progress | Pure settings and restored native-control tests wired into CI | [Safety contract](DESKTOP_RELIABILITY.md#safe-settings); no legacy settings migration or automatic output selection. |
 | TX / PTT / CW | Not started | None | None in new app | M6 and mode-specific hardware checks. |
 | VST3 processing / editors | Not started | Audit findings recorded | Legacy source only | M7/M8 and defect regression tests. |
 | FreeDV/RADE | Deferred integration | Missing build inputs identified | Later upstream reference retained | M9 dependency recovery and signal-chain validation. |

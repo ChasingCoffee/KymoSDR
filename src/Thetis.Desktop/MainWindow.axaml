@@ -5,13 +5,14 @@
         Width="1140" Height="800" MinWidth="900" MinHeight="700" UseLayoutRounding="True">
   <Grid RowDefinitions="70,*,42">
     <Border Background="#121D2A" BorderBrush="#263449" BorderThickness="0,0,0,1" Padding="24,14">
-      <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+      <Grid ColumnDefinitions="*,Auto,Auto" VerticalAlignment="Center">
         <StackPanel Orientation="Horizontal" Spacing="14">
           <TextBlock Text="≈" Foreground="#33D6BE" FontSize="31" VerticalAlignment="Center" />
           <TextBlock Text="KymoSDR" FontSize="25" FontWeight="SemiBold" VerticalAlignment="Center" />
           <TextBlock Text="RECEIVER PREVIEW" Foreground="#8196AC" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0" />
         </StackPanel>
-        <Border Grid.Column="1" Background="#253123" CornerRadius="5" Padding="12,7">
+        <Button Grid.Column="1" x:Name="ExportButton" Content="Export diagnostics…" Click="OnExport" Margin="0,0,16,0" VerticalAlignment="Center" />
+        <Border Grid.Column="2" Background="#253123" CornerRadius="5" Padding="12,7">
           <TextBlock Text="SIMULATOR ONLY · NO RF / TX" Foreground="#C6D991" FontSize="11" FontWeight="SemiBold" />
         </Border>
       </Grid>

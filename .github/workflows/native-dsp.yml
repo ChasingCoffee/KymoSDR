@@ -38,6 +38,13 @@ on:
         options:
           - short
           - 30-minutes
+      desktop_soak:
+        description: 'Simulator desktop endurance (no physical output; 30-minute option runs on all three OSes)'
+        type: choice
+        default: short
+        options:
+          - short
+          - 30-minutes
 
 permissions:
   contents: read
@@ -62,7 +69,7 @@ jobs:
           - os: ubuntu-latest
             cmake_args: ''
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: ${{ inputs.desktop_soak == '30-minutes' && 100 || 60 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -128,6 +135,39 @@ jobs:
           else { dotnet Thetis.Desktop.dll --smoke --native-dir $missingNative }
           if ($LASTEXITCODE -ne 4) { throw "Expected desktop startup failure exit 4, got $LASTEXITCODE" }
           exit 0
+      - name: Desktop endurance with retune, resize and P2-P1-P2 reconnects
+        timeout-minutes: ${{ inputs.desktop_soak == '30-minutes' && 35 || 3 }}
+        working-directory: artifacts/desktop
+        shell: pwsh
+        run: |
+          $seconds = 60
+          if ('${{ inputs.desktop_soak }}' -eq '30-minutes') { $seconds = 1800 }
+          $report = Join-Path '${{ github.workspace }}' 'artifacts/desktop-endurance.json'
+          $native = Join-Path (Get-Location) 'native'
+          if ($IsLinux) { xvfb-run -a dotnet Thetis.Desktop.dll --endurance-seconds $seconds --report $report --native-dir $native }
+          else { dotnet Thetis.Desktop.dll --endurance-seconds $seconds --report $report --native-dir $native }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Failed desktop endurance retains a diagnostic report
+        timeout-minutes: 3
+        working-directory: artifacts/desktop
+        shell: pwsh
+        run: |
+          $missingNative = Join-Path (Get-Location) 'deliberately-missing-native'
+          $report = Join-Path '${{ github.workspace }}' 'artifacts/desktop-endurance-failure.json'
+          if ($IsLinux) { xvfb-run -a dotnet Thetis.Desktop.dll --endurance-seconds 30 --report $report --native-dir $missingNative }
+          else { dotnet Thetis.Desktop.dll --endurance-seconds 30 --report $report --native-dir $missingNative }
+          if ($LASTEXITCODE -ne 4) { throw "Expected desktop endurance failure exit 4, got $LASTEXITCODE" }
+          $result = Get-Content -Raw $report | ConvertFrom-Json
+          if ($result.passed -or -not $result.failureType -or $result.diagnostics.sessionsStarted -ne 0) { throw 'Invalid failure diagnostic report' }
+          exit 0
+      - name: Retain desktop endurance diagnostics (no waveform or local paths)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-diagnostics-${{ matrix.os }}
+          path: artifacts/desktop-endurance*.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Offline native ABI, DSP and lifecycle tests
         run: ctest --test-dir artifacts/native -C Release --verbose
       - name: Build pinned independent P1 reference (confined loopback adapter)

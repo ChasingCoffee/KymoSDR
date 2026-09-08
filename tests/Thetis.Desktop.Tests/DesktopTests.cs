@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -32,7 +33,7 @@ public sealed class DesktopTests
     {
         await UiTestHost.RunAsync(async () =>
         {
-            var window = new MainWindow(new(Path.GetTempPath())); window.Show();
+            var window = new MainWindow(new(Path.GetTempPath(),PersistSettings:false)); window.Show();
             try
             {
                 Assert.IsFalse(window.Controller.Connected);
@@ -70,7 +71,7 @@ public sealed class DesktopTests
         if (string.IsNullOrWhiteSpace(directory)) Assert.Inconclusive("Requires native receiver/audio libraries; no physical devices.");
         await UiTestHost.RunAsync(async () =>
         {
-            var window = new MainWindow(new(directory)); window.Show();
+            var window = new MainWindow(new(directory,PersistSettings:false)); window.Show();
             try
             {
                 window.Control<ComboBox>("ProtocolInput").SelectedIndex = protocol == 2 ? 0 : 1;
@@ -98,6 +99,16 @@ public sealed class DesktopTests
                 await Wait(() => window.DisplayedFrames >= before+30);
                 using var bitmap = window.CaptureRenderedFrame(); Assert.IsNotNull(bitmap);
                 Save(bitmap,$"receiver-p{protocol}.png");
+                string reportPath = Path.Combine(Path.GetTempPath(),$"kymosdr-live-report-{Guid.NewGuid():N}.json");
+                try
+                {
+                    await window.ExportDiagnostics(reportPath);
+                    using var report = JsonDocument.Parse(File.ReadAllBytes(reportPath));
+                    Assert.AreEqual(1L,report.RootElement.GetProperty("sessionsStarted").GetInt64());
+                    Assert.IsTrue(report.RootElement.GetProperty("samples").GetArrayLength() > 0);
+                    Assert.IsTrue(window.Controller.Connected);
+                }
+                finally { if (File.Exists(reportPath)) File.Delete(reportPath); }
                 Click("DisconnectButton"); await Wait(() => !window.Controller.Connected);
                 Click("ConnectButton"); await Wait(() => !window.Busy && window.Controller.Snapshot?.Output.Rendered > 48000);
                 Assert.IsTrue(window.Controller.Settings.Muted); Assert.IsTrue(window.Controller.Settings.AudioGainDb <= -40);
@@ -126,7 +137,7 @@ public sealed class DesktopTests
         {
             PlaybackOutput? output = null;
             var controller = new PreviewController((path,_) => output = PlaybackOutput.OpenNull(path));
-            var window = new MainWindow(new(directory),controller); window.Show();
+            var window = new MainWindow(new(directory,PersistSettings:false),controller); window.Show();
             try
             {
                 // UI selection is a fixture; the injected factory can only open
@@ -143,6 +154,11 @@ public sealed class DesktopTests
                 Assert.AreEqual(1,window.Control<ComboBox>("OutputInput").ItemCount);
                 Assert.AreEqual(true,window.Control<CheckBox>("MuteInput").IsChecked);
                 Assert.IsFalse(window.Control<Button>("ApplyButton").IsEnabled);
+                var report = controller.Diagnostics.Snapshot();
+                Assert.AreEqual(1L,report.SessionsFailed);
+                Assert.IsNotNull(report.Sessions[0].EndedSeconds);
+                Assert.AreEqual(PlaybackFault.SimulatedDeviceLoss,report.Sessions[0].LastObserved?.Output?.Fault);
+                Assert.IsTrue(report.Sessions[0].LastObserved?.Output?.Muted);
                 await window.Connect();
                 await Wait(() => controller.Snapshot?.Output.Rendered > 4800);
                 Assert.IsTrue(controller.Settings.Muted); Assert.IsTrue(controller.Settings.AudioGainDb <= -40);
@@ -168,7 +184,7 @@ public sealed class DesktopTests
         if (string.IsNullOrWhiteSpace(directory)) Assert.Inconclusive("Requires native libraries; no physical devices.");
         await UiTestHost.RunAsync(async () =>
         {
-            var window = new MainWindow(new(directory)); window.Show();
+            var window = new MainWindow(new(directory,PersistSettings:false)); window.Show();
             var connect = window.Connect(); window.Close();
             await connect;
             var clock = Stopwatch.StartNew();

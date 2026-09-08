@@ -250,6 +250,13 @@ without physical output; see [playback validation](AUDIO_PLAYBACK.md). The user
 confirmed hearing the simulated tone on their Mac. Physical device endurance,
 unplug/sleep/wake and audible G2 receive still require separate qualification.
 
+The follow-up simulator-only desktop increment adds [bounded session diagnostics,
+retune/resize/reconnect endurance and safe versioned preferences](DESKTOP_RELIABILITY.md).
+Reports separate native-window/headless and sample-driven/physical evidence.
+Preferences remember receiver controls and layout, never connection, output-device
+selection or audible state; legacy profiles remain untouched. This continues M5
+preparation without closing M4 hardware or M5 physical/performance gates.
+
 Deliver two sub-gates, using the proven engine:
 
 1. **Audio:** reuse PortAudio initially where it fits the native integration, with macOS CoreAudio and a tested Windows backend. Enumerate/select outputs, handle rate conversion, expose underrun/overrun counters, and test device change/loss and mute/gain. Add Linux audio smoke coverage using a documented backend. PortAudio supplies a cross-platform audio API; backend behavior still needs our tests. [PortAudio documentation](https://www.portaudio.com/docs/v19-doxydocs/index.html).

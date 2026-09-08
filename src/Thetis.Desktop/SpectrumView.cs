@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Thetis.Engine;
+using Thetis.Preview;
 
 namespace Thetis.Desktop;
 
@@ -22,12 +23,16 @@ public sealed class SpectrumView : Control, IDisposable
     private ReceiveSpectrumFrame? renderedFrame;
     public long FramesDisplayed { get; private set; }
     public long FramesRendered { get; private set; }
+    private long lifetimeDisplayed,lifetimeRendered,sourceSkipped;
+    public DisplayTelemetry Telemetry => new(lifetimeDisplayed,lifetimeRendered,sourceSkipped,Bounds.Width,Bounds.Height);
     public void Update(ReceiveSpectrumFrame? value)
     {
         if (value is null || frame?.Sequence == value.Sequence && frame?.TuningGeneration == value.TuningGeneration) return;
         if (frame is null || frame.TuningGeneration != value.TuningGeneration || frame.SampleRate != value.SampleRate)
             Array.Fill(waterfall,unchecked((int)0xff0a111b));
-        frame = value; ++FramesDisplayed;
+        if (frame is not null && frame.TuningGeneration == value.TuningGeneration)
+            sourceSkipped += Math.Max(0,value.Sequence-frame.Sequence-1);
+        frame = value; ++FramesDisplayed; ++lifetimeDisplayed;
         var source = value.LevelsDb.Span;
         Buffer.BlockCopy(waterfall,0,waterfall,Columns*sizeof(int),Columns*(Rows-1)*sizeof(int));
         for (int x = 0; x < Columns; ++x)
@@ -78,7 +83,7 @@ public sealed class SpectrumView : Control, IDisposable
         var waterfallRect = new Rect(plot.X,plot.Bottom+34,width,Math.Max(1,Bounds.Height-plot.Bottom-48));
         if (frame is not null)
         {
-            if (!ReferenceEquals(frame,renderedFrame)) { renderedFrame = frame; ++FramesRendered; }
+            if (!ReferenceEquals(frame,renderedFrame)) { renderedFrame = frame; ++FramesRendered; ++lifetimeRendered; }
             using (context.PushClip(plot))
             {
                 var geometry = new StreamGeometry();

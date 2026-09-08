@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Thetis.Audio;
 using Thetis.Engine;
@@ -21,14 +22,26 @@ public partial class MainWindow : Window
     private readonly PreviewLaunchOptions options;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly List<object> outputs = ["No device (silent monitor)"];
+    private readonly PreviewPreferencesStore? preferencesStore;
+    private PreviewPreferences preferences = PreviewPreferences.Default;
+    private string? preferencesWarning;
+    private double normalWidth = 1140,normalHeight = 800;
+    private bool wasMaximized;
     private bool busy, closing, mayClose, handlingFault;
     internal bool Busy => busy;
     internal long DisplayedFrames => Control<SpectrumView>("SpectrumDisplay").FramesDisplayed;
     public MainWindow() : this(new(PreviewLaunchOptions.DefaultDirectory)) { }
     public MainWindow(PreviewLaunchOptions options) : this(options,new()) { }
-    internal MainWindow(PreviewLaunchOptions options,PreviewController controller)
+    internal MainWindow(PreviewLaunchOptions options,PreviewController controller,PreviewPreferencesStore? store = null)
     {
         this.options = options; Controller = controller; AvaloniaXamlLoader.Load(this);
+        preferencesStore = options.Automated || !options.PersistSettings ? null : store ?? new(PreviewPreferencesStore.DefaultPath);
+        if (preferencesStore is not null)
+        {
+            var loaded = preferencesStore.Load(); preferences = loaded.Value; preferencesWarning = loaded.Warning;
+            RestorePreferences();
+            if (loaded.Warning is not null) Status(loaded.Warning);
+        }
         Control<TextBox>("NativeDirectoryInput").Text = options.NativeDirectory;
         Control<ComboBox>("OutputInput").ItemsSource = outputs; Control<ComboBox>("OutputInput").SelectedIndex = 0;
         Control<Slider>("GainInput").PropertyChanged += (_,e) =>
@@ -36,10 +49,26 @@ public partial class MainWindow : Window
         timer.Tick += (_,_) => RefreshSnapshot(); timer.Start();
         Closing += OnClosing;
         Closed += (_,_) => { timer.Stop(); Control<SpectrumView>("SpectrumDisplay").Dispose(); };
+        PropertyChanged += (_,e) =>
+        {
+            if (e.Property == BoundsProperty && WindowState == WindowState.Normal && Bounds.Width >= 900 && Bounds.Height >= 700)
+            { normalWidth = Math.Clamp(Bounds.Width,900,3840); normalHeight = Math.Clamp(Bounds.Height,700,2160); }
+            if (e.Property == WindowStateProperty && WindowState != WindowState.Minimized) wasMaximized = WindowState == WindowState.Maximized;
+        };
+        Opened += (_,_) =>
+        {
+            if (Screens.ScreenFromWindow(this) is { } screen)
+            {
+                Width = Math.Clamp(Width,MinWidth,Math.Max(MinWidth,screen.WorkingArea.Width/screen.Scaling));
+                Height = Math.Clamp(Height,MinHeight,Math.Max(MinHeight,screen.WorkingArea.Height/screen.Scaling));
+            }
+            if (preferences.Window.Maximized) WindowState = WindowState.Maximized;
+        };
         if (options.Smoke) Opened += async (_,_) => await RunSmoke();
+        if (options.EnduranceSeconds > 0) Opened += async (_,_) => await RunEndurance();
     }
     internal T Control<T>(string name) where T : Control => this.FindControl<T>(name) ?? throw new InvalidOperationException($"Missing UI control {name}");
-    private void Status(string message) => Control<TextBlock>("StatusText").Text = message;
+    private void Status(string message) => Control<TextBlock>("StatusText").Text = preferencesWarning is null ? message : $"{message} Settings: {preferencesWarning}";
     private void Enabled()
     {
         bool connected = Controller.Connected;
@@ -48,6 +77,7 @@ public partial class MainWindow : Window
         Control<Button>("DisconnectButton").IsEnabled = (connected || busy) && !closing;
         Control<Button>("ApplyButton").IsEnabled = connected && !busy && !closing;
         Control<CheckBox>("MuteInput").IsEnabled = connected && !busy && !closing;
+        Control<Button>("ExportButton").IsEnabled = !closing;
     }
     private async Task Operation(Func<Task> operation,string progress,string success)
     {
@@ -55,7 +85,7 @@ public partial class MainWindow : Window
         busy = true; Enabled(); Status(progress);
         try { await operation(); Status(success); }
         catch (OperationCanceledException) { Status("Operation cancelled; simulator/output stopped."); }
-        catch (Exception ex) { Status(ex.Message); }
+        catch (Exception ex) { Controller.Diagnostics.Event("operation-failed",ex); Status(ex.Message); }
         finally { busy = false; Enabled(); }
     }
     private async void OnConnect(object? sender,RoutedEventArgs e) => await Connect();
@@ -64,10 +94,12 @@ public partial class MainWindow : Window
         int protocol = Control<ComboBox>("ProtocolInput").SelectedIndex == 0 ? 2 : 1;
         string directory = Control<TextBox>("NativeDirectoryInput").Text ?? "";
         var device = Control<ComboBox>("OutputInput").SelectedItem as PlaybackDevice;
-        await Controller.ConnectAsync(directory,protocol,device);
+        if ((options.Automated || enduranceRunning) && device is not null) throw new InvalidOperationException("Automated runs cannot open physical audio.");
+        await Controller.ConnectAsync(directory,protocol,device,initialSettings:ReadSettings());
         Control<CheckBox>("MuteInput").IsChecked = true;
         Control<Slider>("GainInput").Value = Controller.Settings.AudioGainDb;
         Control<SpectrumView>("SpectrumDisplay").Reset();
+        await SavePreferences();
     },"Starting owned simulator and receiver…","Connected to simulator. Output muted; adjust controls, then unmute when ready.");
     private async void OnDisconnect(object? sender,RoutedEventArgs e)
     {
@@ -89,7 +121,7 @@ public partial class MainWindow : Window
     },"Enumerating output devices (no stream opened)…","Output list refreshed. Select a device before connecting; no device remains selected by default.");
     private async void OnApply(object? sender,RoutedEventArgs e) => await Apply();
     private async void OnInputKey(object? sender,KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled = true; await Apply(); } }
-    private Task Apply() => Operation(() => Controller.ApplyAsync(ReadSettings()),"Applying receive controls…","Receive controls applied. Spectrum levels are uncalibrated, not dBm.");
+    internal Task Apply() => Operation(async () => { await Controller.ApplyAsync(ReadSettings()); await SavePreferences(); },"Applying receive controls…","Receive controls applied. Spectrum levels are uncalibrated, not dBm.");
     private PreviewSettings ReadSettings()
     {
         int Number(string name) => int.TryParse(Control<TextBox>(name).Text,NumberStyles.Integer,CultureInfo.InvariantCulture,out int value)
@@ -101,9 +133,70 @@ public partial class MainWindow : Window
     private async void OnMute(object? sender,RoutedEventArgs e) => await Operation(
         () => Controller.ApplyAsync(Controller.Settings with { Muted = Control<CheckBox>("MuteInput").IsChecked != false }),
         "Updating mute…","Mute updated. Already driver-buffered audio cannot be recalled.");
+    private void RestorePreferences()
+    {
+        var saved = preferences.Receiver;
+        Control<ComboBox>("ProtocolInput").SelectedIndex = saved.Protocol == 2 ? 0 : 1;
+        Control<TextBox>("FrequencyInput").Text = saved.FrequencyHz.ToString(CultureInfo.InvariantCulture);
+        Control<ComboBox>("ModeInput").SelectedIndex = saved.Mode == ReceiveMode.Usb ? 0 : 1;
+        Control<TextBox>("LowInput").Text = saved.LowCutHz.ToString(CultureInfo.InvariantCulture);
+        Control<TextBox>("HighInput").Text = saved.HighCutHz.ToString(CultureInfo.InvariantCulture);
+        Control<ComboBox>("AgcInput").SelectedIndex = saved.AgcMode switch { ReceiveAgcMode.Off => 0,ReceiveAgcMode.Slow => 1,ReceiveAgcMode.Medium => 2,_ => 3 };
+        Control<TextBox>("AgcMaxInput").Text = saved.AgcMaxGainDb.ToString(CultureInfo.InvariantCulture);
+        Control<CheckBox>("MuteInput").IsChecked = true; Control<Slider>("GainInput").Value = -40;
+        normalWidth = Width = preferences.Window.Width; normalHeight = Height = preferences.Window.Height;
+        wasMaximized = preferences.Window.Maximized;
+        Control<TextBlock>("FrequencyText").Text = (saved.FrequencyHz/1e6).ToString("F6",CultureInfo.InvariantCulture);
+        Control<TextBlock>("ModeText").Text = $"{saved.Mode.ToString().ToUpperInvariant()} · {saved.LowCutHz}–{saved.HighCutHz} Hz";
+    }
+    internal async Task SavePreferences()
+    {
+        if (preferencesStore is null) return;
+        var receive = preferences.Receiver;
+        try
+        {
+            var value = ReadSettings(); value.Validate();
+            receive = ReceiverPreferences.From(Control<ComboBox>("ProtocolInput").SelectedIndex == 0 ? 2 : 1,value);
+        }
+        catch (ArgumentException) { /* An invalid draft must not destroy the last valid controls. */ }
+        preferences = new(1,receive,new(normalWidth,normalHeight,wasMaximized));
+        try { await preferencesStore.SaveAsync(preferences); preferencesWarning = null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        { preferencesWarning = ex.Message; Controller.Diagnostics.Event("settings-save-unavailable",ex); }
+    }
+    private async void OnExport(object? sender,RoutedEventArgs e)
+    {
+        if (closing) return;
+        try
+        {
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export KymoSDR session diagnostics",SuggestedFileName = $"KymoSDR-session-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json",
+                DefaultExtension = "json",ShowOverwritePrompt = true,
+                FileTypeChoices = [new FilePickerFileType("JSON diagnostics") { Patterns = ["*.json"] }]
+            });
+            if (file is null) return;
+            using (file)
+            {
+                string path = file.TryGetLocalPath() ?? throw new IOException("Choose a local file for an atomic diagnostic export.");
+                await ExportDiagnostics(path);
+            }
+            Status("Diagnostics exported locally. No waveform, device names, network addresses or local paths are included; nothing was uploaded.");
+        }
+        catch (Exception ex) { Status($"Diagnostic export failed: {ex.Message}"); }
+    }
+    internal Task ExportDiagnostics(string path)
+    {
+        if (preferencesStore is not null && string.Equals(Path.GetFullPath(path),preferencesStore.PathName,
+            OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            throw new ArgumentException("Choose a diagnostic report file, not the settings file.");
+        Controller.Diagnostics.PublishDisplay(Control<SpectrumView>("SpectrumDisplay").Telemetry);
+        return Controller.Diagnostics.ExportAsync(path);
+    }
     private async void RefreshSnapshot()
     {
         if (closing) return;
+        Controller.Diagnostics.PublishDisplay(Control<SpectrumView>("SpectrumDisplay").Telemetry);
         if (Controller.Error is { } fault && !handlingFault)
         {
             handlingFault = true;
@@ -140,7 +233,7 @@ public partial class MainWindow : Window
         if (closing) return;
         closing = true; timer.Stop(); Enabled(); Status("Stopping output and joining receiver…");
         await Task.Yield(); // leave the original Closing event before issuing Close again
-        try { await Controller.DisposeAsync(); }
+        try { await Controller.DisposeAsync(); await SavePreferences(); }
         catch (Exception ex) { Console.Error.WriteLine($"Shutdown: {ex.Message}"); }
         finally { mayClose = true; Close(); }
     }

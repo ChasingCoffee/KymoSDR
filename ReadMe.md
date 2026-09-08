@@ -22,6 +22,9 @@ Nereid of Thetis.
   no-device monitor. Adaptive output-clock recovery and explicit muted recovery
   from audio-device failure have simulator/fake-driver tests. The user has heard
   the simulated tone on Mac; physical-device endurance remains unqualified.
+  [Session diagnostics, desktop endurance and safe settings](docs/DESKTOP_RELIABILITY.md)
+  add local report export and remembered receiver controls/layout. Startup always
+  stays disconnected and muted, without selecting an audio device.
   The portable app does **not** stream from hardware or transmit. VST3 hosting
   remains planned work.
 - ChannelMaster's [offline DSP/pipe lifecycle](docs/CHANNELMASTER_OFFLINE.md)

@@ -47,10 +47,15 @@ macOS `.app`, Windows installer or self-contained release.
    select an output, then reconnect. It starts muted with AF gain at or below
    −40 dB. Lower the system/speaker volume before deliberately unmuting.
 5. Disconnect before changing output. Reconnect always restores mute and a
-   conservative gain; selections/settings are not persisted to disk.
+   conservative gain. Receiver controls and window layout are persisted separately
+   from legacy Thetis; audio-device selection and unmute/AF level are not restored.
 6. After an output failure, the app stops the complete simulated receive session
    and clears the old output selection. Refresh devices, select an output and
    explicitly reconnect; it will remain muted until you unmute it again.
+7. **Export diagnostics…** saves a local bounded session report during receive or
+   after disconnect/failure. No waveform/device names/addresses/paths are included;
+   nothing is uploaded by the app. See [diagnostics, safe settings and desktop
+   endurance](DESKTOP_RELIABILITY.md), including `--no-settings` and opt-in long runs.
 
 Tuning is requested frequency, not hardware acknowledgement. Spectrum levels
 are pre-demodulation, uncalibrated dB, **not dBm**. The plot max-pools native bins

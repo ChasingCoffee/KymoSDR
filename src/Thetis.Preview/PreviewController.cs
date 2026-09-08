@@ -35,6 +35,13 @@ public sealed class PreviewController : IAsyncDisposable
     private ReceiveSession? receiver;
     private ReceivePlayback? playback;
     private Task? observation;
+    private readonly CancellationTokenSource diagnosticsStop = new();
+    private Task? diagnosticSampling;
+    private readonly object disposalGate = new();
+    private Task? disposal;
+    private sealed record ObservedSession(long Id,ReceivePlayback Pump);
+    private ObservedSession? observedSession;
+    public PreviewDiagnostics Diagnostics { get; } = new();
     private Exception? lastError;
     private G2Simulator? p2;
     private P1Simulator? p1;
@@ -45,9 +52,10 @@ public sealed class PreviewController : IAsyncDisposable
     public bool Connected => Volatile.Read(ref playback) is not null;
 
     public async Task ConnectAsync(string directory,int protocol = 2,PlaybackDevice? device = null,
-        CancellationToken token = default)
+        CancellationToken token = default,PreviewSettings? initialSettings = null)
     {
         if (protocol is not (1 or 2)) throw new ArgumentOutOfRangeException(nameof(protocol));
+        initialSettings?.Validate();
         await gate.WaitAsync(token).ConfigureAwait(false);
         try
         {
@@ -61,7 +69,8 @@ public sealed class PreviewController : IAsyncDisposable
                 {
                     startup.Token.ThrowIfCancellationRequested();
                     // Reconnect never restores audible output or a high AF level.
-                    var initial = Settings with { Muted = true, AudioGainDb = Math.Min(Settings.AudioGainDb,-40) };
+                    var requested = initialSettings ?? Settings;
+                    var initial = requested with { Muted = true, AudioGainDb = Math.Min(requested.AudioGainDb,-40) };
                     PlaybackOutput? output = null;
                     try
                     {
@@ -72,12 +81,15 @@ public sealed class PreviewController : IAsyncDisposable
                         playback = new(receiver,output); output = null;
                         Volatile.Write(ref settings,initial);
                         Volatile.Write(ref lastError,null);
+                        Volatile.Write(ref observedSession,new(Diagnostics.Begin(protocol,initial),playback));
+                        RecordDiagnostics();
+                        diagnosticSampling ??= Task.Run(SampleDiagnostics);
                         observation = ObservePlayback(playback);
                     }
                     finally { output?.Dispose(); }
                 },startup.Token).ConfigureAwait(false);
             }
-            catch { await CloseOwned().ConfigureAwait(false); throw; }
+            catch (Exception ex) { Diagnostics.Event("connect-failed",ex); await CloseOwned(ex).ConfigureAwait(false); throw; }
             finally { lock (cancellationGate) connecting = null; }
         }
         finally { gate.Release(); }
@@ -90,7 +102,7 @@ public sealed class PreviewController : IAsyncDisposable
         {
             if (!ReferenceEquals(playback,owned) || owned.Error is not { } failure) return;
             Volatile.Write(ref lastError,failure);
-            try { await CloseOwned().ConfigureAwait(false); }
+            try { await CloseOwned(failure).ConfigureAwait(false); }
             catch (Exception ex) { Volatile.Write(ref lastError,new AggregateException("Playback failed and cleanup reported an error.",failure,ex)); }
         }
         finally { gate.Release(); }
@@ -114,11 +126,12 @@ public sealed class PreviewController : IAsyncDisposable
                     if (value.FrequencyHz != Settings.FrequencyHz) rx.Tune(value.FrequencyHz);
                     pump.Flush(); pump.SetMuted(value.Muted);
                     Volatile.Write(ref settings,value);
+                    Diagnostics.Event("controls-applied",controls:value);
                 }
                 catch { Volatile.Write(ref settings,Settings with { Muted = true }); throw; }
             },token).ConfigureAwait(false);
         }
-        catch { await CloseOwned().ConfigureAwait(false); throw; }
+        catch (Exception ex) { Diagnostics.Event("controls-failed",ex); await CloseOwned(ex).ConfigureAwait(false); throw; }
         finally { gate.Release(); }
     }
     public async Task DisconnectAsync()
@@ -128,7 +141,35 @@ public sealed class PreviewController : IAsyncDisposable
         finally { gate.Release(); }
     }
     private void CancelStartup() { lock (cancellationGate) connecting?.Cancel(); }
-    private async Task CloseOwned()
+    private async Task SampleDiagnostics()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try { while (await timer.WaitForNextTickAsync(diagnosticsStop.Token).ConfigureAwait(false)) RecordDiagnostics(); }
+        catch (OperationCanceledException) when (diagnosticsStop.IsCancellationRequested) { }
+    }
+    private void RecordDiagnostics()
+    {
+        var observed = Volatile.Read(ref observedSession); if (observed is null) return;
+        try
+        {
+            var simulator = p2?.State;
+            Diagnostics.Record(observed.Id,observed.Pump.Snapshot,simulator is null ? null : new(simulator.IqPacingResyncs,simulator.IqPacingLostNanoseconds));
+        }
+        catch (Exception ex) { Diagnostics.Event("diagnostic-sample-unavailable",ex); }
+    }
+    private async Task CloseOwned(Exception? cause = null)
+    {
+        var pump = playback;
+        Exception? closeError = null;
+        try { await CloseOwnedCore().ConfigureAwait(false); }
+        catch (Exception ex) { closeError = ex; throw; }
+        finally
+        {
+            RecordDiagnostics();
+            if (Interlocked.Exchange(ref observedSession,null) is { } observed) Diagnostics.End(observed.Id,cause ?? closeError ?? pump?.Error);
+        }
+    }
+    private async Task CloseOwnedCore()
     {
         var pump = playback;
         try { if (pump is not null) await pump.DisposeAsync().ConfigureAwait(false); }
@@ -144,6 +185,7 @@ public sealed class PreviewController : IAsyncDisposable
                     try { if (p2 is not null) await p2.DisposeAsync().ConfigureAwait(false); }
                     finally
                     {
+                        RecordDiagnostics();
                         p1 = null; p2 = null;
                         Volatile.Write(ref settings,Settings with { Muted = true });
                         // Publish disconnected only after every owned worker
@@ -154,11 +196,25 @@ public sealed class PreviewController : IAsyncDisposable
             }
         }
     }
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
+    { lock (disposalGate) return new(disposal ??= DisposeCore()); }
+    private async Task DisposeCore()
     {
-        CancelStartup(); await gate.WaitAsync().ConfigureAwait(false);
-        try { if (!disposed) { disposed = true; await CloseOwned().ConfigureAwait(false); } }
-        finally { gate.Release(); }
-        if (observation is { } pending) await pending.ConfigureAwait(false);
+        try
+        {
+            CancelStartup(); await gate.WaitAsync().ConfigureAwait(false);
+            try { disposed = true; await CloseOwned().ConfigureAwait(false); }
+            finally { gate.Release(); }
+        }
+        finally
+        {
+            try { if (observation is { } pending) await pending.ConfigureAwait(false); }
+            finally
+            {
+                diagnosticsStop.Cancel();
+                try { if (diagnosticSampling is { } sampling) await sampling.ConfigureAwait(false); }
+                finally { diagnosticsStop.Dispose(); }
+            }
+        }
     }
 }

@@ -85,6 +85,13 @@ public sealed class ReceivePlayback : IAsyncDisposable
         finally
         {
             try { output.SetMuted(true); } catch (Exception ex) { Interlocked.CompareExchange(ref error,ex,null); }
+            // Preserve terminal counters/faults before Dispose closes the native
+            // output. Exporters read this immutable snapshot, never the handles.
+            try
+            {
+                Volatile.Write(ref snapshot,new(receiver.State,output.State,spectrum,receiver.Demodulation,receiver.Gain,rms,hz));
+            }
+            catch (Exception ex) { Interlocked.CompareExchange(ref error,ex,null); }
         }
     }
     private static IOException OutputFailure(PlaybackState state) => new(
