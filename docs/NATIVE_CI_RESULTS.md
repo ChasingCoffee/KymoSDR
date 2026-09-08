@@ -1,5 +1,18 @@
 # Native cross-platform CI results
 
+## P1 simulated receive checkpoint
+
+The [P1 receive path](P1_RECEIVE_INTEGRATION.md) shares the P2 native/managed
+owner. Local macOS arm64 validation on 2026-09-07 passes all 156 managed tests
+(115 core / 41 engine, including independent pinned `hpsdrsim` interoperability)
+and ten native CTests, both normally and with ASan/UBSan. Local sanitizer leak
+detection is disabled on macOS; Linux CI retains its existing leak checks.
+Fourteen P1 USB/LSB/filter/retuning audio checks and four signed RF spectrum
+checks pass. The independent reference yields 796.972 Hz LSB audio at
+0.000177726874 RMS, both expected spectral lines, RX tune receipt, STOP and
+native-port rebind. Hardware, higher-rate/multi-RX P1 and TX remain unqualified.
+Hosted Windows/macOS/Linux results will be recorded after this checkpoint runs.
+
 ## USB/LSB receive mode and filter controls
 
 Validated source: `06416f06ee276687f1cb99ab37a38165a6c615e4`, recorded

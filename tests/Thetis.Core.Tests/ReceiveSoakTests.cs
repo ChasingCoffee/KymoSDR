@@ -67,7 +67,7 @@ public sealed class ReceiveSoakTests
     [TestMethod]
     public void FaultAllowanceDoesNotMaskUnrelatedErrors()
     {
-        P2ReceiveState clean = new(30000, 20000, 2, 192000, 1, 1000, 238000, 0, 0, 0, 0, 100, 1, 0, 10, 0, 0, 0, 59000, 0);
+        ReceiveState clean = new(30000, 20000, 2, 192000, 1, 1000, 238000, 0, 0, 0, 0, 100, 1, 0, 10, 0, 0, 0, 59000, 0);
         ReceiveSoak.ValidateState(clean, false, false);
         ReceiveSoak.ValidateState(clean with { MissingPackets = 100 }, true, false);
         ReceiveSoak.ValidateState(clean with { AudioDropped = 32000, AudioQueued = 16384 }, false, true);

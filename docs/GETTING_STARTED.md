@@ -101,6 +101,11 @@ on stderr and the final or partial JSON report is on stdout. Hardware/TX stay of
 
 ## P1 simulator (optional; macOS/Linux host)
 
+For the new **streaming** tests, use the owned-loopback campaign and confined
+reference build in [P1 simulated receive](P1_RECEIVE_INTEGRATION.md). The legacy
+commands below are for optional standalone discovery and listen on all interfaces;
+they are not used by the new streaming CI.
+
 Build a pinned external simulator without building piHPSDR's desktop app:
 
 ```sh

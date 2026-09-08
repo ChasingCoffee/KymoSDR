@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * Loopback-only, receive-only P2 integration. Not the full legacy network loop.
+ * Shared loopback-only P1/P2 receive owner. P2-prefixed pull/control exports
+ * are retained for ABI compatibility and operate on the single active owner.
  * One bounded packet/control worker owns the socket and never feeds mic/TX.
  */
 #include "rnet.h"
@@ -9,6 +10,7 @@
 #include "cm_receive_core.h"
 #include "cm_spectrum.h"
 #include "p2_rx_packet.h"
+#include "p1_rx_packet.h"
 
 #define AUDIO_CAPACITY 16384
 static volatile LONG command_busy;
@@ -16,7 +18,7 @@ static CRITICAL_SECTION state_lock;
 static int lock_owned, core_owned, rnet_owned, socket_owned, worker_started, opened;
 static HANDLE stop_event;
 static cm_thread worker;
-static int base_port, selected_ddc, sample_rate;
+static int base_port, selected_ddc, sample_rate, protocol_one;
 static uint32_t frequency_hz, high_sequence;
 static int64_t state[24];
 static double audio[2 * AUDIO_CAPACITY];
@@ -109,8 +111,17 @@ static int send_high(int run)
     EnterCriticalSection(&state_lock);
     uint32_t frequency = frequency_hz; int64_t generation = spectrum_generation;
     LeaveCriticalSection(&state_lock);
-    p2_rx_high(packet, selected_ddc, frequency, run, high_sequence++);
-    int result = send_control(3, packet, 1444);
+    int result;
+    if (protocol_one)
+    {
+        if (run) { p1_rx_control(packet, frequency, high_sequence++); result = send_control(0, packet, 1032); }
+        else { p1_rx_run(packet, 0); result = send_control(0, packet, 64); }
+    }
+    else
+    {
+        p2_rx_high(packet, selected_ddc, frequency, run, high_sequence++);
+        result = send_control(3, packet, 1444);
+    }
     EnterCriticalSection(&state_lock);
     // There is no sample-accurate P2 tuning acknowledgement. Wait after the
     // matching command was sent; metadata remains REQUESTED center frequency.
@@ -128,7 +139,14 @@ static void receive_main(void *unused)
     while (WaitForSingleObject(stop_event, 0) == WAIT_TIMEOUT)
     {
         uint64_t now = now_ms();
-        if (now >= setup)
+        if (protocol_one && !have_sequence && now >= setup)
+        {
+            unsigned char config[1032]; p1_rx_setup(config, high_sequence++);
+            unsigned char run[64]; p1_rx_run(run, 1);
+            if (send_control(0, config, 1032) || send_high(1) || send_control(0, run, 64)) break;
+            setup = now + 250; // retry START only until first IQ
+        }
+        if (!protocol_one && now >= setup)
         {
             unsigned char general[60], rx[1444];
             p2_rx_general(general, base_port); p2_rx_receivers(rx, selected_ddc, sample_rate);
@@ -144,15 +162,16 @@ static void receive_main(void *unused)
         else if (length == -4) count(12, 1);
         else if (length < 0) { count(15, 1); break; }
         else if (source != MetisAddr) count(12, 1);
-        else if (port == base_port + 1)
+        else if (!protocol_one && port == base_port + 1)
         { count(length == 60 ? 14 : 11, 1); }
-        else if (port == base_port + 2)
+        else if (!protocol_one && port == base_port + 2)
         { count(length == 132 ? 13 : 11, 1); } // mic deliberately discarded, never Inbound(TX)
-        else if (port != base_port + 11 + selected_ddc) count(12, 1);
+        else if (port != base_port + (protocol_one ? 0 : 11 + selected_ddc)) count(12, 1);
         else
         {
             uint32_t sequence;
-            int samples = p2_rx_decode(prn->ReadBufp, length, prn->RxReadBufp, 476, &sequence);
+            int samples = protocol_one ? p1_rx_decode(prn->ReadBufp, length, prn->RxReadBufp, 476, &sequence)
+                : p2_rx_decode(prn->ReadBufp, length, prn->RxReadBufp, 476, &sequence);
             if (samples < 0) count(11, 1);
             else
             {
@@ -160,8 +179,11 @@ static void receive_main(void *unused)
                 if (have_sequence && distance >= 0x80000000u) count(10, 1);
                 else
                 {
-                    count(9, distance); last_sequence = sequence; have_sequence = 1;
-                    last_iq = now_ms(); count(7, 1); count(8, samples);
+                    last_sequence = sequence; have_sequence = 1; last_iq = now_ms();
+                    EnterCriticalSection(&state_lock);
+                    state[9] += distance; ++state[7]; state[8] += samples;
+                    if (protocol_one) { ++state[13]; ++state[14]; } // embedded mic/status discarded
+                    LeaveCriticalSection(&state_lock);
                     xrouter(NULL, 0, selected_ddc, samples, prn->RxReadBufp);
                 }
             }
@@ -216,9 +238,14 @@ CM_API int ThetisP2ReceiveOpen(int abi, const char *remote, int base, int ddc, i
 { return ThetisP2ReceiveOpenWithControls(abi, remote, base, ddc, rate, frequency, 1, 300, 3000, checkpoint, context); }
 CM_API int ThetisP2ReceiveOpenWithControls(int abi, const char *remote, int base, int ddc, int rate,
     int frequency, int mode, int low, int high, cm_checkpoint checkpoint, void *context)
+{ return ThetisReceiveOpenWithControls(abi, 2, remote, base, ddc, rate, frequency, mode, low, high, checkpoint, context); }
+CM_API int ThetisReceiveProtocolAbi(void) { return 1; }
+CM_API int ThetisReceiveOpenWithControls(int abi, int protocol, const char *remote, int base, int ddc, int rate,
+    int frequency, int mode, int low, int high, cm_checkpoint checkpoint, void *context)
 {
     uint32_t address;
-    if (abi != 1 || cm_socket_address(remote, &address, 1) || base < 1024 || base > 65515 ||
+    if (abi != 1 || (protocol != 1 && protocol != 2) || (protocol == 1 && (ddc != 0 || rate != 48000)) ||
+        cm_socket_address(remote, &address, 1) || base < 1024 || base > (protocol == 1 ? 65535 : 65515) ||
         ddc < 0 || ddc > 9 || (rate != 48000 && rate != 96000 && rate != 192000 && rate != 384000) ||
         frequency < 0 || frequency > 61440000 || !valid_controls(mode, low, high)) return -1;
     if (!enter()) return -2;
@@ -232,6 +259,7 @@ CM_API int ThetisP2ReceiveOpenWithControls(int abi, const char *remote, int base
     controls_generation = 1;
     InitializeCriticalSectionAndSpinCount(&state_lock, 2500); lock_owned = 1;
     base_port = base; selected_ddc = ddc; sample_rate = rate; frequency_hz = (uint32_t)frequency; high_sequence = 0;
+    protocol_one = protocol == 1;
     for (int stage = 1; stage <= 5; ++stage)
     {
         if (stage == 1)
@@ -256,7 +284,8 @@ CM_API int ThetisP2ReceiveOpenWithControls(int abi, const char *remote, int base
         }
         if (stage == 3)
         {
-            if (nativeInitMetis((char *)remote, base, "127.0.0.1", 0, ETH, HPSDRModel_ANAN_G2, 1)) goto failed;
+            if (nativeInitMetis((char *)remote, base, "127.0.0.1", 0, protocol_one ? USB : ETH,
+                protocol_one ? HPSDRModel_HPSDR : HPSDRModel_ANAN_G2, protocol_one ? 0 : 1)) goto failed;
             socket_owned = 1;
         }
         if (stage == 4 && (FAIL_AT(4) || !(stop_event = CreateEvent(NULL, TRUE, FALSE, NULL)))) goto failed;

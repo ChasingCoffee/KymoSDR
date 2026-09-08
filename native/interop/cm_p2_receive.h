@@ -2,6 +2,11 @@
 #ifndef THETIS_CM_P2_RECEIVE_H
 #define THETIS_CM_P2_RECEIVE_H
 #include "cm_session.h"
+/* Shared P1/P2 owner; old P2-prefixed pull/control ABI operates on either.
+ * Protocol 1 is restricted to one receiver (DDC0), 48000 Hz, loopback UDP. */
+CM_API int ThetisReceiveProtocolAbi(void);
+CM_API int ThetisReceiveOpenWithControls(int abi, int protocol, const char *remote, int base, int ddc, int rate,
+    int frequency, int mode, int low, int high, cm_checkpoint checkpoint, void *context);
 /* Single-DDC loopback RX -> CM RX0 -> WDSP SSB audio tap. No TX/audio device.
  * Checkpoints: 1 CM core, 2 RNet, 3 socket, 4 stop event, 5 receive worker.
  * Close joins the producer before CM consumers. Calls reject reentrancy. */

@@ -28,6 +28,9 @@ Nereid of Thetis.
   resource measurements and isolated fault/reconnect checks without hardware.
   [USB/LSB receive controls](docs/RECEIVE_CONTROLS.md) add adjustable filters and
   signal-checked switching/reconnects through the simulator-backed engine.
+  [P1 simulated receive](docs/P1_RECEIVE_INTEGRATION.md) now uses the same engine
+  for one 48 kHz receiver, with deterministic signal/fault tests and independent
+  pinned `hpsdrsim` interoperability on macOS/Linux.
   This is not yet a usable hardware receiver.
 - The inherited Windows application remains in the tree as the source/reference
   implementation. Its features are not a claim of portable feature parity.

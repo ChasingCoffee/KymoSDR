@@ -7,6 +7,10 @@ sim_dir="$thetis_root/artifacts/external/pihpsdr"
 sim_remote="https://github.com/g0orx/pihpsdr.git"
 sim_revision="f6c17bd4347a2d80cdf6080c3c19dbd915648cdc"
 sim_compiler="${CC:-cc}"
+sim_loopback=0
+if [[ "$#" == 1 && "$1" == --loopback ]]; then sim_loopback=1
+elif [[ "$#" != 0 ]]; then printf 'Usage: build-hpsdrsim.sh [--loopback]\n' >&2; exit 2
+fi
 
 case "$(uname -s)" in
     Darwin|Linux) ;;
@@ -30,5 +34,13 @@ fi
 git -C "$sim_dir" checkout --detach "$sim_revision"
 
 # Compile only the simulator, not the full piHPSDR desktop application.
-"$sim_compiler" -O2 -pthread "$sim_dir/hpsdrsim.c" "$sim_dir/newhpsdrsim.c" -lm -o "$sim_dir/hpsdrsim"
-printf 'Built simulator at %s/hpsdrsim (revision %s). Not started.\n' "$sim_dir" "$sim_revision"
+if [[ "$sim_loopback" == 1 ]]; then
+    # -P1 is forced by our adapter. New-protocol code is linked for upstream's
+    # references but cannot be started; the adapter accepts no command-line flags.
+    "$sim_compiler" -O2 -pthread -I "$sim_dir" "$thetis_root/native/tests/hpsdrsim_loopback.c" \
+        "$sim_dir/newhpsdrsim.c" -lm -o "$sim_dir/hpsdrsim-loopback"
+    printf 'Built loopback-only fixture at %s/hpsdrsim-loopback (revision %s). Not started.\n' "$sim_dir" "$sim_revision"
+else
+    "$sim_compiler" -O2 -pthread "$sim_dir/hpsdrsim.c" "$sim_dir/newhpsdrsim.c" -lm -o "$sim_dir/hpsdrsim"
+    printf 'Built simulator at %s/hpsdrsim (revision %s). Not started.\n' "$sim_dir" "$sim_revision"
+fi

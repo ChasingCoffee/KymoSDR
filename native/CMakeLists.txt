@@ -44,7 +44,7 @@ set_target_properties(wdsp PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
 
 # M3 offline ChannelMaster core shares the existing WDSP module and its global
-# channel/cache ownership. A narrow loopback-only P2 RX decoder/control worker
+# channel/cache ownership. A narrow loopback-only P1/P2 RX decoder/control worker
 # is linked; the full legacy network engine, audio devices and writers are not.
 set(CM_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/Source/ChannelMaster")
 set(cm_units aamix amix analyzers cmaster cmbuffs cmsetup ilv ivac pipe ring
@@ -53,12 +53,16 @@ foreach(unit IN LISTS cm_units)
   target_sources(wdsp PRIVATE "${CM_SOURCE_DIR}/${unit}.c")
   set_source_files_properties("${CM_SOURCE_DIR}/${unit}.c" PROPERTIES COMPILE_DEFINITIONS THETIS_CM_HEADLESS)
 endforeach()
-target_sources(wdsp PRIVATE platform/cm_thread.c platform/cm_no_audio.c interop/cm_session.c interop/cm_transport.c interop/cm_p2_receive.c interop/cm_spectrum.c interop/p2_rx_packet.c)
+target_sources(wdsp PRIVATE platform/cm_thread.c platform/cm_no_audio.c interop/cm_session.c interop/cm_transport.c interop/cm_p2_receive.c interop/cm_spectrum.c interop/p2_rx_packet.c interop/p1_rx_packet.c)
 set_source_files_properties(platform/cm_no_audio.c interop/cm_session.c interop/cm_transport.c interop/cm_p2_receive.c PROPERTIES COMPILE_DEFINITIONS THETIS_CM_HEADLESS)
 target_include_directories(wdsp PRIVATE "${CM_SOURCE_DIR}" interop
   "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/lib/portaudio-19.7.0/include")
 
 if(BUILD_TESTING)
+  add_executable(p1_packet_tests tests/p1_packet_tests.c interop/p1_rx_packet.c)
+  target_include_directories(p1_packet_tests PRIVATE interop)
+  add_test(NAME p1_receive_packet_codec COMMAND p1_packet_tests)
+  set_tests_properties(p1_receive_packet_codec PROPERTIES TIMEOUT 20)
   add_executable(p2_packet_tests tests/p2_packet_tests.c interop/p2_rx_packet.c)
   target_include_directories(p2_packet_tests PRIVATE interop)
   add_test(NAME p2_receive_packet_codec COMMAND p2_packet_tests)
@@ -78,6 +82,18 @@ if(BUILD_TESTING)
   set_target_properties(cm_receive_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
   add_test(NAME channelmaster_p2_receive COMMAND cm_receive_tests)
   set_tests_properties(channelmaster_p2_receive PROPERTIES TIMEOUT 180)
+  add_executable(cm_p1_receive_tests tests/cm_p1_receive_tests.c tests/loopback_peer.c "${CM_SOURCE_DIR}/radio_socket.c")
+  target_include_directories(cm_p1_receive_tests PRIVATE interop "${CM_SOURCE_DIR}")
+  target_compile_definitions(cm_p1_receive_tests PRIVATE THETIS_TESTING)
+  target_link_libraries(cm_p1_receive_tests PRIVATE wdsp)
+  if(WIN32)
+    target_link_libraries(cm_p1_receive_tests PRIVATE ws2_32)
+  else()
+    target_link_libraries(cm_p1_receive_tests PRIVATE m)
+  endif()
+  set_target_properties(cm_p1_receive_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
+  add_test(NAME channelmaster_p1_receive COMMAND cm_p1_receive_tests)
+  set_tests_properties(channelmaster_p1_receive PROPERTIES TIMEOUT 180)
   set_property(SOURCE interop/cm_transport.c APPEND PROPERTY COMPILE_DEFINITIONS THETIS_TESTING)
   set_property(SOURCE interop/cm_p2_receive.c APPEND PROPERTY COMPILE_DEFINITIONS THETIS_TESTING)
   add_executable(rnet_tests tests/rnet_tests.c "${CM_SOURCE_DIR}/rnet.c"

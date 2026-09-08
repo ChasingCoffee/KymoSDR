@@ -37,7 +37,7 @@ public sealed record ReceiveSpectrumMeasurement(long Sequence, long TuningGenera
 public sealed record ReceiveSelfTestResult(int SchemaVersion, bool Passed, bool LoopbackOnly, bool TransmitAllowed,
     ReceiveMeasurement BeforeTuning, ReceiveMeasurement AfterTuning,
     ReceiveSpectrumMeasurement SpectrumBeforeTuning, ReceiveSpectrumMeasurement SpectrumAfterTuning,
-    P2ReceiveState Native, SimulatorState Simulator,
+    ReceiveState Native, SimulatorState Simulator,
     long ElapsedMilliseconds);
 
 public static class ReceiveSelfTest
@@ -70,7 +70,7 @@ public static class ReceiveSelfTest
             throw new InvalidOperationException("Receive safety, routing or bounded-buffer check failed.");
         return new(2, true, true, false, first, second, firstSpectrum, secondSpectrum, native, peer, clock.ElapsedMilliseconds);
     }
-    public static ReceiveSpectrumMeasurement MeasureSpectrum(P2ReceiveSession session, int centerHz, double rfHz,
+    public static ReceiveSpectrumMeasurement MeasureSpectrum(ReceiveSession session, int centerHz, double rfHz,
         long generation, CancellationToken token = default)
     {
         var deadline = Stopwatch.StartNew();
@@ -109,7 +109,7 @@ public static class ReceiveSelfTest
             previous = frame;
         }
     }
-    public static ReceiveMeasurement Measure(P2ReceiveSession session, double expectedHz, CancellationToken token = default)
+    public static ReceiveMeasurement Measure(ReceiveSession session, double expectedHz, CancellationToken token = default)
     {
         // Drain during settling so the bounded pull queue cannot silently mask a stalled reader.
         var deadline = Stopwatch.StartNew();

@@ -198,8 +198,16 @@ now passes three-OS CI at `06416f06`: 145 managed tests per platform, twelve
 controls signal checks, native/sanitizer coverage and unchanged reconnect-memory
 guards. Startup/live configuration, settings generations, sideband/filter
 rejection, cancellation and reconnects are covered. Gain/AGC controls, other
-modes, P1 streaming and the hardware gate below remain pending; this does not
+modes and the hardware gate below remain pending; this does not
 advance the project to a qualified desktop or live-radio milestone.
+
+[P1 simulated receive](P1_RECEIVE_INTEGRATION.md) now shares that native/managed
+owner: one 48 kHz receiver, USB/LSB/filter and RF-retuning signal checks, packet
+faults, cancellation and reconnects. A confined pinned `hpsdrsim` process adds
+independent macOS/Linux packet/command interoperability; its fixed baseband
+tones cannot validate RF retuning. Higher P1 rates, multi-RX, Windows-reference
+comparison and real P1 hardware remain separate gates. No hardware or TX tests
+are authorized by this simulator checkpoint.
 
 - Add bounded `receive` operation to the CLI: select discovered radio/interface, start RX1 at one confirmed supported rate, tune, set mode/filter, read spectrum and stop.
 - Preserve G2-specific capability, routing and port handling. Do not treat all P2 boards as interchangeable. Compare control sequences and observable receive behavior with the Windows reference.

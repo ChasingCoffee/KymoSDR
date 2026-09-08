@@ -7,6 +7,7 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'tools/Thetis.MemoryProbe/**'
+      - 'scripts/build-hpsdrsim.sh'
       - 'Project Files/Source/wdsp/**'
       - 'Project Files/Source/ChannelMaster/**'
       - 'Project Files/lib/portaudio-19.7.0/include/**'
@@ -20,6 +21,7 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'tools/Thetis.MemoryProbe/**'
+      - 'scripts/build-hpsdrsim.sh'
       - 'Project Files/Source/wdsp/**'
       - 'Project Files/Source/ChannelMaster/**'
       - 'Project Files/lib/portaudio-19.7.0/include/**'
@@ -81,6 +83,13 @@ jobs:
         run: dotnet restore Thetis.CrossPlatform.slnx --locked-mode
       - name: Build managed harness
         run: dotnet build Thetis.CrossPlatform.slnx -c Release --no-restore
+      - name: Build pinned independent P1 reference (confined loopback adapter)
+        if: runner.os != 'Windows'
+        run: bash scripts/build-hpsdrsim.sh --loopback
+      - name: Independent P1 reference interoperability (owned process, no hardware)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: THETIS_P1_REFERENCE_SIM="$GITHUB_WORKSPACE/artifacts/external/pihpsdr/hpsdrsim-loopback" dotnet test tests/Thetis.Engine.Tests -c Release --no-build --no-restore --filter FullyQualifiedName~P1ReferenceTests --logger "console;verbosity=normal" --blame-hang-timeout 2m
       - name: Linux reconnect allocator regression (loopback only)
         if: runner.os == 'Linux'
         # Fresh processes: allocator history from one mode must not contaminate another.
@@ -97,6 +106,8 @@ jobs:
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Receive mode and filter switching (loopback only)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-controls-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: P1 receive audio, spectrum, controls and reconnect (loopback only)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- p1-receive-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Short receive endurance and fault campaign (loopback only)
         if: github.event_name != 'workflow_dispatch' || inputs.receive_soak != '30-minutes'
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 10 --reconnects 2

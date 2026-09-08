@@ -34,7 +34,7 @@ internal static class ReceiveControlsCli
 public sealed record ReceiveControlCheck(string Name, ReceiveDemodulationState Controls, double Rms,
     double ToneHz, bool ExpectedPassband, bool Passed);
 public sealed record ReceiveControlsResult(int SchemaVersion, bool Passed, bool LoopbackOnly, bool TransmitAllowed,
-    long ElapsedMilliseconds, IReadOnlyList<ReceiveControlCheck> Checks, P2ReceiveState Native, SimulatorState Simulator);
+    long ElapsedMilliseconds, IReadOnlyList<ReceiveControlCheck> Checks, ReceiveState Native, SimulatorState Simulator);
 
 /// <summary>Fixed signal fixtures, not a configurable hardware receive command.</summary>
 public static class ReceiveControlsSelfTest
@@ -45,7 +45,7 @@ public static class ReceiveControlsSelfTest
         var clock = Stopwatch.StartNew();
         var checks = new List<ReceiveControlCheck>();
         await using var simulator = G2Simulator.Open(new(BasePort: 0), token);
-        P2ReceiveState? final = null;
+        ReceiveState? final = null;
         foreach (var initial in new[] { new ReceiveDemodulation(), new ReceiveDemodulation(ReceiveMode.Lsb, 500, 2500) })
         {
             int center = initial.Mode == ReceiveMode.Usb ? 14_199_000 : 14_201_000;
@@ -93,7 +93,7 @@ public static class ReceiveControlsSelfTest
         return new(1, true, true, false, clock.ElapsedMilliseconds, checks, final!, peer);
     }
 
-    public static ReceiveMeasurement MeasureSettled(P2ReceiveSession session, CancellationToken token = default)
+    public static ReceiveMeasurement MeasureSettled(ReceiveSession session, CancellationToken token = default)
     {
         // Drain one audio second to exclude queued I/O and FIR transition history.
         // Count consumed samples, not a sleep, so slow simulated hosts cannot fake settling.
@@ -119,7 +119,7 @@ public static class ReceiveControlsSelfTest
         return new(Math.Sqrt(energy / frames), crossings * 48000.0 / (frames - 1), frames);
     }
 
-    private static void RequireClean(P2ReceiveState state)
+    private static void RequireClean(ReceiveState state)
     {
         if (state.SocketErrors != 0 || state.DspErrors != 0 || state.InputOverruns != 0 || state.MissingPackets != 0 || state.AudioDropped != 0)
             throw new InvalidOperationException($"Errors during control switching: {state}");

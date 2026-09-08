@@ -23,7 +23,7 @@ public sealed record ReceiveSoakResources(long Samples, long InitialWorkingSetBy
 public sealed record ReceiveSoakPhase(string Name, bool Passed, string? Failure, double ObservedSeconds,
     int Retunes, long AudioFramesRead, long SpectrumFramesRead, long SpectrumFramesProduced, long SpectrumFramesCoalesced,
     double SpectrumFramesPerSecond, double MaxSpectrumReadGapMilliseconds, int AudioSignalChecks,
-    int SpectrumSignalChecks, P2ReceiveState? Native, SimulatorState? Simulator,
+    int SpectrumSignalChecks, ReceiveState? Native, SimulatorState? Simulator,
     ReceiveSoakResources? Resources, bool NativeDisposed, bool StopObserved, bool PortRebound,
     bool ExpectedPeerFailureObserved);
 public sealed record ReceiveSoakResult(int SchemaVersion, bool Passed, bool Cancelled, string? Failure,
@@ -58,7 +58,7 @@ public static class ReceiveSoak
         {
             token.ThrowIfCancellationRequested();
             G2Simulator? simulator = null; P2ReceiveSession? session = null;
-            P2ReceiveState? native = null; SimulatorState? peer = null;
+            ReceiveState? native = null; SimulatorState? peer = null;
             ReceiveSoakObservation? observation = null;
             string? phaseFailure = null;
             bool disposed = false, stopped = false, rebound = false, peerGone = false, peerFailure = false;
@@ -232,7 +232,7 @@ public static class ReceiveSoak
         }
     }
 
-    internal static void ValidateState(P2ReceiveState state, bool loss, bool slow)
+    internal static void ValidateState(ReceiveState state, bool loss, bool slow)
     {
         Require(state.DspErrors == 0 && state.SocketErrors == 0 && state.InputOverruns == 0, "Unexpected native socket/DSP/input-overrun error.");
         Require(state.MalformedPackets == 0 && state.ForeignPackets == 0 && state.LatePackets == 0, "Unexpected malformed/foreign/late traffic.");
