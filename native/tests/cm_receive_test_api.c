@@ -4,7 +4,37 @@
  */
 #include "cmcomm.h"
 #include "cm_spectrum.h"
+#include "cm_p2_receive.h"
 #define CHECK(x) do { if (!(x)) return __LINE__; } while (0)
+PORT int ThetisTestCMGainHistory(void)
+{
+    // Only this test thread issues controls. Freeze the producer/consumer and DSP
+    // under their recursive locks so byte-for-byte history checks cannot race it.
+    EnterCriticalSection(&pcm->update[0]);
+    EnterCriticalSection(&ch[0].csDSP);
+    WCPAGC a = rxa[0].agc.p;
+    unsigned char before[sizeof(wcpagc)]; memcpy(before,a,sizeof(before));
+    int ok = a->volts > 0 && a->mode == 4 &&
+        ThetisReceiveSetGain(1,-20,0,4,60) == 0 && memcmp(before,a,sizeof(before)) == 0 &&
+        ThetisReceiveSetGain(1,0,1,4,60) == 0 && memcmp(before,a,sizeof(before)) == 0;
+    LeaveCriticalSection(&ch[0].csDSP);
+    LeaveCriticalSection(&pcm->update[0]);
+    CHECK(ok); return 0;
+}
+PORT int ThetisTestCMGain(int db, int muted, int mode, int top)
+{
+    EnterCriticalSection(&ch[0].csDSP);
+    WCPAGC a = rxa[0].agc.p;
+    int ok = a->run == 1 && a->mode == mode && a->fixed_gain == 1 && a->var_gain == 1 &&
+        fabs(a->max_gain - pow(10.0, top / 20.0)) < 1e-8 &&
+        fabs(rxa[0].panel.p->gain1 - (muted ? 0 : pow(10.0, db / 20.0))) < 1e-12 &&
+        fabs(a->tau_attack - .001) < 1e-12 &&
+        fabs(a->tau_decay - (mode == 2 ? .5 : mode == 4 ? .05 : .25)) < 1e-12 &&
+        fabs(a->hangtime - (mode == 2 ? 1 : 0)) < 1e-12 &&
+        fabs(a->hang_thresh - (mode == 2 ? .25 : 1)) < 1e-12;
+    LeaveCriticalSection(&ch[0].csDSP);
+    CHECK(ok); return 0;
+}
 PORT int ThetisTestCMSpectrum(void)
 {
     double iq[2 * CM_SPECTRUM_FFT_SIZE];

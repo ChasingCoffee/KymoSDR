@@ -2,7 +2,8 @@ namespace Thetis.Simulator;
 
 public sealed record SimulatorOptions(int BasePort = 51024, double ToneFrequencyHz = 14_200_000,
     double Amplitude = 0.25, double NoiseAmplitude = 0, uint Seed = 1,
-    int DropEvery = 0, int LeaseTimeoutMilliseconds = 2000, bool SimulateTransmit = false)
+    int DropEvery = 0, int LeaseTimeoutMilliseconds = 2000, bool SimulateTransmit = false,
+    SignalLevelProfile? SignalLevels = null)
 {
     internal void Validate()
     {

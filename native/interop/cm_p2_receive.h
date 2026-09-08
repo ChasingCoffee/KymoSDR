@@ -5,6 +5,19 @@
 /* Shared P1/P2 owner; old P2-prefixed pull/control ABI operates on either.
  * Protocol 1 is restricted to one receiver (DDC0), 48000 Hz, loopback UDP. */
 CM_API int ThetisReceiveProtocolAbi(void);
+/* Gain ABI 1: post-AGC audio dB -60..0, mute 0/1, AGC off=0/slow=2/medium=3/fast=4,
+ * AGC maximum 0..80 dB. Off is fixed unity. Attack 1 ms, flat slope; slow restores
+ * hang threshold 25%, hang 1000 ms, decay 500 ms. Medium/fast: threshold 100%,
+ * no hang, decay 250/50 ms. This is not RF hardware gain or an output limiter. */
+CM_API int ThetisReceiveGainAbi(void);
+CM_API int ThetisReceiveOpenWithGain(int abi, int protocol, const char *remote, int base, int ddc, int rate,
+    int frequency, int mode, int low, int high, int gain_db, int muted, int agc, int max_gain,
+    cm_checkpoint checkpoint, void *context);
+CM_API int ThetisReceiveSetGain(int abi, int gain_db, int muted, int agc, int max_gain);
+/* 11 int64: ABI, open, audio dB, mute, AGC, max gain dB, attack ms, decay ms,
+ * hang ms, hang threshold percent, generation. Old open exports default to
+ * unity audio, unmuted, AGC off with maximum gain 60 dB (inactive until enabled). */
+CM_API int ThetisReceiveGetGain(int64_t *values, int capacity);
 CM_API int ThetisReceiveOpenWithControls(int abi, int protocol, const char *remote, int base, int ddc, int rate,
     int frequency, int mode, int low, int high, cm_checkpoint checkpoint, void *context);
 /* Single-DDC loopback RX -> CM RX0 -> WDSP SSB audio tap. No TX/audio device.
@@ -18,7 +31,7 @@ CM_API int ThetisP2ReceiveTune(int frequency);
  * 0 <= low < high <= 12000 Hz, width >=100 Hz. USB -> [low,high];
  * LSB -> [-high,-low] in the RF/spectrum convention. The bridge translates
  * to WDSP's opposite FIR frequency convention internally.
- * No AGC/gain/TX/radio-routing controls are exposed.
+ * Gain/AGC use their separate ABI above. No TX/radio-routing controls are exposed.
  * The old open entry point retains USB 300..3000 defaults. */
 CM_API int ThetisP2ReceiveControlsAbi(void);
 CM_API int ThetisP2ReceiveOpenWithControls(int abi, const char *remote, int base, int ddc, int rate,

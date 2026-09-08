@@ -5,6 +5,9 @@ It adds one P1 UDP receiver at 48 kHz to the same ChannelMaster/WDSP lifecycle,
 audio tap, spectrum analyzer and USB/LSB controls used by P2. No physical radio,
 audio output device or transmit path is exercised.
 
+Follow-up: [shared AF gain, mute and AGC](RECEIVE_GAIN.md) add startup/live
+settings and sample-clock amplitude profiles to the same P1/P2 engine.
+
 ## Run the deterministic signal campaign
 
 Build the native library and managed solution as described in

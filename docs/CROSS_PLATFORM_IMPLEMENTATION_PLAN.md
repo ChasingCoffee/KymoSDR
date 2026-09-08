@@ -14,6 +14,7 @@ Planning inputs:
 - [VST divergence audit](VST_DIVERGENCE_AUDIT.md): behavior to preserve and catalog/lifecycle defects to correct.
 - [Upstream/FreeDV review](UPSTREAM_BASELINE_REVIEW.md): assessment of the 18 newer commits and dependency/TX-routing findings.
 - [WDSP baseline review](WDSP_BASELINE_REVIEW.md): authoritative TAPR 2.00 reference, local extensions and the retained older PureSignal implementation.
+- [Zeus engine review](ZEUS_ENGINE_REVIEW.md): proposed capability, audio, TX, measurement and plugin-IPC refinements; a pinned RADE V1 recovery candidate; optional later features. Recommendations remain planning inputs, not implemented features or passed gates.
 
 The audits are static evidence, not proof of successful builds or operation. Milestone acceptance below requires new test results.
 
@@ -197,7 +198,7 @@ The next simulator-backed increment, [USB/LSB mode and receive filters](RECEIVE_
 now passes three-OS CI at `06416f06`: 145 managed tests per platform, twelve
 controls signal checks, native/sanitizer coverage and unchanged reconnect-memory
 guards. Startup/live configuration, settings generations, sideband/filter
-rejection, cancellation and reconnects are covered. Gain/AGC controls, other
+rejection, cancellation and reconnects are covered. Other
 modes and the hardware gate below remain pending; this does not
 advance the project to a qualified desktop or live-radio milestone.
 
@@ -212,6 +213,12 @@ are authorized by this simulator checkpoint.
 This P1 checkpoint passes three-OS native/managed/CLI CI at `986467f5`, with
 independent pinned-reference tests on macOS/Linux and Linux sanitizer/leak tests;
 see [counts, measurements and exclusions](NATIVE_CI_RESULTS.md#p1-simulated-receive-checkpoint).
+
+Shared [AF gain, mute and WDSP AGC controls](RECEIVE_GAIN.md) now add startup/live
+settings for both protocols. Owned simulator amplitude profiles exercise gain
+ceilings, preset response/recovery, silence and reconnect defaults. These are
+audio-path controls, not hardware RF gain or calibrated levels; the hardware
+gate below and M5 audio/UI work remain separate.
 
 - Add bounded `receive` operation to the CLI: select discovered radio/interface, start RX1 at one confirmed supported rate, tune, set mode/filter, read spectrum and stop.
 - Preserve G2-specific capability, routing and port handling. Do not treat all P2 boards as interchangeable. Compare control sequences and observable receive behavior with the Windows reference.

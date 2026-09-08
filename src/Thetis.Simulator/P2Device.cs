@@ -95,6 +95,7 @@ internal sealed class P2Device
                 bool nextEnabled = (enabled & (1 << i)) != 0;
                 int rate = nextEnabled ? BinaryPrimitives.ReadUInt16BigEndian(packet[(18 + 6 * i)..]) * 1000 : r.Rate;
                 if (nextEnabled != r.Enabled || rate != r.Rate) r.Due = now;
+                if (rate != r.Rate) r.SignalSample = 0;
                 r.Enabled = nextEnabled; r.Rate = rate;
             }
             receiverConfigured = true; lastControl = now; ++controls; return;
@@ -218,9 +219,11 @@ internal sealed class P2Device
         BinaryPrimitives.WriteUInt16BigEndian(r.Packet.AsSpan(14), SamplesPerPacket);
         double offset = options.ToneFrequencyHz - r.Frequency;
         double step = 2 * Math.PI * Math.IEEERemainder(offset, r.Rate) / r.Rate;
-        double amplitude = Math.Abs(offset) < r.Rate / 2.0 ? options.Amplitude : 0;
+        bool inBand = Math.Abs(offset) < r.Rate / 2.0;
         for (int i = 0; i < SamplesPerPacket; ++i)
         {
+            double amplitude = inBand ? options.SignalLevels?.AtSample(r.SignalSample, r.Rate, options.Amplitude) ?? options.Amplitude : 0;
+            ++r.SignalSample;
             Write24(r.Packet.AsSpan(16 + 6 * i), amplitude * Math.Cos(r.Phase) + Noise(r));
             Write24(r.Packet.AsSpan(19 + 6 * i), amplitude * Math.Sin(r.Phase) + Noise(r));
             r.Phase = Math.IEEERemainder(r.Phase + step, 2 * Math.PI);
@@ -245,10 +248,12 @@ internal sealed class P2Device
         internal double Frequency, Phase, Due;
         internal uint Sequence, Noise;
         internal ulong Ordinal;
+        internal long SignalSample;
         internal readonly byte[] Packet = new byte[IqPacketSize];
         internal void Restart(double now, uint seed, int ddc)
         {
             Phase = 0; Sequence = 0; Ordinal = 0; Due = now;
+            SignalSample = 0;
             Noise = seed ^ unchecked(0x9e3779b9u * (uint)(ddc + 1));
             if (Noise == 0) Noise = 1;
         }

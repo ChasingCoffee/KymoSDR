@@ -9,6 +9,7 @@ Console.CancelKeyPress += (_, args) =>
 
 return args.FirstOrDefault() switch
 {
+    "receive-gain-selftest" => await ReceiveGainCli.RunAsync(args, Console.Out, Console.Error, cancellation.Token),
     "p1-receive-selftest" => await P1ReceiveCli.RunAsync(args, Console.Out, Console.Error, cancellation.Token),
     "dsp-selftest" => DspCli.Run(args, Console.Out, Console.Error, cancellation.Token),
     "session-selftest" => SessionCli.Run(args, Console.Out, Console.Error, cancellation.Token),

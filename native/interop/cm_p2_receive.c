@@ -30,6 +30,8 @@ static int spectrum_count, spectrum_skip, spectrum_ready;
 static uint64_t spectrum_resume_ms;
 static int rx_mode, filter_low, filter_high;
 static int64_t controls_generation;
+static int audio_gain_db, audio_muted, agc_mode, agc_max_gain;
+static int64_t gain_generation;
 #ifdef THETIS_TESTING
 static int fault;
 #define FAIL_AT(s) (fault == (s))
@@ -59,6 +61,7 @@ static void observe_audio(int frames, const double *samples, int error)
     {
         double left = samples[2 * i], right = samples[2 * i + 1];
         if (!isfinite(left) || !isfinite(right)) { ++state[21]; left = right = 0; }
+        if (audio_muted) left = right = 0; // gates even in-flight resampler/DSP tail while AGC keeps running
         if (audio_count == AUDIO_CAPACITY)
         { audio_read = (audio_read + 1) % AUDIO_CAPACITY; --audio_count; ++state[19]; }
         audio[2 * audio_write] = left; audio[2 * audio_write + 1] = right;
@@ -214,6 +217,59 @@ static void close_owned(void)
 }
 static int valid_controls(int mode, int low, int high)
 { return (mode == 0 || mode == 1) && low >= 0 && high <= 12000 && high > low && high - low >= 100; }
+static int valid_gain(int db, int muted, int agc, int top)
+{ return db >= -60 && db <= 0 && (muted == 0 || muted == 1) && (agc == 0 || agc == 2 || agc == 3 || agc == 4) && top >= 0 && top <= 80; }
+static void apply_gain(int db, int muted, int agc, int top, int initial)
+{
+    EnterCriticalSection(&pcm->update[0]);
+    EnterCriticalSection(&ch[0].csDSP);
+    // Audio-only changes must not reposition the AGC lookahead or alter its envelope.
+    if (initial || agc != agc_mode || top != agc_max_gain)
+    {
+        SetRXAAGCMode(0, agc); SetRXAAGCFixed(0, 0); SetRXAAGCTop(0, top);
+        SetRXAAGCAttack(0, 1); SetRXAAGCSlope(0, 0);
+        SetRXAAGCDecay(0, agc == 2 ? 500 : agc == 4 ? 50 : 250);
+        SetRXAAGCHang(0, agc == 2 ? 1000 : 0);
+        // WDSP fast/medium set this to 1, but slow does not restore it itself.
+        SetRXAAGCHangThreshold(0, agc == 2 ? 25 : 100);
+    }
+    SetRXAPanelGain1(0, muted ? 0 : pow(10.0, db / 20.0));
+    LeaveCriticalSection(&ch[0].csDSP);
+    EnterCriticalSection(&state_lock);
+    audio_gain_db = db; audio_muted = muted; agc_mode = agc; agc_max_gain = top;
+    audio_read = audio_write = audio_count = 0;
+    LeaveCriticalSection(&state_lock);
+    LeaveCriticalSection(&pcm->update[0]);
+}
+CM_API int ThetisReceiveGainAbi(void) { return 1; }
+CM_API int ThetisReceiveSetGain(int abi, int db, int muted, int agc, int top)
+{
+    if (abi != 1 || !valid_gain(db, muted, agc, top)) return -1;
+    if (!enter()) return -2;
+    if (!opened || WaitForSingleObject(stop_event, 0) != WAIT_TIMEOUT) { leave(); return -3; }
+    if (db != audio_gain_db || muted != audio_muted || agc != agc_mode || top != agc_max_gain)
+    { apply_gain(db, muted, agc, top, 0); ++gain_generation; }
+    leave(); return 0;
+}
+CM_API int ThetisReceiveGetGain(int64_t *values, int capacity)
+{
+    if (!values || capacity < 11) return -1;
+    if (!enter()) return -2;
+    int64_t result[11] = {1,0,0,0,0,0,0,0,0,0,0};
+    if (opened)
+    {
+        result[1] = 1; result[2] = audio_gain_db; result[3] = audio_muted;
+        result[4] = agc_mode; result[5] = agc_max_gain;
+        EnterCriticalSection(&ch[0].csDSP);
+        result[6] = (int64_t)llround(rxa[0].agc.p->tau_attack * 1000);
+        result[7] = (int64_t)llround(rxa[0].agc.p->tau_decay * 1000);
+        result[8] = (int64_t)llround(rxa[0].agc.p->hangtime * 1000);
+        result[9] = (int64_t)llround(rxa[0].agc.p->hang_thresh * 100);
+        LeaveCriticalSection(&ch[0].csDSP);
+        result[10] = gain_generation;
+    }
+    memcpy(values, result, sizeof(result)); leave(); return 11;
+}
 static void apply_controls(int mode, int low, int high)
 {
     // Caller owns the lifecycle command gate. CM -> DSP -> state is the same
@@ -242,12 +298,16 @@ CM_API int ThetisP2ReceiveOpenWithControls(int abi, const char *remote, int base
 CM_API int ThetisReceiveProtocolAbi(void) { return 1; }
 CM_API int ThetisReceiveOpenWithControls(int abi, int protocol, const char *remote, int base, int ddc, int rate,
     int frequency, int mode, int low, int high, cm_checkpoint checkpoint, void *context)
+{ return ThetisReceiveOpenWithGain(abi, protocol, remote, base, ddc, rate, frequency, mode, low, high, 0, 0, 0, 60, checkpoint, context); }
+CM_API int ThetisReceiveOpenWithGain(int abi, int protocol, const char *remote, int base, int ddc, int rate,
+    int frequency, int mode, int low, int high, int gain_db, int muted, int agc, int max_gain,
+    cm_checkpoint checkpoint, void *context)
 {
     uint32_t address;
     if (abi != 1 || (protocol != 1 && protocol != 2) || (protocol == 1 && (ddc != 0 || rate != 48000)) ||
         cm_socket_address(remote, &address, 1) || base < 1024 || base > (protocol == 1 ? 65535 : 65515) ||
         ddc < 0 || ddc > 9 || (rate != 48000 && rate != 96000 && rate != 192000 && rate != 384000) ||
-        frequency < 0 || frequency > 61440000 || !valid_controls(mode, low, high)) return -1;
+        frequency < 0 || frequency > 61440000 || !valid_controls(mode, low, high) || !valid_gain(gain_db, muted, agc, max_gain)) return -1;
     if (!enter()) return -2;
     if (opened || core_owned || prn || listenSock != CM_INVALID_SOCKET) { leave(); return -2; }
     int result = -3;
@@ -257,6 +317,7 @@ CM_API int ThetisReceiveOpenWithControls(int abi, int protocol, const char *remo
     spectrum_sequence = spectrum_coalesced = 0; spectrum_generation = 1;
     spectrum_resume_ms = UINT64_MAX;
     controls_generation = 1;
+    gain_generation = 1;
     InitializeCriticalSectionAndSpinCount(&state_lock, 2500); lock_owned = 1;
     base_port = base; selected_ddc = ddc; sample_rate = rate; frequency_hz = (uint32_t)frequency; high_sequence = 0;
     protocol_one = protocol == 1;
@@ -273,8 +334,7 @@ CM_API int ThetisReceiveOpenWithControls(int abi, int protocol, const char *remo
             functions[ddc] = 1; // selected DDC -> Inbound(CM RX0)
             LoadRouterAll(NULL, 0, 10, 1, 1, streams, functions, calls);
             apply_controls(mode, low, high);
-            SetRXAAGCMode(0, 0); SetRXAAGCFixed(0, 0);
-            SetRXAPanelGain1(0, 1); // deterministic unity gain, not the legacy default x4
+            apply_gain(gain_db, muted, agc, max_gain, 1);
             SetChannelState(0, 1, 0); // RX0/sub0 only; TX and all other channels remain off
         }
         if (stage == 2)

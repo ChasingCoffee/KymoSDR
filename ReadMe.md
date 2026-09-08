@@ -31,6 +31,8 @@ Nereid of Thetis.
   [P1 simulated receive](docs/P1_RECEIVE_INTEGRATION.md) now uses the same engine
   for one 48 kHz receiver, with deterministic signal/fault tests and independent
   pinned `hpsdrsim` interoperability on macOS/Linux.
+  Shared [AF gain, mute and WDSP AGC](docs/RECEIVE_GAIN.md) add startup/live
+  controls and repeatable P1/P2 signal-level step tests.
   This is not yet a usable hardware receiver.
 - The inherited Windows application remains in the tree as the source/reference
   implementation. Its features are not a claim of portable feature parity.

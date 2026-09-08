@@ -4,7 +4,8 @@ using System.Net.Sockets;
 namespace Thetis.Engine;
 
 public sealed record P2ReceiveOptions(int BasePort, int Ddc = 2, int InputRate = 192000,
-    int FrequencyHz = 14_199_000, string Address = "127.0.0.1", ReceiveDemodulation? Demodulation = null)
+    int FrequencyHz = 14_199_000, string Address = "127.0.0.1", ReceiveDemodulation? Demodulation = null,
+    ReceiveGain? Gain = null)
 {
     internal void Validate(bool p1 = false)
     {
@@ -13,6 +14,7 @@ public sealed record P2ReceiveOptions(int BasePort, int Ddc = 2, int InputRate =
         if (InputRate is not (48000 or 96000 or 192000 or 384000)) throw new ArgumentOutOfRangeException(nameof(InputRate));
         ValidateFrequency(FrequencyHz);
         Demodulation?.Validate();
+        Gain?.Validate();
         if (!IPAddress.TryParse(Address, out var ip) || ip.AddressFamily != AddressFamily.InterNetwork ||
             !IPAddress.IsLoopback(ip) || ip.ToString() != Address)
             throw new ArgumentException("Receive integration currently accepts canonical IPv4 loopback addresses only.");

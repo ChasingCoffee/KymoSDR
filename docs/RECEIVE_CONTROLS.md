@@ -4,6 +4,9 @@ The P2 receive owner now supports **USB and LSB**, with adjustable low/high
 audio-frequency filter edges. This is a simulator-only M4 engine increment,
 not a hardware receiver, audio output, UI or TX implementation.
 
+Follow-up: [shared gain/mute/AGC controls](RECEIVE_GAIN.md) now apply to P1 and
+P2. The fixed-gain descriptions and results below document this earlier checkpoint.
+
 ## API contract
 
 ```csharp

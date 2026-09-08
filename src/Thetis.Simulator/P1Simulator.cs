@@ -5,13 +5,14 @@ using System.Net.Sockets;
 
 namespace Thetis.Simulator;
 
-public sealed record P1SimulatorOptions(int Port = 0, int DropEvery = 0, bool InjectFaults = false);
+public sealed record P1SimulatorOptions(int Port = 0, int DropEvery = 0, bool InjectFaults = false,
+    double Amplitude = .25, SignalLevelProfile? SignalLevels = null);
 public sealed record P1SimulatorState(bool Running, int ClientPort, int FrequencyHz, long Starts, long Stops,
     long Packets, long InjectedDrops, long UnsafeRequests, long MalformedRequests, long ForeignRequests,
     long SocketErrors, long WatchdogStops, long PacingResyncs);
 
 /// <summary>Deterministic single-RX P1 UDP fixture, always bound to IPv4 loopback.
-/// Fixed RF tone 14.2 MHz, complex amplitude .25, 48 kHz. No transmit implementation.</summary>
+/// Fixed RF tone 14.2 MHz, default complex amplitude .25, 48 kHz. No transmit implementation.</summary>
 public sealed class P1Simulator : IAsyncDisposable
 {
     private readonly Socket socket;
@@ -26,6 +27,7 @@ public sealed class P1Simulator : IAsyncDisposable
     private bool configured, adcSelected, running, injected;
     private int frequency;
     private uint sequence;
+    private long signalSample;
     private double phase, nextPacket, lastControl;
     private long starts, stops, packets, drops, unsafeRequests, malformed, foreign, errors, watchdog, resyncs;
     public int Port { get; }
@@ -50,6 +52,7 @@ public sealed class P1Simulator : IAsyncDisposable
         options ??= new(); token.ThrowIfCancellationRequested();
         if (options.Port != 0 && options.Port is < 1024 or > 65535) throw new ArgumentOutOfRangeException(nameof(options));
         if (options.DropEvery is < 0 or 1) throw new ArgumentOutOfRangeException(nameof(options));
+        SignalLevelProfile.ValidateAmplitude(options.Amplitude);
         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
         try
         {
@@ -111,7 +114,7 @@ public sealed class P1Simulator : IAsyncDisposable
             if (p[3] == 0)
             { if (owner is not null) ++stops; running = configured = adcSelected = false; owner = null; return; }
             if (!configured) { ++malformed; return; }
-            if (!running) { running = true; ++starts; sequence = uint.MaxValue - 1; phase = 0; injected = false; nextPacket = now; }
+            if (!running) { running = true; ++starts; sequence = uint.MaxValue - 1; phase = 0; signalSample = 0; injected = false; nextPacket = now; }
             lastControl = now; return;
         }
         if (p.Length != 1032 || p[0] != 0xef || p[1] != 0xfe || p[2] != 1 || p[3] != 2 ||
@@ -143,8 +146,10 @@ public sealed class P1Simulator : IAsyncDisposable
             for (int i = 0; i < 63; ++i)
             {
                 int at = frame + 8 + 8*i;
-                Put24(p.AsSpan(at), (int)(.25 * 8388608 * Math.Cos(phase)));
-                Put24(p.AsSpan(at+3), (int)(.25 * 8388608 * Math.Sin(phase)));
+                double amplitude = options.SignalLevels?.AtSample(signalSample, 48000, options.Amplitude) ?? options.Amplitude;
+                ++signalSample;
+                Put24(p.AsSpan(at), (int)(amplitude * 8388608 * Math.Cos(phase)));
+                Put24(p.AsSpan(at+3), (int)(amplitude * 8388608 * Math.Sin(phase)));
                 p[at+6] = 0x7f; p[at+7] = 0xff; // loud microphone sentinel, never demodulated
                 phase = Math.IEEERemainder(phase + step, 2 * Math.PI);
             }

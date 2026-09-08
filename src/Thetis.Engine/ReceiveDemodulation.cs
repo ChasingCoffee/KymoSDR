@@ -3,7 +3,7 @@ namespace Thetis.Engine;
 public enum ReceiveMode { Lsb = 0, Usb = 1 }
 
 /// <summary>Positive audio-frequency filter edges; LSB maps to negative baseband frequencies.
-/// Initial SSB contract: 0..12000 Hz, at least 100 Hz wide. AGC/gain stay fixed.</summary>
+/// Initial SSB contract: 0..12000 Hz, at least 100 Hz wide. Gain/AGC are configured separately.</summary>
 public sealed record ReceiveDemodulation(ReceiveMode Mode = ReceiveMode.Usb, int LowCutHz = 300, int HighCutHz = 3000)
 {
     internal void Validate()

@@ -53,6 +53,30 @@ public sealed class P1SimulatorTests
         Assert.AreEqual(0,simulator.State.SocketErrors);
     }
     [TestMethod]
+    public async Task SignalLevelWireStepPreservesPhaseAndResetsOnRestart()
+    {
+        await using var simulator = P1Simulator.Open(new(Amplitude:.005,SignalLevels:new(new SignalLevelStep(1,.25))));
+        var target = new IPEndPoint(IPAddress.Loopback,simulator.Port);
+        for (int run = 0; run < 2; ++run)
+        {
+            using var client = new UdpClient(new IPEndPoint(IPAddress.Loopback,0));
+            await client.SendAsync(Control(28),target); await client.SendAsync(Control(4),target); await client.SendAsync(Run(true),target);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var result = await client.ReceiveAsync(deadline.Token);
+            Assert.AreEqual(uint.MaxValue-1,BinaryPrimitives.ReadUInt32BigEndian(result.Buffer.AsSpan(4)));
+            for (int sample = 0; sample < 126; ++sample)
+            {
+                int at = 16+512*(sample/63)+8*(sample%63);
+                double amplitude = sample < 48 ? .005 : .25, phase = 2*Math.PI*1000*sample/48000;
+                Assert.AreEqual(amplitude*8388608*Math.Cos(phase),SimulatorProtocolTests.Read24(result.Buffer.AsSpan(at)),1.1);
+                Assert.AreEqual(amplitude*8388608*Math.Sin(phase),SimulatorProtocolTests.Read24(result.Buffer.AsSpan(at+3)),1.1);
+            }
+            await client.SendAsync(Run(false),target);
+            await P1ReceiveSelfTest.WaitUntil(() => !simulator.State.Running && simulator.State.Stops == run+1);
+        }
+        Assert.AreEqual(0,simulator.State.UnsafeRequests); Assert.AreEqual(0,simulator.State.SocketErrors);
+    }
+    [TestMethod]
     public async Task LeaseExpiryAndConcurrentDisposalReleaseThePort()
     {
         await using var simulator = P1Simulator.Open(); int port = simulator.Port;

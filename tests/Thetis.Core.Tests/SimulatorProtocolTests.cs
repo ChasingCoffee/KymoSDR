@@ -52,6 +52,39 @@ public sealed class SimulatorProtocolTests
     }
 
     [TestMethod]
+    public void SignalLevelWireStepsKeepPhaseAndRestartOnStreamOrRateChange()
+    {
+        var device = Device(new(BasePort:Port,Amplitude:.005,SignalLevels:new(new SignalLevelStep(4,.25))));
+        Configure(device);
+        VerifyFirstPacket(0,48000);
+        output.Clear(); device.Tick(.005,Capture);
+        CheckSample(output.Single(p => p.Port == 13).Data,0,238,48000,.25);
+        device.Accept(3,High(false),Client,.006,Discard);
+        device.Accept(3,High(),Client,.007,Discard);
+        VerifyFirstPacket(.007,48000);
+        device.Accept(1,Rx(rate:96000),Client,.008,Discard);
+        double carriedPhase = 2*Math.PI*1000*238/48000;
+        VerifyFirstPacket(.008,96000,carriedPhase);
+        output.Clear(); device.Tick(.011,Capture);
+        byte[] changed = output.Single(p => p.Port == 13).Data;
+        for (int i = 0; i < 238; ++i) CheckSample(changed,i,238+i,96000,238+i < 384 ? .005 : .25,carriedPhase);
+
+        void VerifyFirstPacket(double now,int rate,double carried = 0)
+        {
+            output.Clear(); device.Tick(now,Capture);
+            byte[] p = output.First(p => p.Port == 13).Data;
+            int edge = rate*4/1000;
+            for (int i = 0; i < 238; ++i) CheckSample(p,i,i,rate,i < edge ? .005 : .25,carried);
+        }
+        static void CheckSample(byte[] packet,int index,int sample,int rate,double amplitude,double carried = 0)
+        {
+            double phase = carried+2*Math.PI*1000*sample/rate;
+            Assert.AreEqual(amplitude*8388608*Math.Cos(phase),Read24(packet.AsSpan(16+6*index)),1.1);
+            Assert.AreEqual(amplitude*8388608*Math.Sin(phase),Read24(packet.AsSpan(19+6*index)),1.1);
+        }
+    }
+
+    [TestMethod]
     public void SchedulerStallKeepsReplayInsideTheReceiverBurstBudget()
     {
         var device = Device(); Configure(device, rate: 192000);

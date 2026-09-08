@@ -37,6 +37,9 @@ public abstract class ReceiveSession : IDisposable
             if (P2ReceiveNative.ThetisReceiveProtocolAbi() != 1)
                 throw new NotSupportedException("Native receive protocol ABI is incompatible.");
             var controls = options.Demodulation ?? new();
+            if (P2ReceiveNative.ThetisReceiveGainAbi() != 1)
+                throw new NotSupportedException("Native receive gain ABI is incompatible.");
+            var gain = options.Gain ?? new();
             var session = create();
             Exception? callbackError = null;
             ChannelMasterNative.Checkpoint callback = (stage, _) =>
@@ -46,8 +49,9 @@ public abstract class ReceiveSession : IDisposable
             };
             NativeMethods.ThetisWdspSetPlanningTimeLimit(0);
             int rc;
-            try { rc = P2ReceiveNative.ThetisReceiveOpenWithControls(1, protocol, options.Address, options.BasePort, options.Ddc,
-                options.InputRate, options.FrequencyHz, (int)controls.Mode, controls.LowCutHz, controls.HighCutHz, callback, 0); }
+            try { rc = P2ReceiveNative.ThetisReceiveOpenWithGain(1, protocol, options.Address, options.BasePort, options.Ddc,
+                options.InputRate, options.FrequencyHz, (int)controls.Mode, controls.LowCutHz, controls.HighCutHz,
+                gain.AudioGainDb, gain.Muted ? 1 : 0, (int)gain.AgcMode, gain.AgcMaxGainDb, callback, 0); }
             finally { GC.KeepAlive(callback); NativeMethods.ThetisWdspSetPlanningTimeLimit(-1); }
             if (rc != 0)
             {
@@ -119,6 +123,40 @@ public abstract class ReceiveSession : IDisposable
             }
         });
     }
+    public ReceiveGainState Gain
+    {
+        get
+        {
+            lock (DspRuntime.Gate)
+            {
+                CheckOpen(); long[] s = new long[11];
+                int count = P2ReceiveNative.ThetisReceiveGetGain(s, s.Length); GC.KeepAlive(handle);
+                if (count != 11 || s[0] != 1 || s[1] != 1 || s[3] is not (0 or 1) || s[10] < 1)
+                    throw new NotSupportedException("Native receive gain state is incompatible.");
+                var settings = new ReceiveGain(checked((int)s[2]), s[3] != 0, (ReceiveAgcMode)checked((int)s[4]), checked((int)s[5]));
+                settings.Validate();
+                return new(settings, checked((int)s[6]), checked((int)s[7]), checked((int)s[8]), checked((int)s[9]), s[10]);
+            }
+        }
+    }
+    /// <summary>Serializes gain/AGC changes with DSP and clears queued tap audio. Mute gates
+    /// subsequent pulls immediately; AGC continues tracking. No click-free transition is promised.</summary>
+    public void ConfigureGain(ReceiveGain settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings); settings.Validate();
+        NativeLifecycle.Invoke(() =>
+        {
+            lock (DspRuntime.Gate)
+            {
+                CheckOpen();
+                int rc = P2ReceiveNative.ThetisReceiveSetGain(1, settings.AudioGainDb, settings.Muted ? 1 : 0,
+                    (int)settings.AgcMode, settings.AgcMaxGainDb);
+                GC.KeepAlive(handle);
+                if (rc != 0) throw new InvalidOperationException($"Native receive gain update failed ({rc}).");
+                return 0;
+            }
+        });
+    }
     /// <summary>Returns frames copied into an interleaved L/R buffer (48 kHz), without waiting.</summary>
     public int ReadAudio(double[] interleaved)
     {
@@ -178,6 +216,16 @@ public abstract class ReceiveSession : IDisposable
 
 internal static class P2ReceiveNative
 {
+    [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int ThetisReceiveGainAbi();
+    [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int ThetisReceiveOpenWithGain(int abi, int protocol, [MarshalAs(UnmanagedType.LPUTF8Str)] string remote,
+        int basePort, int ddc, int rate, int frequency, int mode, int low, int high,
+        int gainDb, int muted, int agc, int maxGain, ChannelMasterNative.Checkpoint checkpoint, nint context);
+    [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int ThetisReceiveSetGain(int abi, int gainDb, int muted, int agc, int maxGain);
+    [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int ThetisReceiveGetGain([Out] long[] values, int capacity);
     [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     internal static extern int ThetisReceiveProtocolAbi();
     [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
