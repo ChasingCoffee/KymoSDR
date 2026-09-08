@@ -4,7 +4,7 @@ The output path is implemented separately from WDSP: native stereo 48 kHz PCM
 → managed background pump → bounded native queue/resampler → PortAudio callback.
 `Thetis.Audio` owns an explicit native library and one output; `ReceivePlayback`
 owns its pump/output, and `PreviewController` owns the complete simulator session.
-There are no .NET, DSP, UI, logging, allocation or mutex calls in our device
+There are no .NET, WDSP, UI, logging, allocation or mutex calls in our device
 callback. PortAudio initialization, device enumeration and stream open/close
 run on one stable control thread (including WASAPI COM ownership).
 
@@ -128,6 +128,12 @@ and TX options. The [desktop](DESKTOP_PREVIEW.md) uses the same owner.
 The user confirmed hearing the simulator through the Mac desktop. This is an
 initial manual listening check; device identity/rate, latency, unplug behavior
 and duration were not recorded. It is not a full physical-device qualification.
+
+Runtime `9311607c` passes Windows, macOS and Linux native, managed, signal and
+desktop CI, including Linux sanitizer/leak checks. Local validation passes all
+189 managed cases, 14 Release native tests and 14 sanitizer tests. See the
+[current validation record](NATIVE_CI_RESULTS.md#audio-clock-recovery-and-output-loss-checkpoint)
+for exact source, hosted results and qualification limits.
 
 Clock-recovery tests exercise eight virtual-hour controller scenarios (0,
 ±100/500/1,000 ppm and a direction reversal), bounded slew/anti-windup, and

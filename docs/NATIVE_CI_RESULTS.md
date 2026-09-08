@@ -1,5 +1,94 @@
 # Native cross-platform CI results
 
+## Audio clock recovery and output-loss checkpoint
+
+Runtime source: `9311607cd9ae4c0f24c746954bafa9384d2078f0`, recorded
+2026-09-07 Pacific. All four jobs pass in the
+[native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34194859815),
+including Linux ASan/UBSan/LeakSanitizer: 14/14 tests in 358.83 s, leak detection
+enabled and no suppressions. Existing lifecycle and Linux memory-growth gates
+also pass unchanged.
+The [managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34194859829)
+passes all three platforms; the optional Windows-reference job was not dispatched.
+
+| Target | Native CTest | Full managed suite | P1/P2 playback campaign | Published native window |
+| --- | --- | --- | --- | --- |
+| Windows x64 | 13/13, 268.91 s | 188 pass / 1 reference skip | 15.166 s, pass | 20 displayed/rendered frames, 2.672 s, exit 0 |
+| macOS arm64 | 14/14, 284.46 s | 188 pass / 1 reference skip | 14.428 s, pass | 20 displayed/rendered frames, 4.300 s, exit 0 |
+| Linux x64 | 14/14, 184.60 s | 188 pass / 1 reference skip | 15.014 s, pass | 20 displayed/rendered frames, 3.039 s, exit 0 under Xvfb/X11 |
+
+The full suite contains 124 core, 59 engine and six desktop cases. The independent
+P1 reference also passes separately on macOS/Linux, giving 189 distinct passing
+cases there; Windows has 188 without that comparison. Thirteen focused playback
+and six desktop cases repeat early in CI, not additional distinct cases. The
+deliberately missing-native desktop launch returns exit 4 on every OS.
+
+All three platforms pass the virtual-hour PCM test with the same printed
+queue/correction/signal results listed below, and the controlled-clock 60-second
+wall-time pipeline test. These are no-device tests, not physical listening.
+The separate sample-driven playback campaign recovers 1,000 Hz on both protocols:
+P1 RMS is 0.01767763735 on all platforms; P2 is 0.01767758865 on Windows,
+0.01767784074 on macOS and 0.01767758876 on Linux. Required receive/output error
+counters are clean.
+
+Local macOS arm64 validation passes:
+
+- Zero-warning managed build and framework-dependent desktop publish, with
+  production playback ABI 2 staged beside the published app.
+- 189 managed cases: 124 core, 59 engine (including the confined independent P1
+  reference) and six headless desktop/Skia cases; no skips or failures.
+- 14/14 Release native tests (79.68 s) and 14/14 ASan/UBSan tests (114.55 s).
+  Local macOS leak detection remains disabled; no sanitizer suppressions added.
+- A real stereo PCM **virtual-hour** run at 48 kHz/+1,000 ppm: steady queue
+  2,053–4,007 frames, average correction 999.871 ppm, RMS 0.35355123,
+  1001.0002 Hz and zero underruns/rejected frames. This is accelerated sample
+  time, not a wall-clock hour or a physical listening session.
+- Six four-minute PCM cases cover both ±1,000 ppm at 44.1/48/96 kHz, with
+  variable independent packet/callback sizes, stereo ratio/amplitude/frequency
+  checks and zero underruns/rejections. Both fixed-rate negative controls exhaust
+  their queues. Eight virtual-hour controller cases cover 0, ±100/500/1,000 ppm,
+  offset reversal, scheduling disturbance, slew bounds and anti-windup.
+- One **60-second wall-clock** P2/CM/WDSP session uses controlled virtual source
+  and +1,000 ppm output clock domains, mute/flush/retune and output loss. Host
+  delays pause the test timeline, not the relative clock skew. It advanced
+  37.605 virtual seconds in the full local suite: 1,806,845 output frames,
+  queue 2,546, correction −726.282 ppm, zero I/Q clock rebases/lost time,
+  two re-primes, zero input/output overruns, drops, underruns, nonfinite/clipped
+  samples or transport/DSP errors. Correction was still settling after flush;
+  this is resilience coverage, not the steady-state estimator measurement.
+- The fake PortAudio backend drives production native lifecycle code through
+  100 loss/reopen cycles, stopped/error/finished/stalled callbacks, stale device
+  selection, startup rollback and failed-close storage retention. It is not
+  linked to any physical audio backend. Engine/UI tests verify automatic cleanup,
+  cleared UI device selection, and explicit conservative muted reconnect.
+- Production (`BUILD_TESTING=OFF`) P1/P2 playback campaign: 11.708 s, 1,000 Hz,
+  RMS 0.01767763735 / 0.01767758876, clean receive/output counters.
+
+The new controller-loss regression exposed an intermediate state that published
+disconnected before native RX close completed. Publication now occurs only after
+all owned cleanup; both protocols pass repeated failure/reconnect tests.
+
+Initial hosted failures were not treated as passing results. `dc22c8fa` needed
+an explicit `<initializer_list>` include for GCC's fake-driver test build;
+`e51fd7c8` fixes that. The first unconstrained wall-clock integration test also
+failed on hosted Mac: at 192 kHz I/Q, 21 simulator scheduler rebases by 3.2 s
+lost much more source time than the injected ppm offset. A 48 kHz attempt at
+`de45a1ec` also lost 7.659 ms of I/Q clock time and underrun at 17.5 s. The
+simulator intentionally bounds replay to eight packets and is not a hardware
+clock. Those are genuine host-paced simulator limitations, not evidence that
+physical playback endurance is solved. `9311607c` drives the complete native
+receive path on a controlled timeline with independently derived clock-domain
+frame counts and strict zero-underrun/rebase checks. Queue size, correction
+limits, public simulator replay policy and higher-rate transport gates were
+not relaxed. See [the test boundary and diagnostics](AUDIO_PLAYBACK.md).
+
+The user reported a working Mac window and audible simulated tone on the prior
+preview. No physical audio stream, microphone, LAN radio or hardware TX was used
+by this increment's automated validation. Real driver unplug/sleep/wake, hanging
+driver calls, physical-clock endurance/latency, wideband/speech quality, hardware
+G2 receive and the M4/M5 performance gates remain unqualified. See the
+[audio contract](AUDIO_PLAYBACK.md) and [desktop preview](DESKTOP_PREVIEW.md).
+
 ## Simulator receiver desktop and playback checkpoint
 
 Validated runtime source: `e9c352ce2f90a686460a3aeb590915f068b70616`, recorded
