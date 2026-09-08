@@ -77,6 +77,16 @@ public sealed class PreferencesTests
         CollectionAssert.AreEqual(original,File.ReadAllBytes(path));
     }
     [TestMethod]
+    public void FailedExclusiveCreateCannotDeleteAnExistingTemporaryName()
+    {
+        byte[] original = Encoding.UTF8.GetBytes("original settings"); File.WriteAllBytes(path,original);
+        string existing = Path.Combine(directory,".already-owned.tmp"); File.WriteAllText(existing,"belongs to another writer");
+        Assert.ThrowsExactly<IOException>(() => AtomicJsonFile.Write(path,[],temporaryFileName:".already-owned.tmp"));
+        CollectionAssert.AreEqual(original,File.ReadAllBytes(path)); Assert.AreEqual("belongs to another writer",File.ReadAllText(existing));
+        Assert.ThrowsExactly<ArgumentException>(() => AtomicJsonFile.Write(path,[],temporaryFileName:Path.Combine("..","outside.tmp")));
+        Assert.AreEqual(2,Directory.GetFiles(directory).Length);
+    }
+    [TestMethod]
     public void AtomicPublishFailurePreservesOriginalAndRemovesOnlyOwnedTemporaryFile()
     {
         byte[] original = Encoding.UTF8.GetBytes("original"); File.WriteAllBytes(path,original);

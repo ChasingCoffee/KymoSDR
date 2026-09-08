@@ -82,7 +82,7 @@ finite and within 900×700–3840×2160 logical units, are constrained to the cu
 screen subject to the application's minimum size, and no screen coordinates are
 restored. Minimized state is never restored.
 
-Files larger than 64 KiB, malformed/incomplete data, unsupported enums/values,
+Files larger than 64 KiB, malformed JSON, missing required sections, unsupported enums/values,
 unknown fields and unknown schema versions produce a visible warning and safe
 defaults. Such files are **left unchanged**, including on shutdown; saving stays
 disabled until a subsequent successful load. Preserve/move the file and restart
@@ -93,6 +93,9 @@ transaction against an arbitrary external editor racing the atomic rename.
 Saves are serialized per store, written to a unique same-directory temporary file,
 flushed and renamed over the destination. Failure/cancellation before publication
 leaves the original intact and removes only that operation's temporary file.
+Cleanup only removes a file after successful exclusive creation; a colliding
+name already owned by another writer is left untouched. An abrupt process/OS
+crash can leave a temporary file, which the loader never treats as preferences.
 Read/save errors are visible; they do not unmute or stop a healthy receive session.
 
 Use `--no-settings` for an isolated interactive session. Smoke/endurance modes
