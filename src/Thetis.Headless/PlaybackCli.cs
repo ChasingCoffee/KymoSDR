@@ -79,9 +79,9 @@ public static class PlaybackSelfTest
             long start = controller.Snapshot.Output.Rendered;
             await WaitFor(controller,s => s.Output.Rendered > start+96000,token);
             var measured = controller.Snapshot!;
+            CheckClean(measured);
             if (Math.Abs(measured.NullRms-.025/Math.Sqrt(2)) > .001 || Math.Abs(measured.NullToneHz-1000) > 10)
                 throw new InvalidOperationException($"P{protocol} playback signal mismatch: {measured.NullRms:G9} RMS, {measured.NullToneHz} Hz.");
-            CheckClean(measured);
             checks.Add(new(protocol,measured.NullRms,measured.NullToneHz,measured.Spectrum!.Sequence,measured));
             await controller.ApplyAsync(controller.Settings with { Muted = true },token);
             await WaitFor(controller,s => s.Output.Rendered > measured.Output.Rendered+48000 && s.NullRms == 0,token);

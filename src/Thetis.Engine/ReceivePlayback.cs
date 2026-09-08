@@ -34,7 +34,8 @@ public sealed class ReceivePlayback : IAsyncDisposable
     private void Run()
     {
         double[] input = new double[4096]; float[] rendered = new float[1920];
-        var clock = Stopwatch.StartNew(); double nextRender = 0, nextSnapshot = 0;
+        var clock = Stopwatch.StartNew(); double nextSnapshot = 0;
+        int nullSourceCredit = 0;
         ReceiveSpectrumFrame? spectrum = null;
         double energy = 0, rms = 0, hz = 0, previous = 0; int measured = 0, crossings = 0;
         try
@@ -47,10 +48,15 @@ public sealed class ReceivePlayback : IAsyncDisposable
                 double now = clock.Elapsed.TotalSeconds;
                 if (!device.Physical)
                 {
-                    int block = device.Rate/100; // deterministic 10 ms null callback, bounded catch-up
-                    for (int burst = 0; now >= nextRender && burst < 8; ++burst)
+                    // The silent monitor is sample-driven, not a fake hardware
+                    // clock. A delayed producer must not render a wall-clock
+                    // catch-up burst before draining PCM still in CM's queue.
+                    // Each read is <=2048 source frames, so this is <=5 blocks.
+                    nullSourceCredit += frames;
+                    int block = device.Rate/100;
+                    while (nullSourceCredit >= 480)
                     {
-                        output.RenderNull(rendered,block); nextRender += .01;
+                        output.RenderNull(rendered,block); nullSourceCredit -= 480;
                         for (int i = 0; i < block; ++i)
                         {
                             double v = rendered[2*i]; energy += v*v;
@@ -59,7 +65,6 @@ public sealed class ReceivePlayback : IAsyncDisposable
                             { rms = Math.Sqrt(energy/measured); hz = rms > 1e-8 ? crossings*10 : 0; energy = 0; measured = crossings = 0; }
                         }
                     }
-                    if (now >= nextRender) nextRender = now+.01;
                 }
                 if (now >= nextSnapshot)
                 {

@@ -37,9 +37,26 @@ int main() {
         CHECK(ThetisAudioState(state,16) == 16 && state[8] == 0 && state[11] == 0 && state[16] == 12345);
         CHECK(ThetisAudioMute(1) == 0 && ThetisAudioRenderNull(out,960) == 960);
         for (int i = 0; i < 1920; ++i) CHECK(out[i] == 0);
+        // Exhaust the queue deliberately, then require silence until a fresh
+        // prefill exists. Starvation must not repeat the previous tone.
+        for (int i = 0; i < 10; ++i) CHECK(ThetisAudioRenderNull(out,960) == 960);
+        CHECK(ThetisAudioState(state,16) == 16 && state[11] > 0);
+        CHECK(ThetisAudioMute(0) == 0);
+        double restart[2*1024]; for (double &v : restart) v = .125;
+        CHECK(ThetisAudioWrite(restart,512) == 512 && ThetisAudioRenderNull(out,100) == 100);
+        for (int i = 0; i < 200; ++i) CHECK(out[i] == 0);
+        CHECK(ThetisAudioWrite(restart,1024) == 1024 && ThetisAudioRenderNull(out,100) == 100);
+        for (int i = 0; i < 200; ++i) CHECK(std::abs(out[i]-.125f) < 1e-6);
         CHECK(out[1920] == 123);
         CHECK(ThetisAudioInterruptNull() == 0 && ThetisAudioState(state,16) == 16 && state[3] == 0 && state[5] == 1);
         CHECK(ThetisAudioClose() == 0 && ThetisAudioClose() == 0);
+    }
+    for (int cycle = 0; cycle < 100; ++cycle) {
+        float empty[2] = {1,1};
+        CHECK(ThetisAudioOpen(1,-1,48000,nullptr,nullptr) == 0);
+        CHECK(ThetisAudioState(state,16) == 16 && state[5] == 1 && state[7] == 0);
+        CHECK(ThetisAudioRenderNull(empty,1) == 1 && empty[0] == 0 && empty[1] == 0);
+        CHECK(ThetisAudioClose() == 0);
     }
     // Direct SPSC concurrency exercises the actual device callback queue, not the
     // API's serialized null renderer. Sentinels expose ordering/wrap corruption.

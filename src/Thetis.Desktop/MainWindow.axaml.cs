@@ -139,6 +139,7 @@ public partial class MainWindow : Window
         try
         {
             await Connect();
+            if (!Controller.Connected) throw new InvalidOperationException(Control<TextBlock>("StatusText").Text);
             await WaitFor(() => Control<SpectrumView>("SpectrumDisplay").FramesRendered >= 5 && DisplayedFrames >= 10 && Controller.Snapshot?.Output.Rendered > 48000);
             if (Controller.Snapshot is not { } s || s.Output.Physical || !s.Output.Muted || s.NullRms != 0) throw new InvalidOperationException("Smoke must use muted no-device output.");
             Control<TextBox>("FrequencyInput").Text = "14198500";
@@ -158,8 +159,11 @@ public partial class MainWindow : Window
         catch (Exception ex) { Console.Error.WriteLine($"Desktop smoke failed: {ex.Message}"); }
         finally
         {
-            await Controller.DisposeAsync(); mayClose = true; Close();
+            try { await Controller.DisposeAsync(); }
+            catch (Exception ex) { Console.Error.WriteLine($"Desktop shutdown failed: {ex.Message}"); exit = 4; }
+            mayClose = true;
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop) desktop.Shutdown(exit);
+            else Close();
         }
     }
     private async Task WaitFor(Func<bool> condition)

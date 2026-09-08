@@ -36,9 +36,12 @@ recall audio already buffered by the driver. Native output always opens muted;
 the application reconnects muted with AF gain no higher than −40 dB.
 
 The no-device backend runs the same queue and resampler but **never initializes
-PortAudio**. Its managed 10 ms scheduler has bounded catch-up and measures tone
-frequency/RMS. This is deterministic signal/lifecycle coverage, not a physical
-device clock or latency qualification. There is no adaptive hardware-clock drift
+PortAudio**. It advances in 10 ms sample blocks as PCM is recovered (at most five
+blocks per read), and measures tone frequency/RMS. It does not advance a fake
+wall clock while PCM awaits draining: host scheduling delays must not synthesize
+test-only starvation. Native tests still explicitly exercise actual queue
+starvation/overflow behavior. This is deterministic signal/lifecycle coverage,
+not a physical device clock or latency qualification. There is no adaptive hardware-clock drift
 correction yet; long sessions with independent radio/device clocks may exhaust
 the queue. Driver hangs, actual unplug, sleep/wake and 60-minute underrun-free
 listening remain manual qualification gates, not simulated-device claims.

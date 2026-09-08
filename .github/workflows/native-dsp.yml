@@ -142,6 +142,16 @@ jobs:
         timeout-minutes: 3
         working-directory: artifacts/desktop
         run: xvfb-run -a dotnet Thetis.Desktop.dll --smoke --native-dir "${{ github.workspace }}/artifacts/desktop/native"
+      - name: Desktop smoke startup failure must return an error
+        timeout-minutes: 3
+        working-directory: artifacts/desktop
+        shell: pwsh
+        run: |
+          $missingNative = Join-Path (Get-Location) 'deliberately-missing-native'
+          if ($IsLinux) { xvfb-run -a dotnet Thetis.Desktop.dll --smoke --native-dir $missingNative }
+          else { dotnet Thetis.Desktop.dll --smoke --native-dir $missingNative }
+          if ($LASTEXITCODE -ne 4) { throw "Expected desktop startup failure exit 4, got $LASTEXITCODE" }
+          exit 0
       - name: Loopback transport CLI (100 socket lifecycles, no radio commands)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- transport-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: macOS dependency inspection

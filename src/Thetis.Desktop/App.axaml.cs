@@ -10,7 +10,10 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            if (Program.Launch.Smoke) desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnExplicitShutdown;
             desktop.MainWindow = new MainWindow(Program.Launch);
+        }
         base.OnFrameworkInitializationCompleted();
     }
 }

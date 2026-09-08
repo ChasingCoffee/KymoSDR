@@ -53,7 +53,13 @@ public sealed class DesktopTests
                 window.KeyTextInput("1");
                 Assert.IsFalse(window.Controller.Connected);
             }
-            finally { await window.Controller.DisposeAsync(); window.Close(); }
+            finally
+            {
+                await window.Controller.DisposeAsync(); window.Close();
+                var closeClock = Stopwatch.StartNew();
+                while (window.IsVisible && closeClock.Elapsed.TotalSeconds < 10) await Task.Delay(10);
+                Assert.IsFalse(window.IsVisible);
+            }
             return 0;
         },CancellationToken.None);
     }
