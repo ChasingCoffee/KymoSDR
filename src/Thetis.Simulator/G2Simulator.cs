@@ -15,6 +15,9 @@ public sealed class G2Simulator : IAsyncDisposable
     private readonly SimulatorTimerResolution? timerResolution;
     private Task? disposeTask;
     private SimulatorState snapshot;
+    private readonly Func<double>? testClock;
+    private double lastTestTick = -1;
+    internal double LastTestTick => Volatile.Read(ref lastTestTick);
     public int BasePort { get; }
     public Task Completion => worker;
     public SimulatorState State
@@ -26,8 +29,9 @@ public sealed class G2Simulator : IAsyncDisposable
         }
     }
 
-    private G2Simulator(SimulatorOptions options, Dictionary<int, Socket> bound, CancellationToken token)
+    private G2Simulator(SimulatorOptions options, Dictionary<int, Socket> bound, CancellationToken token,Func<double>? testClock)
     {
+        this.testClock = testClock;
         sockets = bound; BasePort = options.BasePort;
         device = new(options); snapshot = device.Snapshot();
         stop = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -45,6 +49,12 @@ public sealed class G2Simulator : IAsyncDisposable
     }
 
     public static G2Simulator Open(SimulatorOptions? options = null, CancellationToken cancellationToken = default)
+        => OpenCore(options,cancellationToken,null);
+    // Controlled-timeline integration fixture only. The public/CLI simulator
+    // always uses its monotonic host clock and existing bounded replay policy.
+    internal static G2Simulator OpenWithClock(SimulatorOptions options,Func<double> clock)
+        => OpenCore(options,CancellationToken.None,clock ?? throw new ArgumentNullException(nameof(clock)));
+    private static G2Simulator OpenCore(SimulatorOptions? options,CancellationToken cancellationToken,Func<double>? testClock)
     {
         options ??= new(); options.Validate(); cancellationToken.ThrowIfCancellationRequested();
         for (int attempt = 0; ; ++attempt)
@@ -64,7 +74,7 @@ public sealed class G2Simulator : IAsyncDisposable
                     socket.Blocking = false;
                 }
                 cancellationToken.ThrowIfCancellationRequested();
-                return new(options with { BasePort = port }, bound, cancellationToken);
+                return new(options with { BasePort = port }, bound, cancellationToken,testClock);
             }
             catch (SocketException ex) when (CanRetryLayout(options.BasePort, attempt, ex.SocketErrorCode, OperatingSystem.IsWindows()))
             { foreach (var socket in bound.Values) socket.Dispose(); }
@@ -83,6 +93,7 @@ public sealed class G2Simulator : IAsyncDisposable
     {
         byte[] packet = new byte[65536];
         var clock = Stopwatch.StartNew();
+        double Now() => testClock?.Invoke() ?? clock.Elapsed.TotalSeconds;
         double nextSnapshot = 0;
         try
         {
@@ -102,13 +113,14 @@ public sealed class G2Simulator : IAsyncDisposable
                         try { length = socket.ReceiveFrom(packet, ref source); }
                         catch (SocketException ex) when (ex.SocketErrorCode == SocketError.WouldBlock) { break; }
                         catch (SocketException ex) when (IsPeerError(ex)) { device.SocketFailure(); break; }
-                        device.Accept(offset, packet.AsSpan(0, length), (IPEndPoint)source, clock.Elapsed.TotalSeconds, Send);
+                        device.Accept(offset, packet.AsSpan(0, length), (IPEndPoint)source, Now(), Send);
                     }
                     Volatile.Write(ref snapshot, device.Snapshot());
                 }
-                device.Tick(clock.Elapsed.TotalSeconds, Send);
-                if (clock.Elapsed.TotalSeconds >= nextSnapshot)
-                { Volatile.Write(ref snapshot, device.Snapshot()); nextSnapshot = clock.Elapsed.TotalSeconds + 0.05; }
+                double now = Now(); device.Tick(now, Send);
+                if (testClock is not null || now >= nextSnapshot)
+                { Volatile.Write(ref snapshot, device.Snapshot()); nextSnapshot = now + 0.05; }
+                if (testClock is not null) Volatile.Write(ref lastTestTick,now);
             }
         }
         finally

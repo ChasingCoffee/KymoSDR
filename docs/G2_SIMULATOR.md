@@ -176,12 +176,21 @@ radio clock. Public state is an immutable snapshot/copy.
 
 `iqPacingResyncs` separates I/Q rebases from microphone rebases;
 `iqPacingLostNanoseconds` sums ungenerated source-clock time over enabled DDCs.
-These are not missing wire sequence numbers. Independent audio-clock validation
-uses one 48 kHz P2 receiver (eight packets cover about 39.7 ms of scheduling
-jitter), and requires zero I/Q rebases. At 192 kHz the same replay budget is only
-9.9 ms; a slow host can lose source time much faster than an audio drift corrector
-should compensate. Existing burst limits and higher-rate transport gates are
-unchanged. Neither profile is a hard-real-time hardware clock.
+These are not missing wire sequence numbers. At 48 kHz, eight packets cover
+39.7 ms of scheduling jitter; at 192 kHz the budget is only 9.9 ms. A slow host
+can lose source time much faster than an audio drift corrector should compensate.
+Both profiles exceeded their budgets in a hosted Mac audio-clock experiment.
+Existing burst limits and higher-rate transport gates are unchanged. Neither
+profile is a hard-real-time hardware clock.
+
+An internal test-only `OpenWithClock` adapter lets the audio integration test
+drive the source on a controlled virtual timeline and observe completed ticks.
+The test waits for cumulative native/pump processing of each event, then renders
+the independently skewed output frame count, preserving relative clock rates
+without interpreting host scheduling delay as source time. It requires zero
+I/Q rebases and reports wall/sample durations separately. The public constructor,
+CLI and desktop still use the normal monotonic host clock; no radio/TX/network
+boundary or replay budget is changed by this fixture.
 
 On Windows, each open simulator owns a 1 ms `timeBeginPeriod` request, balanced
 by `timeEndPeriod` when its worker exits (including cancellation/failure), or on

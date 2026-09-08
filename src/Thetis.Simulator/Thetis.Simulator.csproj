@@ -9,5 +9,6 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Thetis.Core.Tests" />
+    <InternalsVisibleTo Include="Thetis.Engine.Tests" />
   </ItemGroup>
 </Project>

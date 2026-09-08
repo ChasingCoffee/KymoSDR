@@ -150,21 +150,33 @@ artifacts/native/stage/Release/playback_clock_tests --soak
 ```
 
 The second command uses `.exe` on Windows. It renders a virtual hour without a
-device. Managed playback regressions also include a 60-second **wall-clock** P2
-session at 48 kHz I/Q with an independently paced +1,000 ppm simulated output,
-mute/flush, retune and output loss, plus automatic cleanup/reconnect for both
-protocols. This gate requires zero underruns **and zero I/Q source-clock rebases**.
+device. Managed playback regressions also run the real P2/CM/WDSP/pump pipeline
+for 60 seconds of **wall time**, using two controlled virtual clock domains:
+48 kHz I/Q and +1,000 ppm output. Each 5 ms source event is processed through
+native DSP and the pump before advancing the test timeline. Readiness uses
+cumulative expected PCM counts, not output queue occupancy; output frame counts
+are derived independently from elapsed virtual time and the fixed skew. Host
+scheduling delays pause the shared timeline, not either domain's relative rate.
+The run covers mute/flush, retune and output loss and requires zero underruns
+**and zero I/Q source-clock rebases**. It reports both wall and virtual duration
+(37.600 virtual seconds in the initial local 60-second run). Automatic cleanup
+and conservative reconnect are also exercised for both protocols.
 
 The initial 192 kHz version of that wall-clock test failed on hosted macOS: its
 source had 21 scheduler rebases by 3.2 seconds, losing much more time than the
 injected 1,000 ppm offset. The simulator deliberately drops overdue clock time
-beyond eight replay packets, which at 192 kHz covers only 9.9 ms. The clock test
-uses 48 kHz I/Q (39.7 ms replay budget) and retains the strict output assertions;
-it does not widen the drift actuator, hide underruns or enlarge native queues.
-Explicit `iqPacingResyncs`/`iqPacingLostNanoseconds` diagnostics quantify the
-source limitation. The preview's default 192 kHz profile and all existing
-higher-rate transport tests are unchanged; scheduling starvation is still a
-real limitation of this host-paced simulator, not a hardware radio-clock claim.
+beyond eight replay packets, which at 192 kHz covers only 9.9 ms. A 48 kHz
+attempt (39.7 ms budget) also encountered a host stall, lost 7.659 ms of I/Q
+clock time and underrun at 17.5 seconds. That disproved the assumption that a
+general-purpose hosted runner could supply a reliable independent real-time
+source for this test. The controlled-timeline fixture retains strict sample/
+counter assertions without widening the actuator or enlarging queues. It proves
+clock/sample/lifecycle behavior, **not host real-time scheduling or physical
+playback endurance**. Explicit `iqPacingResyncs`/`iqPacingLostNanoseconds`
+diagnostics quantify the limitation in the normal simulator. The preview's
+default 192 kHz profile and all existing higher-rate transport tests are
+unchanged; host scheduling starvation remains a real limitation, not a claim
+that the radio's hardware clock stops under load.
 
 ### Previous simulator preview checkpoint
 
