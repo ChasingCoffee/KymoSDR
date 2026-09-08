@@ -125,8 +125,14 @@ native build passes the gain campaign too, and real Ctrl-C exits 130 after
 disposing the owned peers/receiver. JSON is retained locally in ignored
 `artifacts/receive-gain-local.json` and `artifacts/receive-gain-production.json`.
 
-Three-OS hosted qualification is pending. No G2/LAN radio or physical audio
-output was used.
+Runtime `e49104de` passes [Windows/macOS/Linux native CI](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34178295913)
+and [managed-only CI](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34178295867).
+Each OS passes the twenty gain checks and six AGC traces, plus 168 managed
+regressions with one explicit reference skip; macOS/Linux also pass that
+independent reference in its dedicated step. Native CTest is 10/10 on Windows
+and 11/11 on macOS/Linux, with Linux sanitizer/leak checking 11/11. See the
+[exact counts, durations and observations](NATIVE_CI_RESULTS.md#shared-receive-gain-mute-and-agc-checkpoint).
+No G2/LAN radio or physical audio output was used.
 
 Still unqualified: hardware RF gain/routing, calibrated metering, noise-rich or
 speech AGC behavior, click-free playback, other modes, live radio, desktop UI and

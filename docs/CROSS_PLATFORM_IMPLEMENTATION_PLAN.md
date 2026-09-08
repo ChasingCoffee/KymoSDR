@@ -6,6 +6,8 @@ Date: 2026-09-04. Status: discovery and initial macOS native DSP implemented; cr
 
 Build one C#/.NET 10 application with a shared Avalonia interface for Windows and macOS, eventually replacing the existing Windows interface. Preserve the native WDSP/ChannelMaster engine and HPSDR protocol behavior through incremental extraction and platform adaptation. Keep Linux in the build and test strategy from the beginning.
 
+**Project purpose clarified 2026-09-07:** the project owner built the existing Thetis VST3 host and wants that work to remain open source, available and maintainable across platforms. The engine, shared desktop UI, and VST3 host/scanner/editor integration must remain open source and buildable from published source. Preserving this complete application is a primary outcome of the port, alongside operating the radio on macOS and Windows.
+
 This is the implementation successor to the [original macOS plan](SDR-VST3_macOS_Port_Plan.md), which remains unchanged as historical context. Where they differ, this plan proposes the updated direction: one shared Windows/Mac UI, discovery before native bring-up, the reviewed pre-FreeDV baseline, and G2/P2 hardware plus P1 simulation.
 
 Planning inputs:
@@ -14,7 +16,6 @@ Planning inputs:
 - [VST divergence audit](VST_DIVERGENCE_AUDIT.md): behavior to preserve and catalog/lifecycle defects to correct.
 - [Upstream/FreeDV review](UPSTREAM_BASELINE_REVIEW.md): assessment of the 18 newer commits and dependency/TX-routing findings.
 - [WDSP baseline review](WDSP_BASELINE_REVIEW.md): authoritative TAPR 2.00 reference, local extensions and the retained older PureSignal implementation.
-- [Zeus engine review](ZEUS_ENGINE_REVIEW.md): proposed capability, audio, TX, measurement and plugin-IPC refinements; a pinned RADE V1 recovery candidate; optional later features. Recommendations remain planning inputs, not implemented features or passed gates.
 
 The audits are static evidence, not proof of successful builds or operation. Milestone acceptance below requires new test results.
 
@@ -219,6 +220,9 @@ settings for both protocols. Owned simulator amplitude profiles exercise gain
 ceilings, preset response/recovery, silence and reconnect defaults. These are
 audio-path controls, not hardware RF gain or calibrated levels; the hardware
 gate below and M5 audio/UI work remain separate.
+This increment passes three-OS native/managed/signal CI at `e49104de`, including
+Linux sanitizer/leak and unchanged reconnect-memory guards; see the
+[qualification record](NATIVE_CI_RESULTS.md#shared-receive-gain-mute-and-agc-checkpoint).
 
 - Add bounded `receive` operation to the CLI: select discovered radio/interface, start RX1 at one confirmed supported rate, tune, set mode/filter, read spectrum and stop.
 - Preserve G2-specific capability, routing and port handling. Do not treat all P2 boards as interchangeable. Compare control sequences and observable receive behavior with the Windows reference.
@@ -252,6 +256,7 @@ Add versioned preferences, keyboard/focus behavior, DPI/Retina resizing, useful 
 
 ### M7 — VST3 processing and persistence
 
+- Preserve the existing host as an open-source component throughout portability work. Include the platform bridge, scanner, processing host and subsequent M8 editor integration in reproducible source-build instructions; an implementation dependent on an unavailable proprietary host does not satisfy M7/M8.
 - Before extraction, add regression coverage and fix VST-1's multi-class cache collapse, VST-2's permanently signaled event and VST-3's unmatched runtime reference. Include cancellation of hung scans and consistent path-plus-class identity in catalog/removal/state operations.
 - Preserve separate RX/TX chains and out-of-process audio hosting. Define versioned, fixed-width IPC with explicit string encoding, bounded audio handoff and a tested host failure/restart policy. Native Windows and macOS implementations supply process/IPC/module-loading details; Linux remains a separate qualification target.
 - Use known architecture-matched test plugins to validate scan/load, audio, reorder, enable/bypass, sample-rate/block-size changes, parameter enumerate/get/set and state save/restore without editors. The general managed parameter API is new work, not an existing capability to assume.

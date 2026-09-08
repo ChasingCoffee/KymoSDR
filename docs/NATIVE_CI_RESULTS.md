@@ -1,5 +1,58 @@
 # Native cross-platform CI results
 
+## Shared receive gain, mute and AGC checkpoint
+
+Validated runtime source: `e49104decdff79a4773a0818cf15165919279add`, recorded
+2026-09-07 Pacific. The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34178295913)
+passes on Windows x64, macOS arm64 and Linux x64. Linux ASan/UBSan/LeakSanitizer
+passes all eleven native tests, including the new gain/history/rollback test,
+with leak detection enabled and no suppressions.
+
+| Target | Native CTest | Full managed suite | Separate pinned P1 reference | Gain/AGC CLI |
+| --- | --- | --- | --- | --- |
+| Windows x64 | 10/10 | 168 pass / 1 reference skip | POSIX tool not run | 98.754 s, pass |
+| macOS arm64 | 11/11 | 168 pass / 1 reference skip | 1/1 pass | 104.757 s, pass |
+| Linux x64 | 11/11 | 168 pass / 1 reference skip | 1/1 pass | 99.409 s, pass |
+
+The full suite contains 123 core and 46 engine cases. Its reference test is
+enabled only in the separate POSIX step, giving 169 distinct passing cases on
+macOS/Linux. Windows has 168 and still lacks independent POSIX-reference or
+legacy-Windows-application comparison. The
+[managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34178295867)
+passes all three OSes: 134 pass / 35 native-dependent skips, with the optional
+legacy Windows-reference job not dispatched.
+
+Each gain CLI runs ten gain/mute/ceiling checks and three AGC amplitude-step
+traces on each protocol (P1 at 48 kHz, P2 at 192 kHz). All three OSes observe the
+strong-to-weak drop in the 3.2 s audio window, with 300 ms fast recovery and
+1600 ms medium/slow recovery. The early responses differ: approximately
+0.319/0.0275/0.0131 RMS for P1 fast/medium/slow and
+0.314/0.0273/0.0131 for P2. Maximum step peaks are below 0.99 and settled silence
+is exactly zero. These are 100 ms-window observations of this fixture, not
+hardware latency or a promise that slow/medium always finish recovery together.
+The full traces are in the job logs; see the [gain contract](RECEIVE_GAIN.md)
+for analysis boundaries and expected levels.
+
+All gain campaigns enforce zero missing packets, socket/DSP errors, CM input
+overruns and audio drops, and verify safe STOP/rebind. Startup mute, unmute,
+idempotent updates, native settings, maximum gain, default reconnect and
+unmodified RF-spectrum level checks pass. The native test also verifies actual
+AGC history is unchanged by AF/mute-only updates, restores slow hang settings
+after other presets, and exercises all five configured-startup rollback stages.
+
+Existing P1/P2 audio/spectrum/controls, short soak, 100-cycle CM/transport CLIs,
+and Linux six-cycle same-caller / twenty-cycle async / twenty-cycle rotating-
+caller memory regressions pass with unchanged guards. No WDSP algorithm,
+production allocator setting or RF/TX control was changed.
+
+Local macOS arm64 passes all 169 managed tests including the confined reference,
+eleven Release native CTests, and eleven ASan/UBSan CTests (local leak detection
+disabled). A separate `BUILD_TESTING=OFF` native gain campaign passes in
+89.068 s; real Ctrl-C exits 130 after disposing owners. All radio traffic is
+owned IPv4 loopback. No G2/LAN radio, audio device or hardware TX was exercised.
+Hardware RF gain, calibration, speech/noise AGC behavior, click-free playback
+and the broader M4 hardware gate remain unqualified.
+
 ## P1 simulated receive checkpoint
 
 Validated runtime source: `986467f5d29e3261c53a78aefcbca49b13ea1db1`, recorded
