@@ -3,12 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="../Thetis.Audio/Thetis.Audio.csproj" />
-    <InternalsVisibleTo Include="Thetis.Engine.Tests" />
-  </ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="Thetis.Engine.Tests" /></ItemGroup>
 </Project>

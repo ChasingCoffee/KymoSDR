@@ -16,6 +16,7 @@ endif()
 include(CTest)
 find_package(Threads REQUIRED)
 include(cmake/Dependencies.cmake)
+include(cmake/Playback.cmake)
 
 set(WDSP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/Source/wdsp")
 # The existing Windows project remains the authoritative DSP translation-unit

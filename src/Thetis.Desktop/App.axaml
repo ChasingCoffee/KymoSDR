@@ -1,0 +1,24 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Thetis.Desktop.App" RequestedThemeVariant="Dark">
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="avares://Avalonia.Fonts.Inter/Assets#Inter" />
+      <Setter Property="Background" Value="#0C121C" />
+      <Setter Property="Foreground" Value="#E7EEF7" />
+    </Style>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="#8D9FB5" />
+      <Setter Property="Margin" Value="0,0,0,7" />
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="#33D6BE" />
+      <Setter Property="Foreground" Value="#08201D" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="ComboBox"><Setter Property="HorizontalAlignment" Value="Stretch" /></Style>
+    <Style Selector="TextBox"><Setter Property="MinHeight" Value="34" /></Style>
+  </Application.Styles>
+</Application>

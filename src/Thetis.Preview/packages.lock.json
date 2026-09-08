@@ -5,20 +5,10 @@
       "thetis.audio": {
         "type": "Project"
       },
-      "thetis.core": {
-        "type": "Project"
-      },
       "thetis.engine": {
         "type": "Project",
         "dependencies": {
           "Thetis.Audio": "[1.0.0, )"
-        }
-      },
-      "thetis.preview": {
-        "type": "Project",
-        "dependencies": {
-          "Thetis.Engine": "[1.0.0, )",
-          "Thetis.Simulator": "[1.0.0, )"
         }
       },
       "thetis.simulator": {

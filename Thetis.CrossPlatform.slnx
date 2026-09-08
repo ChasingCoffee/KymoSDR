@@ -1,11 +1,15 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Thetis.Audio/Thetis.Audio.csproj" />
+    <Project Path="src/Thetis.Preview/Thetis.Preview.csproj" />
+    <Project Path="src/Thetis.Desktop/Thetis.Desktop.csproj" />
     <Project Path="src/Thetis.Core/Thetis.Core.csproj" />
     <Project Path="src/Thetis.Engine/Thetis.Engine.csproj" />
     <Project Path="src/Thetis.Headless/Thetis.Headless.csproj" />
     <Project Path="src/Thetis.Simulator/Thetis.Simulator.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Thetis.Desktop.Tests/Thetis.Desktop.Tests.csproj" />
     <Project Path="tests/Thetis.Core.Tests/Thetis.Core.Tests.csproj" />
     <Project Path="tests/Thetis.Engine.Tests/Thetis.Engine.Tests.csproj" />
   </Folder>

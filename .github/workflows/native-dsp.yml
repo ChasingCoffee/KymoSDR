@@ -10,7 +10,7 @@ on:
       - 'scripts/build-hpsdrsim.sh'
       - 'Project Files/Source/wdsp/**'
       - 'Project Files/Source/ChannelMaster/**'
-      - 'Project Files/lib/portaudio-19.7.0/include/**'
+      - 'Project Files/lib/portaudio-19.7.0/**'
       - 'Project Files/lib/NR_Algorithms_x64/src/**'
       - 'global.json'
       - 'Thetis.CrossPlatform.slnx'
@@ -24,7 +24,7 @@ on:
       - 'scripts/build-hpsdrsim.sh'
       - 'Project Files/Source/wdsp/**'
       - 'Project Files/Source/ChannelMaster/**'
-      - 'Project Files/lib/portaudio-19.7.0/include/**'
+      - 'Project Files/lib/portaudio-19.7.0/**'
       - 'Project Files/lib/NR_Algorithms_x64/src/**'
       - 'global.json'
       - 'Thetis.CrossPlatform.slnx'
@@ -46,6 +46,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
   DOTNET_NOLOGO: '1'
   TESTINGPLATFORM_TELEMETRY_OPTOUT: '1'
+  AVALONIA_TELEMETRY_OPTOUT: '1'
   THETIS_NATIVE_DIR: '${{ github.workspace }}/artifacts/native/stage/Release'
 
 jobs:
@@ -73,6 +74,9 @@ jobs:
         run: |
           cmake --version
           dotnet --info
+      - name: Linux audio and virtual display dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libfontconfig1 xvfb
       - name: Configure source-built dependencies and WDSP
         run: cmake -S native -B artifacts/native -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
       - name: Build native library and tests
@@ -110,6 +114,8 @@ jobs:
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- p1-receive-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: P1/P2 gain, mute and AGC signal steps (loopback only)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-gain-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: P1/P2 playback, mute and reconnect (no physical audio devices)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- playback-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Short receive endurance and fault campaign (loopback only)
         if: github.event_name != 'workflow_dispatch' || inputs.receive_soak != '30-minutes'
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 10 --reconnects 2
@@ -119,6 +125,23 @@ jobs:
       - name: Managed and native integration regressions
         # All transport fixture traffic is hard-restricted to IPv4 loopback.
         run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger trx --results-directory artifacts/test-results
+      - name: Publish framework-dependent desktop with source-built native libraries
+        shell: pwsh
+        run: |
+          dotnet publish src/Thetis.Desktop -c Release --no-restore -o artifacts/desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force artifacts/desktop/native | Out-Null
+          Get-ChildItem $env:THETIS_NATIVE_DIR | Where-Object { $_.Name -match '^(libthetis_(wdsp|audio)\.(so|dylib)|thetis_(wdsp|audio)\.dll)$' } | Copy-Item -Destination artifacts/desktop/native
+      - name: Published desktop native window (muted simulator, no physical output)
+        if: runner.os != 'Linux'
+        timeout-minutes: 3
+        working-directory: artifacts/desktop
+        run: dotnet Thetis.Desktop.dll --smoke --native-dir "${{ github.workspace }}/artifacts/desktop/native"
+      - name: Published Linux X11 desktop (muted simulator under Xvfb)
+        if: runner.os == 'Linux'
+        timeout-minutes: 3
+        working-directory: artifacts/desktop
+        run: xvfb-run -a dotnet Thetis.Desktop.dll --smoke --native-dir "${{ github.workspace }}/artifacts/desktop/native"
       - name: Loopback transport CLI (100 socket lifecycles, no radio commands)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- transport-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: macOS dependency inspection
@@ -139,6 +162,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - name: Linux audio build dependency
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - name: Configure AddressSanitizer and UndefinedBehaviorSanitizer
         run: cmake -S native -B artifacts/native-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DTHETIS_SANITIZE=ON
       - name: Build instrumented native code

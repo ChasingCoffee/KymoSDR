@@ -2,16 +2,30 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
+      "thetis.audio": {
+        "type": "Project"
+      },
       "thetis.core": {
         "type": "Project"
       },
       "thetis.engine": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Thetis.Audio": "[1.0.0, )"
+        }
       },
       "thetis.headless": {
         "type": "Project",
         "dependencies": {
           "Thetis.Core": "[1.0.0, )",
+          "Thetis.Engine": "[1.0.0, )",
+          "Thetis.Preview": "[1.0.0, )",
+          "Thetis.Simulator": "[1.0.0, )"
+        }
+      },
+      "thetis.preview": {
+        "type": "Project",
+        "dependencies": {
           "Thetis.Engine": "[1.0.0, )",
           "Thetis.Simulator": "[1.0.0, )"
         }

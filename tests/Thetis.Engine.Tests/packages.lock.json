@@ -92,16 +92,30 @@
         "resolved": "4.4.0",
         "contentHash": "8g2KL2LjsXXVywvQb0uWQBANOONVnRf6cTSbON9ar6gIw08oSBY7Z3PJlC8sHbqOVvCr7srrcWiKzb12SUoV2w=="
       },
+      "thetis.audio": {
+        "type": "Project"
+      },
       "thetis.core": {
         "type": "Project"
       },
       "thetis.engine": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Thetis.Audio": "[1.0.0, )"
+        }
       },
       "thetis.headless": {
         "type": "Project",
         "dependencies": {
           "Thetis.Core": "[1.0.0, )",
+          "Thetis.Engine": "[1.0.0, )",
+          "Thetis.Preview": "[1.0.0, )",
+          "Thetis.Simulator": "[1.0.0, )"
+        }
+      },
+      "thetis.preview": {
+        "type": "Project",
+        "dependencies": {
           "Thetis.Engine": "[1.0.0, )",
           "Thetis.Simulator": "[1.0.0, )"
         }

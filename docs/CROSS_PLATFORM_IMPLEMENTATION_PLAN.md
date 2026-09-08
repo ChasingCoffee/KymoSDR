@@ -236,6 +236,13 @@ This is the first major engine-viability gate. If it fails, resolve transport, D
 
 ### M5 — Shared receive-only desktop preview
 
+Initial simulator-only increment (2026-09-07): [receive playback](AUDIO_PLAYBACK.md)
+and an [Avalonia receiver window](DESKTOP_PREVIEW.md) now share an owned P1/P2
+loopback session, with bounded output/render storage, tuning/filter/AGC/gain/mute,
+device selection and automated no-device signal/control/render tests. This
+parallel preparation does not bypass M4: hardware receive, actual speaker/device
+qualification and the full M5 exit criteria below remain open.
+
 Deliver two sub-gates, using the proven engine:
 
 1. **Audio:** reuse PortAudio initially where it fits the native integration, with macOS CoreAudio and a tested Windows backend. Enumerate/select outputs, handle rate conversion, expose underrun/overrun counters, and test device change/loss and mute/gain. Add Linux audio smoke coverage using a documented backend. PortAudio supplies a cross-platform audio API; backend behavior still needs our tests. [PortAudio documentation](https://www.portaudio.com/docs/v19-doxydocs/index.html).

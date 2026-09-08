@@ -1,8 +1,8 @@
 # Initial dependency and toolchain manifest
 
 Recorded 2026-09-04 for discovery and the initial native WDSP milestone.
-This is not a complete manifest for future ChannelMaster, desktop, plugin or
-FreeDV builds. See [native results](M2_NATIVE_RESULTS.md) for qualification limits.
+Extended 2026-09-07 for the simulator desktop/playback preview. This is not a
+complete manifest for future plugin or FreeDV builds. See [native results](M2_NATIVE_RESULTS.md) for qualification limits.
 
 | Component | Pin/source | Scope |
 | --- | --- | --- |
@@ -14,15 +14,22 @@ FreeDV builds. See [native results](M2_NATIVE_RESULTS.md) for qualification limi
 | RNNoise / libspecbleach | Sources under `Project Files/lib/NR_Algorithms_x64/src` at the adopted SDR-VST3 revision | Compiled in place; existing generated binaries ignored. RNNoise selects NEON on arm64; SSE2 where the compiler advertises it, otherwise scalar C. No CPU runtime dispatch or fast-math flags. |
 | Recovered RNNoise headers | Xiph RNNoise `70f1d256acd4b34a572f999a05c87bf00b67730d` | Two missing headers only; [provenance and retained notices](../native/third_party/rnnoise/README.md). |
 | ChannelMaster / PortAudio types | ChannelMaster and `Project Files/lib/portaudio-19.7.0/include` at the adopted baseline | M3a compiles the offline core in place and uses PortAudio headers only; no PortAudio/ASIO device library or native network transport is linked. |
+| Playback PortAudio | Tracked `Project Files/lib/portaudio-19.7.0` source at the adopted baseline | Separate `thetis_audio` statically links CoreAudio / WASAPI / ALSA; PortAudio MIT-style notices retained. Directory says 19.7.0 but vendored CMake declares 19.8: this is repository-pinned content, not a verified stock upstream release. No ASIO SDK/backend. |
+| Avalonia Desktop / Fluent / Inter | NuGet 12.1.2, content hashes in project lock files | MIT framework, platform and drawing assets for `Thetis.Desktop`; no Accelerate UI/tools dependency. |
+| Avalonia Headless | NuGet 12.1.2 | MIT, desktop tests with real Skia rendering and no display/device requirement. |
 | .NET SDK | `global.json`: 10.0.400, `latestPatch`, prereleases disabled | New managed solution. Root SDK selection also applies when using dotnet in the legacy tree. |
 | Microsoft.NET.Test.Sdk | 18.9.0 | Test project only. |
 | MSTest.TestAdapter / TestFramework | 4.4.0 | Test project only. |
 | NuGet transitive dependencies | `tests/Thetis.Core.Tests/packages.lock.json` | Resolved versions and content hashes; use locked restore. |
 | piHPSDR simulator | `f6c17bd4347a2d80cdf6080c3c19dbd915648cdc`, `https://github.com/g0orx/pihpsdr.git` | External optional test tool, not linked or bundled with the application. |
 
-The portable Core, Engine and Headless application projects have no NuGet package
-dependencies. Headless references Engine, but native loading occurs only for the
-explicit DSP or offline session commands. Discovery links the existing discovery and enum files rather
+The portable Core, Audio, Engine, Preview and Headless projects have no direct
+NuGet package dependencies. Desktop and its tests have checked-in package locks,
+including transitive Skia/HarfBuzz/platform assets and Avalonia.BuildServices
+11.3.2 (MIT). Set `AVALONIA_TELEMETRY_OPTOUT=1` for restore/build/test/publish;
+the build-services package documents this opt-out for FOSS projects. Headless
+native loading occurs only for explicit DSP/session/playback commands, not discovery.
+Discovery links the existing discovery and enum files rather
 than copying their implementations. Existing copyright/license headers remain
 intact. Dependency notices remain with the original source and downloaded
 packages; review distribution requirements before shipping broader binaries.

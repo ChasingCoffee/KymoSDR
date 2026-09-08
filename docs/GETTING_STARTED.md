@@ -6,7 +6,10 @@ those names.
 
 This implements discovery, offline DSP checks and simulator-to-native receive
 from the [port plan](CROSS_PLATFORM_IMPLEMENTATION_PLAN.md).
-It does **not** open hardware radio streams, play audio or transmit.
+The discovery harness does **not** open hardware radio streams, play audio or
+transmit. The separate [simulator receiver desktop](DESKTOP_PREVIEW.md) now
+provides rendered spectrum/waterfall and opt-in [playback](AUDIO_PLAYBACK.md).
+Set `AVALONIA_TELEMETRY_OPTOUT=1` when building/restoring the full solution.
 The legacy Windows solution remains separate.
 
 ## Prerequisites and build

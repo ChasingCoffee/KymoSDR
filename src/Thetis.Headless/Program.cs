@@ -9,6 +9,9 @@ Console.CancelKeyPress += (_, args) =>
 
 return args.FirstOrDefault() switch
 {
+    "playback-selftest" => await PlaybackCli.RunAsync(args,Console.Out,Console.Error,cancellation.Token),
+    "audio-devices" => await PlaybackCli.RunAsync(args,Console.Out,Console.Error,cancellation.Token),
+    "playback-listen" => await PlaybackCli.RunAsync(args,Console.Out,Console.Error,cancellation.Token),
     "receive-gain-selftest" => await ReceiveGainCli.RunAsync(args, Console.Out, Console.Error, cancellation.Token),
     "p1-receive-selftest" => await P1ReceiveCli.RunAsync(args, Console.Out, Console.Error, cancellation.Token),
     "dsp-selftest" => DspCli.Run(args, Console.Out, Console.Error, cancellation.Token),

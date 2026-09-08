@@ -16,8 +16,12 @@ Nereid of Thetis.
 - Source-built native WDSP 2.0 baseline with offline signal, ABI, noise-reduction
   and lifecycle checks. Windows x64, macOS arm64 and Linux x64 CI pass, including
   Linux sanitizer/leak checks. See the [validation record](docs/NATIVE_CI_RESULTS.md).
-- The portable harness does **not** stream from hardware, play audio or transmit.
-  The cross-platform UI, rendering and VST3 hosting are still planned work.
+- A new [Avalonia receiver preview](docs/DESKTOP_PREVIEW.md) displays live
+  simulator spectrum/waterfall with tuning, filter, AGC, gain and mute controls.
+  [PortAudio playback](docs/AUDIO_PLAYBACK.md) is opt-in; the default is a muted
+  no-device monitor. Physical playback remains unqualified.
+  The portable app does **not** stream from hardware or transmit. VST3 hosting
+  remains planned work.
 - ChannelMaster's [offline DSP/pipe lifecycle](docs/CHANNELMASTER_OFFLINE.md)
   now has a .NET session owner and 100-cycle tests passing on all three OSes.
   A separate [RNet/socket loopback probe](docs/TRANSPORT_LOOPBACK.md) now tests
@@ -49,6 +53,8 @@ The initial solution, project namespaces and native library names still use
 
 - [Getting started: managed harness](docs/GETTING_STARTED.md)
 - [Building and testing native WDSP](docs/NATIVE_DSP.md)
+- [Run the simulator receiver desktop](docs/DESKTOP_PREVIEW.md)
+- [Receive playback and output-device checks](docs/AUDIO_PLAYBACK.md)
 - [Implementation plan](docs/CROSS_PLATFORM_IMPLEMENTATION_PLAN.md)
 - [Native DSP results](docs/M2_NATIVE_RESULTS.md)
 - [Dependency provenance and licenses](docs/DEPENDENCIES.md)
