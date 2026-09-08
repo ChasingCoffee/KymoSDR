@@ -113,7 +113,14 @@ remain unqualified. The broader M4 G2 hardware gate also remains open.
 
 ## Validation record
 
-Local macOS arm64: fourteen deterministic P1 signal checks pass, independent
+Runtime `986467f5` passes [Windows/macOS/Linux native CI](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34175140277),
+including fourteen P1 signal checks per OS, the native/managed fault and lifecycle
+tests, independent pinned-reference interoperability on macOS/Linux, and ten
+Linux ASan/UBSan/leak tests. Windows runs nine native CTests; macOS/Linux run ten.
+The full managed suite has 155 passes and one explicit reference skip per OS;
+macOS/Linux run that reference successfully in a separate step.
+
+Local macOS arm64: all 156 managed tests and fourteen deterministic P1 signal checks pass, independent
 pinned-reference interoperability passes, and all ten native CTests pass both
 normally and under ASan/UBSan (macOS leak detection disabled). Hosted results
-and the final full-suite counts are recorded in [native CI results](NATIVE_CI_RESULTS.md).
+and production-build/Ctrl-C checks are recorded in [native CI results](NATIVE_CI_RESULTS.md).

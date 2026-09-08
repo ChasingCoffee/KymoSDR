@@ -209,6 +209,10 @@ tones cannot validate RF retuning. Higher P1 rates, multi-RX, Windows-reference
 comparison and real P1 hardware remain separate gates. No hardware or TX tests
 are authorized by this simulator checkpoint.
 
+This P1 checkpoint passes three-OS native/managed/CLI CI at `986467f5`, with
+independent pinned-reference tests on macOS/Linux and Linux sanitizer/leak tests;
+see [counts, measurements and exclusions](NATIVE_CI_RESULTS.md#p1-simulated-receive-checkpoint).
+
 - Add bounded `receive` operation to the CLI: select discovered radio/interface, start RX1 at one confirmed supported rate, tune, set mode/filter, read spectrum and stop.
 - Preserve G2-specific capability, routing and port handling. Do not treat all P2 boards as interchangeable. Compare control sequences and observable receive behavior with the Windows reference.
 - Choose the existing RX1 analyzer or additional-analyzer API after validating IDs, configuration and ownership. Expose renderer-independent frames with sequence, time, frequency/rate, scaling and calibration status.

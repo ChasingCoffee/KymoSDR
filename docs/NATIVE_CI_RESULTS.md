@@ -2,6 +2,34 @@
 
 ## P1 simulated receive checkpoint
 
+Validated runtime source: `986467f5d29e3261c53a78aefcbca49b13ea1db1`, recorded
+2026-09-07. The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34175140277)
+passes on Windows x64, macOS arm64 and Linux x64, including the Linux
+ASan/UBSan/LeakSanitizer job (ten tests, no suppressions).
+
+| Target | Native CTest | Full managed suite | Separate pinned reference | P1 14-check CLI |
+| --- | --- | --- | --- | --- |
+| Windows x64 | 9/9 | 155 pass / 1 reference skip | POSIX tool not run | 19.574 s, pass |
+| macOS arm64 | 10/10 | 155 pass / 1 reference skip | 1/1 pass | 19.139 s, pass |
+| Linux x64 | 10/10 | 155 pass / 1 reference skip | 1/1 pass | 19.231 s, pass |
+
+The reference environment is enabled only in its dedicated macOS/Linux step;
+the full suite explicitly skips that test without it. This gives 156 distinct
+passing managed tests on those two OSes, not 156 passes in the full-suite step.
+Windows still lacks independent POSIX-reference/legacy-Windows-application comparison.
+Wanted RMS ranges are 0.176734–0.176777 (Windows), 0.176708–0.176808 (macOS), and
+0.176734–0.176847 (Linux); maximum rejected RMS is below 1.135e-8 on each.
+The P1 signal campaigns have zero missing/late/malformed/foreign packets, socket
+or DSP errors, CM overruns, audio drops, unsafe requests and watchdog stops.
+Both STOPs and reconnects pass. Injected-fault regressions are separate tests.
+
+Existing P2 audio/spectrum/controls, short soak, 100-cycle CM/transport CLIs and
+Linux six-cycle same-caller / twenty-cycle async / twenty-cycle rotating-caller
+memory regressions also pass with unchanged budgets. The
+[managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34175140270)
+passes all three OSes with 125 passes / 31 native-dependent skips; the opt-in
+legacy Windows-reference build remains skipped.
+
 The [P1 receive path](P1_RECEIVE_INTEGRATION.md) shares the P2 native/managed
 owner. Local macOS arm64 validation on 2026-09-07 passes all 156 managed tests
 (115 core / 41 engine, including independent pinned `hpsdrsim` interoperability)
@@ -11,7 +39,10 @@ Fourteen P1 USB/LSB/filter/retuning audio checks and four signed RF spectrum
 checks pass. The independent reference yields 796.972 Hz LSB audio at
 0.000177726874 RMS, both expected spectral lines, RX tune receipt, STOP and
 native-port rebind. Hardware, higher-rate/multi-RX P1 and TX remain unqualified.
-Hosted Windows/macOS/Linux results will be recorded after this checkpoint runs.
+The local production build (`BUILD_TESTING=OFF`) passes the P1 campaign in
+17.550 seconds, wanted RMS 0.176734–0.176812 and rejected RMS below 1.135e-8.
+A separate real Ctrl-C check exits 130 after disposing owners. All traffic in
+this checkpoint is owned IPv4 loopback; no physical G2 or hardware TX was used.
 
 ## USB/LSB receive mode and filter controls
 
