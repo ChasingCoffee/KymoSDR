@@ -2,13 +2,29 @@
 #ifndef THETIS_CM_P2_RECEIVE_H
 #define THETIS_CM_P2_RECEIVE_H
 #include "cm_session.h"
-/* Single-DDC loopback RX -> CM RX0 -> WDSP USB audio tap. No TX/audio device.
+/* Single-DDC loopback RX -> CM RX0 -> WDSP SSB audio tap. No TX/audio device.
  * Checkpoints: 1 CM core, 2 RNet, 3 socket, 4 stop event, 5 receive worker.
  * Close joins the producer before CM consumers. Calls reject reentrancy. */
 CM_API int ThetisP2ReceiveOpen(int abi, const char *remote, int base, int ddc, int rate,
     int frequency, cm_checkpoint checkpoint, void *context);
 CM_API int ThetisP2ReceiveClose(void);
 CM_API int ThetisP2ReceiveTune(int frequency);
+/* Controls ABI 1: mode 0=LSB, 1=USB. Audio-frequency edges are positive:
+ * 0 <= low < high <= 12000 Hz, width >=100 Hz. USB -> [low,high];
+ * LSB -> [-high,-low] in the RF/spectrum convention. The bridge translates
+ * to WDSP's opposite FIR frequency convention internally.
+ * No AGC/gain/TX/radio-routing controls are exposed.
+ * The old open entry point retains USB 300..3000 defaults. */
+CM_API int ThetisP2ReceiveControlsAbi(void);
+CM_API int ThetisP2ReceiveOpenWithControls(int abi, const char *remote, int base, int ddc, int rate,
+    int frequency, int mode, int low, int high, cm_checkpoint checkpoint, void *context);
+CM_API int ThetisP2ReceiveSetControls(int abi, int mode, int low, int high);
+/* 8 int64: ABI, open, mode, low, high, signed low, signed high, generation.
+ * Generation starts at 1; identical updates are no-ops, rejected updates do not
+ * change state. It is NOT a sample-accurate audio transition marker. Updates
+ * discard queued tap audio; WDSP history still needs settling. Pre-demodulation
+ * spectrum and its tuning generation are not changed by these controls. */
+CM_API int ThetisP2ReceiveGetControls(int64_t *values, int capacity);
 /* 24 int64: ABI, open, local port, base, DDC, rate, socket workers,
  * IQ packets, IQ samples, missing, late/duplicate, malformed, foreign,
  * mic discarded, status, socket errors, commands sent, CM overruns,

@@ -28,6 +28,9 @@ extern int test_peer_send(cm_socket, int, const void *, int);
 static int baseline;
 static void closed(void)
 {
+    int64_t controls[9]; controls[8] = 7654321;
+    CHECK(ThetisP2ReceiveGetControls(controls, 8) == 8 && controls[0] == 1 && controls[8] == 7654321);
+    for (int i = 1; i < 8; ++i) CHECK(controls[i] == 0);
     int64_t state[25]; state[24] = 1234567;
     int32_t core[16], transport[16];
     CHECK(ThetisP2ReceiveGetState(state, 24) == 24 && state[24] == 1234567);
@@ -42,16 +45,17 @@ static int checkpoint(int stage, void *context)
     int target = *(int *)context;
     CHECK(ThetisP2ReceiveClose() == -2);
     CHECK(ThetisCmClose() == -2);
+    CHECK(ThetisP2ReceiveSetControls(1, 0, 300, 3000) == -2);
     return stage == abs(target) ? (target < 0 ? -1 : 1) : 0;
 }
 static void put32(unsigned char *p, uint32_t n)
 { p[0] = (unsigned char)(n >> 24); p[1] = (unsigned char)(n >> 16); p[2] = (unsigned char)(n >> 8); p[3] = (unsigned char)n; }
-static void tone(unsigned char *p, uint32_t sequence, int *sample)
+static void tone_at(unsigned char *p, uint32_t sequence, int *sample, int hz)
 {
     memset(p, 0, 1444); put32(p, sequence); p[13] = 24; p[15] = 238;
     for (int i = 0; i < 238; ++i, ++*sample)
     {
-        double phase = 6.283185307179586 * 1000 * *sample / 48000;
+        double phase = 6.283185307179586 * hz * *sample / 48000;
         for (int component = 0; component < 2; ++component)
         {
             int32_t n = (int32_t)(0.1 * 8388608 * (component ? sin(phase) : cos(phase)));
@@ -61,6 +65,7 @@ static void tone(unsigned char *p, uint32_t sequence, int *sample)
         }
     }
 }
+static void tone(unsigned char *p, uint32_t sequence, int *sample) { tone_at(p, sequence, sample, 1000); }
 static int high_controls(cm_socket socket)
 {
     unsigned char p[1444]; int saw_stop = 0, length;
@@ -73,9 +78,63 @@ static int high_controls(cm_socket socket)
     }
     return saw_stop;
 }
+static void controls_signals(cm_socket iq_peer, cm_socket control_peer, int port, int *sample)
+{
+    const int settings[][5] = {{1,300,3000,1000,1}, {0,300,3000,1000,0}, {0,300,3000,-1000,1},
+        {0,300,700,-1000,0}, {0,1500,3000,-1000,0}, {1,700,1400,1000,1}};
+    unsigned char packet[1444]; double audio[4096]; uint32_t sequence = 327;
+    int64_t generation = 1;
+    for (int phase = 0; phase < 6; ++phase)
+    {
+        const int *s = settings[phase]; int64_t controls[9]; controls[8] = 987654;
+        CHECK(ThetisP2ReceiveSetControls(1, s[0], s[1], s[2]) == 0);
+        if (phase != 0 && phase != 2) ++generation;
+        CHECK(ThetisP2ReceiveGetControls(controls, 8) == 8 && controls[8] == 987654);
+        CHECK(controls[0] == 1 && controls[1] == 1 && controls[2] == s[0] && controls[3] == s[1] && controls[4] == s[2]);
+        CHECK(controls[5] == (s[0] ? s[1] : -s[2]) && controls[6] == (s[0] ? s[2] : -s[1]) && controls[7] == generation);
+        CHECK(ThetisP2ReceiveSetControls(1, 2, 300, 3000) == -1);
+        CHECK(ThetisP2ReceiveSetControls(1, s[0], 3000, 300) == -1);
+        CHECK(ThetisP2ReceiveGetControls(controls, 8) == 8 && controls[7] == generation);
+        int skipped = 0, frames = 0, crossings = 0; double energy = 0, previous = 0;
+        for (int block = 0; block < 300; ++block)
+        {
+            tone_at(packet, sequence++, sample, s[3]);
+            CHECK(test_peer_send(iq_peer, port, packet, 1444) == 1444);
+            Sleep(5); CHECK(!high_controls(control_peer));
+            int count = ThetisP2ReceiveReadAudio(audio, 2048); CHECK(count >= 0);
+            for (int i = 0; i < count; ++i)
+            {
+                CHECK(isfinite(audio[2*i]) && isfinite(audio[2*i+1]));
+                if (skipped++ < 48000) continue;
+                double value = audio[2*i];
+                if (frames && previous <= 0 && value > 0) ++crossings;
+                previous = value; energy += value * value; ++frames;
+            }
+        }
+        CHECK(frames > 16000);
+        double rms = sqrt(energy / frames), hz = crossings * 48000.0 / (frames - 1);
+        printf("Controls: mode=%d edges=%d..%d input=%d RMS=%g pass=%d\n", s[0], s[1], s[2], s[3], rms, s[4]);
+        CHECK(s[4] ? fabs(rms - 0.1 / sqrt(2)) < 0.002 && fabs(hz - 1000) < 10 : rms < 0.000224);
+        int64_t state[24]; CHECK(ThetisP2ReceiveGetState(state, 24) == 24);
+        CHECK(state[15] == 0 && state[17] == 0 && state[19] == 0 && state[21] == 0 && state[9] == 1);
+    }
+}
 int main(void)
 {
     baseline = test_process_threads(); CHECK(baseline > 0);
+    CHECK(ThetisP2ReceiveControlsAbi() == 1);
+    CHECK(ThetisP2ReceiveGetControls(NULL, 8) == -1);
+    int64_t invalid_controls[8];
+    CHECK(ThetisP2ReceiveGetControls(invalid_controls, 7) == -1);
+    CHECK(ThetisP2ReceiveSetControls(1, 1, 300, 3000) == -3);
+    CHECK(ThetisP2ReceiveSetControls(2, 1, 300, 3000) == -1);
+    const int invalid[][3] = {{2,300,3000}, {1,-1,3000}, {1,300,12001}, {1,300,399}, {0,2147483647,3000}, {1,0,-2147483647}};
+    for (int i = 0; i < 6; ++i)
+    {
+        CHECK(ThetisP2ReceiveSetControls(1, invalid[i][0], invalid[i][1], invalid[i][2]) == -1);
+        CHECK(ThetisP2ReceiveOpenWithControls(1, "127.0.0.1", 51024, 2, 192000, 14199000,
+            invalid[i][0], invalid[i][1], invalid[i][2], NULL, NULL) == -1);
+    }
     CHECK(ThetisP2ReceiveOpen(2, "127.0.0.1", 51024, 2, 192000, 14199000, NULL, NULL) == -1);
     CHECK(ThetisP2ReceiveOpen(1, "192.0.2.1", 51024, 2, 192000, 14199000, NULL, NULL) == -1);
     CHECK(ThetisP2ReceiveOpen(1, "0.0.0.0", 51024, 2, 192000, 14199000, NULL, NULL) == -1);
@@ -109,7 +168,8 @@ int main(void)
     for (int target = -5; target <= 5; ++target)
     {
         if (!target) continue;
-        CHECK(ThetisP2ReceiveOpen(1, "127.0.0.1", 51024, 2, 192000, 14199000, checkpoint, &target) == (target < 0 ? -5 : -4));
+        CHECK(ThetisP2ReceiveOpenWithControls(1, "127.0.0.1", 51024, 2, 192000, 14201000, 0, 500, 2500,
+            checkpoint, &target) == (target < 0 ? -5 : -4));
         closed();
     }
     for (int fault = 4; fault <= 5; ++fault)
@@ -208,6 +268,7 @@ int main(void)
         CHECK(spectrum_frames >= 5 && coalesced > 0);
         printf("Spectrum: %d pulls, sequence=%lld coalesced=%lld, signed frequency/level and bounded ABI passed\n",
             spectrum_frames, (long long)last_spectrum, (long long)coalesced);
+        if (cycle == 0) controls_signals(peer[4], peer[3], port, &sample);
         CHECK(ThetisP2ReceiveReadAudio(audio, 16385) == -1);
         CHECK(ThetisP2ReceiveTune(14198500) == 0);
         spectrum[0] = 12345; metadata[0] = 1234567;

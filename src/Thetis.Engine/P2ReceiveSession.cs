@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace Thetis.Engine;
 
 public sealed record P2ReceiveOptions(int BasePort, int Ddc = 2, int InputRate = 192000,
-    int FrequencyHz = 14_199_000, string Address = "127.0.0.1")
+    int FrequencyHz = 14_199_000, string Address = "127.0.0.1", ReceiveDemodulation? Demodulation = null)
 {
     internal void Validate()
     {
@@ -13,6 +13,7 @@ public sealed record P2ReceiveOptions(int BasePort, int Ddc = 2, int InputRate =
         if (Ddc is < 0 or > 9) throw new ArgumentOutOfRangeException(nameof(Ddc));
         if (InputRate is not (48000 or 96000 or 192000 or 384000)) throw new ArgumentOutOfRangeException(nameof(InputRate));
         ValidateFrequency(FrequencyHz);
+        Demodulation?.Validate();
         if (!IPAddress.TryParse(Address, out var ip) || ip.AddressFamily != AddressFamily.InterNetwork ||
             !IPAddress.IsLoopback(ip) || ip.ToString() != Address)
             throw new ArgumentException("P2 integration currently accepts canonical IPv4 loopback addresses only.");
@@ -26,7 +27,7 @@ public sealed record P2ReceiveState(int LocalPort, int BasePort, int Ddc, int In
     long ForeignPackets, long MicPacketsDiscarded, long StatusPackets, long SocketErrors, long CommandsSent,
     long InputOverruns, long AudioQueued, long AudioDropped, long AudioProduced, long DspErrors);
 
-/// <summary>Loopback P2 -> native router/CM buffer -> WDSP spectrum and USB audio. No hardware or TX operation.</summary>
+/// <summary>Loopback P2 -> native router/CM buffer -> WDSP spectrum and SSB audio. No hardware or TX operation.</summary>
 public sealed class P2ReceiveSession : IDisposable
 {
     private static bool active;
@@ -54,6 +55,9 @@ public sealed class P2ReceiveSession : IDisposable
             OfflineRadioSession.RequireIdle(); token.ThrowIfCancellationRequested(); ReadNativeState();
             if (P2ReceiveNative.ThetisP2ReceiveSpectrumAbi() != 1)
                 throw new NotSupportedException("Native receive spectrum ABI is incompatible.");
+            if (P2ReceiveNative.ThetisP2ReceiveControlsAbi() != 1)
+                throw new NotSupportedException("Native receive controls ABI is incompatible.");
+            var controls = options.Demodulation ?? new();
             var session = new P2ReceiveSession();
             Exception? callbackError = null;
             ChannelMasterNative.Checkpoint callback = (stage, _) =>
@@ -63,8 +67,8 @@ public sealed class P2ReceiveSession : IDisposable
             };
             NativeMethods.ThetisWdspSetPlanningTimeLimit(0);
             int rc;
-            try { rc = P2ReceiveNative.ThetisP2ReceiveOpen(1, options.Address, options.BasePort, options.Ddc,
-                options.InputRate, options.FrequencyHz, callback, 0); }
+            try { rc = P2ReceiveNative.ThetisP2ReceiveOpenWithControls(1, options.Address, options.BasePort, options.Ddc,
+                options.InputRate, options.FrequencyHz, (int)controls.Mode, controls.LowCutHz, controls.HighCutHz, callback, 0); }
             finally { GC.KeepAlive(callback); NativeMethods.ThetisWdspSetPlanningTimeLimit(-1); }
             if (rc != 0)
             {
@@ -99,6 +103,42 @@ public sealed class P2ReceiveSession : IDisposable
             CheckOpen(); int rc = P2ReceiveNative.ThetisP2ReceiveTune(frequencyHz); GC.KeepAlive(handle);
             if (rc != 0) throw new InvalidOperationException($"Native P2 tuning failed ({rc}).");
         }
+    }
+    public ReceiveDemodulationState Demodulation
+    {
+        get
+        {
+            lock (DspRuntime.Gate)
+            {
+                CheckOpen(); long[] values = new long[8];
+                int count = P2ReceiveNative.ThetisP2ReceiveGetControls(values, values.Length); GC.KeepAlive(handle);
+                if (count != 8 || values[0] != 1 || values[1] != 1 || values[2] is not (0 or 1) || values[7] < 1)
+                    throw new NotSupportedException("Native receive control state is incompatible.");
+                var settings = new ReceiveDemodulation((ReceiveMode)values[2], checked((int)values[3]), checked((int)values[4]));
+                settings.Validate();
+                if (values[5] != settings.SignedLowHz || values[6] != settings.SignedHighHz)
+                    throw new NotSupportedException("Native receive passband mapping is incompatible.");
+                return new(settings, values[7]);
+            }
+        }
+    }
+    /// <summary>Applies mode and filter together, clearing queued tap audio. Allow DSP history
+    /// to settle before measuring; no click-free or sample-accurate transition is promised.</summary>
+    public void ConfigureDemodulation(ReceiveDemodulation settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings); settings.Validate();
+        // FIR updates allocate native memory: keep them on the lifecycle thread too.
+        NativeLifecycle.Invoke(() =>
+        {
+            lock (DspRuntime.Gate)
+            {
+                CheckOpen();
+                int rc = P2ReceiveNative.ThetisP2ReceiveSetControls(1, (int)settings.Mode, settings.LowCutHz, settings.HighCutHz);
+                GC.KeepAlive(handle);
+                if (rc != 0) throw new InvalidOperationException($"Native receive control update failed ({rc}).");
+                return 0;
+            }
+        });
     }
     /// <summary>Returns frames copied into an interleaved L/R buffer (48 kHz), without waiting.</summary>
     public int ReadAudio(double[] interleaved)
@@ -160,8 +200,14 @@ public sealed class P2ReceiveSession : IDisposable
 internal static class P2ReceiveNative
 {
     [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-    internal static extern int ThetisP2ReceiveOpen(int abi, [MarshalAs(UnmanagedType.LPUTF8Str)] string remote,
-        int basePort, int ddc, int rate, int frequency, ChannelMasterNative.Checkpoint checkpoint, nint context);
+    internal static extern int ThetisP2ReceiveOpenWithControls(int abi, [MarshalAs(UnmanagedType.LPUTF8Str)] string remote,
+        int basePort, int ddc, int rate, int frequency, int mode, int low, int high, ChannelMasterNative.Checkpoint checkpoint, nint context);
+    [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int ThetisP2ReceiveControlsAbi();
+    [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int ThetisP2ReceiveSetControls(int abi, int mode, int low, int high);
+    [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int ThetisP2ReceiveGetControls([Out] long[] values, int capacity);
     [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     internal static extern int ThetisP2ReceiveClose();
     [DllImport(NativeMethods.Library, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]

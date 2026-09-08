@@ -13,6 +13,7 @@ return args.FirstOrDefault() switch
     "session-selftest" => SessionCli.Run(args, Console.Out, Console.Error, cancellation.Token),
     "transport-selftest" => TransportCli.Run(args, Console.Out, Console.Error, cancellation.Token),
     "receive-selftest" => await ReceiveCli.RunAsync(args, Console.Out, Console.Error, cancellation.Token),
+    "receive-controls-selftest" => await ReceiveControlsCli.RunAsync(args, Console.Out, Console.Error, cancellation.Token),
     "receive-soak" => await ReceiveSoakCli.RunAsync(args, Console.Out, Console.Error, cancellation.Token),
     _ => DiscoveryCli.Run(args, Console.Out, Console.Error, new DiscoveryBackend(), cancellation.Token)
 };

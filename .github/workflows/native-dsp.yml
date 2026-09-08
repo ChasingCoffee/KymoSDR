@@ -95,6 +95,8 @@ jobs:
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- session-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Simulator to native P2, ChannelMaster and WDSP audio/spectrum
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: Receive mode and filter switching (loopback only)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-controls-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Short receive endurance and fault campaign (loopback only)
         if: github.event_name != 'workflow_dispatch' || inputs.receive_soak != '30-minutes'
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 10 --reconnects 2

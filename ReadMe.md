@@ -26,6 +26,8 @@ Nereid of Thetis.
   renderer-independent spectrum frames, with retuning and packet/buffer diagnostics.
   A [receive endurance campaign](docs/RECEIVE_SOAK.md) adds sustained runs,
   resource measurements and isolated fault/reconnect checks without hardware.
+  [USB/LSB receive controls](docs/RECEIVE_CONTROLS.md) add adjustable filters and
+  signal-checked switching/reconnects through the simulator-backed engine.
   This is not yet a usable hardware receiver.
 - The inherited Windows application remains in the tree as the source/reference
   implementation. Its features are not a claim of portable feature parity.

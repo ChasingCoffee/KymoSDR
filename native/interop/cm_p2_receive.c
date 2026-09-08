@@ -26,6 +26,8 @@ static float spectrum_pixels[CM_SPECTRUM_PIXELS];
 static int64_t spectrum_meta[12], spectrum_sequence, spectrum_generation, spectrum_coalesced;
 static int spectrum_count, spectrum_skip, spectrum_ready;
 static uint64_t spectrum_resume_ms;
+static int rx_mode, filter_low, filter_high;
+static int64_t controls_generation;
 #ifdef THETIS_TESTING
 static int fault;
 #define FAIL_AT(s) (fault == (s))
@@ -33,6 +35,7 @@ static int fault;
 #define FAIL_AT(s) 0
 #endif
 extern void LoadRouterAll(void *, int, int, int, int, int *, int *, int *);
+extern void RXASetPassband(int, double, double);
 static int enter(void) { return !InterlockedBitTestAndSet(&command_busy, 0); }
 static void leave(void) { InterlockedBitTestAndReset(&command_busy, 0); }
 static uint64_t now_ms(void)
@@ -187,13 +190,37 @@ static void close_owned(void)
     memset(state, 0, sizeof(state)); audio_count = audio_read = audio_write = 0;
     spectrum_ready = spectrum_count = spectrum_skip = 0;
 }
+static int valid_controls(int mode, int low, int high)
+{ return (mode == 0 || mode == 1) && low >= 0 && high <= 12000 && high > low && high - low >= 100; }
+static void apply_controls(int mode, int low, int high)
+{
+    // Caller owns the lifecycle command gate. CM -> DSP -> state is the same
+    // lock order as the receive consumer; never wait for DSP while holding state.
+    EnterCriticalSection(&pcm->update[0]);
+    EnterCriticalSection(&ch[0].csDSP);
+    SetRXAMode(0, mode);
+    // Our P2/spectrum contract is I+jQ with exp(+j*w*t) at positive RF offset.
+    // WDSP fir_bandpass builds exp(-j*w*t) coefficients (fir.c), so negate and
+    // reverse RF edges at this boundary. Never silently mirror the spectrum.
+    RXASetPassband(0, mode == 1 ? -high : low, mode == 1 ? -low : high);
+    LeaveCriticalSection(&ch[0].csDSP);
+    EnterCriticalSection(&state_lock);
+    audio_read = audio_write = audio_count = 0; // explicit transition discard, not an overrun
+    LeaveCriticalSection(&state_lock);
+    LeaveCriticalSection(&pcm->update[0]);
+    rx_mode = mode; filter_low = low; filter_high = high;
+}
+CM_API int ThetisP2ReceiveControlsAbi(void) { return 1; }
 CM_API int ThetisP2ReceiveOpen(int abi, const char *remote, int base, int ddc, int rate,
     int frequency, cm_checkpoint checkpoint, void *context)
+{ return ThetisP2ReceiveOpenWithControls(abi, remote, base, ddc, rate, frequency, 1, 300, 3000, checkpoint, context); }
+CM_API int ThetisP2ReceiveOpenWithControls(int abi, const char *remote, int base, int ddc, int rate,
+    int frequency, int mode, int low, int high, cm_checkpoint checkpoint, void *context)
 {
     uint32_t address;
     if (abi != 1 || cm_socket_address(remote, &address, 1) || base < 1024 || base > 65515 ||
         ddc < 0 || ddc > 9 || (rate != 48000 && rate != 96000 && rate != 192000 && rate != 384000) ||
-        frequency < 0 || frequency > 61440000) return -1;
+        frequency < 0 || frequency > 61440000 || !valid_controls(mode, low, high)) return -1;
     if (!enter()) return -2;
     if (opened || core_owned || prn || listenSock != CM_INVALID_SOCKET) { leave(); return -2; }
     int result = -3;
@@ -202,6 +229,7 @@ CM_API int ThetisP2ReceiveOpen(int abi, const char *remote, int base, int ddc, i
     spectrum_ready = spectrum_count = spectrum_skip = 0;
     spectrum_sequence = spectrum_coalesced = 0; spectrum_generation = 1;
     spectrum_resume_ms = UINT64_MAX;
+    controls_generation = 1;
     InitializeCriticalSectionAndSpinCount(&state_lock, 2500); lock_owned = 1;
     base_port = base; selected_ddc = ddc; sample_rate = rate; frequency_hz = (uint32_t)frequency; high_sequence = 0;
     for (int stage = 1; stage <= 5; ++stage)
@@ -216,7 +244,7 @@ CM_API int ThetisP2ReceiveOpen(int abi, const char *remote, int base, int ddc, i
             for (int i = 0; i < 10; ++i) streams[i] = 1; // no divide-by-zero for inactive DDC routes
             functions[ddc] = 1; // selected DDC -> Inbound(CM RX0)
             LoadRouterAll(NULL, 0, 10, 1, 1, streams, functions, calls);
-            SetRXAMode(0, 1); SetRXABandpassFreqs(0, 300, 3000);
+            apply_controls(mode, low, high);
             SetRXAAGCMode(0, 0); SetRXAAGCFixed(0, 0);
             SetRXAPanelGain1(0, 1); // deterministic unity gain, not the legacy default x4
             SetChannelState(0, 1, 0); // RX0/sub0 only; TX and all other channels remain off
@@ -257,6 +285,29 @@ CM_API int ThetisP2ReceiveTune(int frequency)
     spectrum_resume_ms = UINT64_MAX;
     LeaveCriticalSection(&state_lock);
     leave(); return 0;
+}
+CM_API int ThetisP2ReceiveSetControls(int abi, int mode, int low, int high)
+{
+    if (abi != 1 || !valid_controls(mode, low, high)) return -1;
+    if (!enter()) return -2;
+    if (!opened || WaitForSingleObject(stop_event, 0) != WAIT_TIMEOUT) { leave(); return -3; }
+    if (mode != rx_mode || low != filter_low || high != filter_high)
+    { apply_controls(mode, low, high); ++controls_generation; }
+    leave(); return 0;
+}
+CM_API int ThetisP2ReceiveGetControls(int64_t *values, int capacity)
+{
+    if (!values || capacity < 8) return -1;
+    if (!enter()) return -2;
+    int64_t result[8] = {1, 0, 0, 0, 0, 0, 0, 0};
+    if (opened)
+    {
+        result[1] = 1; result[2] = rx_mode; result[3] = filter_low; result[4] = filter_high;
+        result[5] = rx_mode == 1 ? filter_low : -filter_high;
+        result[6] = rx_mode == 1 ? filter_high : -filter_low;
+        result[7] = controls_generation;
+    }
+    memcpy(values, result, sizeof(result)); leave(); return 8;
 }
 CM_API int ThetisP2ReceiveGetState(int64_t *values, int capacity)
 {

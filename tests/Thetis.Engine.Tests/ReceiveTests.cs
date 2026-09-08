@@ -210,6 +210,9 @@ public sealed class ReceiveTests
         await simulator.DisposeAsync();
         await WaitUntil(() => session.State.SocketErrors > 0, 6000);
         Assert.ThrowsExactly<InvalidOperationException>(() => session.Tune(14_198_500));
+        var controls = session.Demodulation;
+        Assert.ThrowsExactly<InvalidOperationException>(() => session.ConfigureDemodulation(new(ReceiveMode.Lsb)));
+        Assert.AreEqual(controls, session.Demodulation);
         long commands = session.State.CommandsSent;
         await Task.Delay(250);
         Assert.AreEqual(commands, session.State.CommandsSent);

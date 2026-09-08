@@ -28,6 +28,10 @@ creates its own simulator on an available loopback port layout. Do not start a
 separate simulator or supply a radio address. There are no NIC, discovery, TX,
 mode, rate or audio-device CLI options at this checkpoint.
 
+The engine also exposes [USB/LSB and adjustable receive filters](RECEIVE_CONTROLS.md),
+with a separate `receive-controls-selftest` campaign. The command above retains
+its fixed USB/tuning fixture; neither command accepts hardware addresses or TX.
+
 The test configures DDC2 at 192 kHz, USB with a 300–3000 Hz passband, fixed unity
 AGC gain and unity panel gain. A 14.200 MHz synthetic RF tone first produces
 approximately 1 kHz audio at 14.199 MHz tuning, then 1.5 kHz at 14.1985 MHz.
