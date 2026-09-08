@@ -131,6 +131,8 @@ public sealed class PlaybackTests
         using var output = PlaybackOutput.OpenClockedNull(NativeDirectory());
         await using var pump = new ReceivePlayback(rx,output);
         using var stopping = new CancellationTokenSource();
+        long maximumCallbackDelayUs = 0;
+        Queue<string> history = new();
         // Independent +1000 ppm device clock, never paced from queue occupancy.
         // Its callback runs on a separate thread; no real audio device is opened.
         var renderer = Task.Factory.StartNew(() =>
@@ -139,16 +141,25 @@ public sealed class PlaybackTests
             while (!stopping.IsCancellationRequested)
             {
                 if (clock.Elapsed.TotalSeconds >= blocks*.01/1.001)
-                { output.RenderNull(samples,480); ++blocks; }
+                {
+                    long late = (long)((clock.Elapsed.TotalSeconds-blocks*.01/1.001)*1e6);
+                    Volatile.Write(ref maximumCallbackDelayUs,Math.Max(maximumCallbackDelayUs,late));
+                    output.RenderNull(samples,480); ++blocks;
+                }
                 else stopping.Token.WaitHandle.WaitOne(1);
             }
         },CancellationToken.None,TaskCreationOptions.LongRunning,TaskScheduler.Default);
         try
         {
-            var elapsed = Stopwatch.StartNew(); bool unmuted = false, flushed = false, retuned = false;
+            var elapsed = Stopwatch.StartNew(); bool unmuted = false, flushed = false, retuned = false; double nextHistory = 0;
             while (elapsed.Elapsed.TotalSeconds < 60)
             {
                 Assert.IsNull(pump.Error); var state = output.State;
+                if (elapsed.Elapsed.TotalSeconds >= nextHistory || state.Underruns != 0 || state.Rejected != 0)
+                {
+                    history.Enqueue($"{elapsed.Elapsed.TotalSeconds:F3}s queue={state.Queued} ppm={state.CorrectionPpm:F3} submitted={state.Submitted} rendered={state.Rendered} underruns={state.Underruns} rejected={state.Rejected} produced={rx.State.AudioProduced} simulatorResyncs={peer.State.PacingResyncs} maxCallbackDelayUs={Volatile.Read(ref maximumCallbackDelayUs)}");
+                    if (history.Count > 12) history.Dequeue(); nextHistory = elapsed.Elapsed.TotalSeconds+1;
+                }
                 Assert.IsTrue(state.Active && !state.Physical && state.ClockTracking);
                 Assert.IsTrue(Math.Abs(state.CorrectionPpm) <= 2000);
                 Assert.AreEqual(0,state.Rejected); Assert.AreEqual(0,state.Underruns);
@@ -169,6 +180,7 @@ public sealed class PlaybackTests
             await pump.Completion.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.IsInstanceOfType<IOException>(pump.Error); Assert.IsTrue(output.State.Muted);
         }
+        catch { Console.WriteLine(string.Join(Environment.NewLine,history)); throw; }
         finally { stopping.Cancel(); await renderer.WaitAsync(TimeSpan.FromSeconds(5)); }
     }
     [TestMethod,TestCategory("Native")]

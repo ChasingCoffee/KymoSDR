@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <initializer_list>
 #include <thread>
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr,"Driver failure %d: %s\n",__LINE__,#x); std::exit(1); } } while (0)
 namespace {
