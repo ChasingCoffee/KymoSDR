@@ -102,6 +102,47 @@ behavior, cross-thread updates concurrent with pulls/disposal, failed-peer
 rejection and cancellation cleanup. CI runs the new CLI on Windows/macOS/Linux
 and the native fixtures under Linux ASan/UBSan/LeakSanitizer.
 
-Validation results will be recorded after the cross-platform run. This does not
-qualify AM/FM/CW, AGC controls, arbitrary filter responses, P1 streaming, real
-G2 receive or UI/audio output.
+## Local validation
+
+Implementation source: `06416f06ee276687f1cb99ab37a38165a6c615e4`.
+macOS arm64 passes all 145 managed tests (111 Core, 34 Engine), eight native
+CTest cases and eight local ASan/UBSan CTests. Local LeakSanitizer is disabled;
+the separate Linux CI job enables it. The Release build has no warnings.
+
+The production native build (`BUILD_TESTING=OFF`) passes the complete controls
+CLI in 15.146 seconds: wanted RMS 0.176734–0.176778, wanted-tone frequency
+996.215–1002.028 Hz, maximum rejected RMS 1.797e-8. Native socket/DSP errors,
+input overruns, missing packets and audio drops are zero; TX packets and
+watchdog stops are zero. Raw report:
+`artifacts/receive-controls-production.json` (ignored local artifact).
+An actual terminal Ctrl-C during the command exits 130 after owner disposal.
+
+## Cross-platform validation
+
+The [native workflow at 06416f06](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34172762561)
+passes on all three platforms, recorded 2026-09-07:
+
+| Target | Native CTest | Managed tests with native library | Controls CLI | Wanted RMS range | Maximum rejected RMS |
+| --- | --- | --- | --- | --- | --- |
+| Windows x64 | 7/7 | 145/145, no skips | 12/12 in 16.506 s | 0.176719–0.176824 | 1.7972e-8 |
+| macOS arm64 | 8/8 | 145/145, no skips | 12/12 in 18.662 s | 0.176736–0.176820 | 1.7983e-8 |
+| Linux x64 | 8/8 | 145/145, no skips | 12/12 in 17.064 s | 0.176712–0.176847 | 1.7977e-8 |
+
+Native socket/DSP errors, input overruns, missing packets and audio drops are
+zero in all three controls reports; STOP, port rebind and no-TX checks pass.
+The existing DSP/receive CLIs, short receive fault/soak campaign, 100-cycle
+offline CM and 100-cycle loopback transport diagnostics also pass on every OS.
+The Linux sanitizer job passes eight native CTests with ASan, UBSan and leak
+detection enabled, without suppressions.
+
+The existing Linux 20-cycle async and six-caller reconnect memory guards remain
+green with the new filter initialization, without changing their thresholds or
+using forced GC/allocator trimming. Maximum post-warmup RSS growth is 14,901,248
+and 15,118,336 bytes respectively; reserved growth is 126,976 and 106,496 bytes.
+These are reconnect checks, not a long-duration arbitrary-filter-churn budget.
+The [managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34172762512)
+passes all three OSes with 120 passes / 25 native-dependent skips. The opt-in
+legacy Windows-reference build remains skipped.
+
+This does not qualify AM/FM/CW, AGC controls, arbitrary filter responses, P1
+streaming, real G2 receive or UI/audio output.

@@ -1,5 +1,32 @@
 # Native cross-platform CI results
 
+## USB/LSB receive mode and filter controls
+
+Validated source: `06416f06ee276687f1cb99ab37a38165a6c615e4`, recorded
+2026-09-07. The loopback P2 owner now supports startup and live USB/LSB mode plus
+receive-filter configuration, with positive audio-frequency edges, native
+settings/generation readback, validation and clean reconnects. The bridge
+updates all linked WDSP passbands and explicitly translates the loopback
+I/Q/spectrum frequency convention to WDSP's FIR convention. Native DSP
+algorithm sources and radio/TX permissions are unchanged.
+
+The [native CI run](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34172762561)
+passes Windows x64 (7 native CTests), macOS arm64 and Linux x64 (8 each), with
+**145 managed tests per platform and no skips**. The new controls CLI passes
+all 12 signal checks on each OS: wanted/opposite sidebands, both filter-edge
+rejections, narrow/restored passbands and reopening with LSB settings. The
+existing DSP, receive, short soak/fault, 100-cycle CM and 100-cycle transport
+CLIs remain green. Linux ASan/UBSan/LeakSanitizer passes all eight native tests;
+both 20-cycle reconnect memory guards pass without changing bounds.
+
+The [managed-only run](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34172762512)
+passes all three OSes (120 pass / 25 native-dependent skips). Local macOS also
+passes 145 tests, eight native CTests, eight ASan/UBSan tests and the production
+`BUILD_TESTING=OFF` controls CLI; actual Ctrl-C exits 130 after disposal.
+See [the control contract, numerical measurements and limits](RECEIVE_CONTROLS.md)
+for exact results. All traffic is owned IPv4 loopback with no TX. This remains
+a partial M4 engine checkpoint, not hardware, audio-device or desktop qualification.
+
 ## Reconnect allocation-thread fix
 
 Validated source: `63484307e5e492f798c12642bd71cad79985efc4`, recorded

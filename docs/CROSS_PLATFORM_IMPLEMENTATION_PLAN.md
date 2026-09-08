@@ -193,6 +193,14 @@ budgets remain separate qualification work. The specific Linux amplification
 blocker is addressed; this does not satisfy the broader M4 hardware/P1 gate.
 This follow-up does not authorize hardware streaming or transmit tests.
 
+The next simulator-backed increment, [USB/LSB mode and receive filters](RECEIVE_CONTROLS.md),
+now passes three-OS CI at `06416f06`: 145 managed tests per platform, twelve
+controls signal checks, native/sanitizer coverage and unchanged reconnect-memory
+guards. Startup/live configuration, settings generations, sideband/filter
+rejection, cancellation and reconnects are covered. Gain/AGC controls, other
+modes, P1 streaming and the hardware gate below remain pending; this does not
+advance the project to a qualified desktop or live-radio milestone.
+
 - Add bounded `receive` operation to the CLI: select discovered radio/interface, start RX1 at one confirmed supported rate, tune, set mode/filter, read spectrum and stop.
 - Preserve G2-specific capability, routing and port handling. Do not treat all P2 boards as interchangeable. Compare control sequences and observable receive behavior with the Windows reference.
 - Choose the existing RX1 analyzer or additional-analyzer API after validating IDs, configuration and ownership. Expose renderer-independent frames with sequence, time, frequency/rate, scaling and calibration status.
