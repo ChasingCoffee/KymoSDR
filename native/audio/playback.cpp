@@ -12,11 +12,11 @@ PcmQueue *queue = nullptr;
 PaStream *stream = nullptr;
 bool initialized = false, physical = false;
 bool valid_rate(int rate) { return rate == 44100 || rate == 48000 || rate == 96000; }
-int initialize() {
+int initialize_audio() {
     if (initialized) return 0;
     int rc = Pa_Initialize(); if (rc == 0) initialized = true; return rc;
 }
-int terminate() {
+int terminate_audio() {
     if (queue) return -2;
     int rc = initialized ? Pa_Terminate() : 0;
     if (rc == 0) initialized = false;
@@ -32,8 +32,8 @@ int callback(const void *,void *output,unsigned long count,const PaStreamCallbac
     q->render(static_cast<float *>(output),static_cast<int>(count));
     return paContinue;
 }
-int close() {
-    if (!queue) return terminate();
+int close_audio() {
+    if (!queue) return terminate_audio();
     queue->muted.store(1); queue->active.store(0);
     if (stream) {
         Pa_AbortStream(stream);
@@ -43,12 +43,12 @@ int close() {
         stream = nullptr;
     }
     delete queue; queue = nullptr; physical = false;
-    return terminate();
+    return terminate_audio();
 }
 }
 int ThetisAudioAbi(void) { return 1; }
-int ThetisAudioInitialize(void) { std::lock_guard<std::mutex> lock(gate); return initialize(); }
-int ThetisAudioTerminate(void) { std::lock_guard<std::mutex> lock(gate); return terminate(); }
+int ThetisAudioInitialize(void) { std::lock_guard<std::mutex> lock(gate); return initialize_audio(); }
+int ThetisAudioTerminate(void) { std::lock_guard<std::mutex> lock(gate); return terminate_audio(); }
 int ThetisAudioDeviceCount(void) { std::lock_guard<std::mutex> lock(gate); return initialized ? Pa_GetDeviceCount() : -3; }
 int ThetisAudioDevice(int index,int *values,int capacity,char *name,int nc,char *host,int hc) {
     std::lock_guard<std::mutex> lock(gate);
@@ -70,17 +70,17 @@ int ThetisAudioOpen(int abi,int device,int rate,const char *expected_name,const 
     if (abi != 1 || device < -1 || !valid_rate(rate) || (device >= 0 && (!expected_name || !expected_host))) return -1;
     if (queue) return -2;
     if (device >= 0) {
-        int rc = initialize(); if (rc != 0) return rc;
+        int rc = initialize_audio(); if (rc != 0) return rc;
         const PaDeviceInfo *d = Pa_GetDeviceInfo(device);
         const PaHostApiInfo *h = d ? Pa_GetHostApiInfo(d->hostApi) : nullptr;
-        if (!d || !h || d->maxOutputChannels < 2 || std::strcmp(d->name,expected_name) || std::strcmp(h->name,expected_host)) { terminate(); return -1; }
+        if (!d || !h || d->maxOutputChannels < 2 || std::strcmp(d->name,expected_name) || std::strcmp(h->name,expected_host)) { terminate_audio(); return -1; }
         PaStreamParameters output{device,2,paFloat32,std::max(.02,d->defaultLowOutputLatency),nullptr};
-        rc = Pa_IsFormatSupported(nullptr,&output,rate); if (rc != 0) { terminate(); return rc; }
-        queue = new(std::nothrow) PcmQueue(rate); if (!queue) { terminate(); return paInsufficientMemory; }
+        rc = Pa_IsFormatSupported(nullptr,&output,rate); if (rc != 0) { terminate_audio(); return rc; }
+        queue = new(std::nothrow) PcmQueue(rate); if (!queue) { terminate_audio(); return paInsufficientMemory; }
         physical = true;
         rc = Pa_OpenStream(&stream,nullptr,&output,rate,paFramesPerBufferUnspecified,paClipOff,callback,queue);
         if (rc == 0) rc = Pa_StartStream(stream);
-        if (rc != 0) { close(); return rc; }
+        if (rc != 0) { close_audio(); return rc; }
     } else {
         queue = new(std::nothrow) PcmQueue(rate); if (!queue) return paInsufficientMemory;
     }
@@ -128,7 +128,7 @@ int ThetisAudioState(int64_t *values,int capacity) {
     }
     std::memcpy(values,result,sizeof(result)); return 16;
 }
-int ThetisAudioClose(void) { std::lock_guard<std::mutex> lock(gate); return close(); }
+int ThetisAudioClose(void) { std::lock_guard<std::mutex> lock(gate); return close_audio(); }
 int ThetisAudioError(int code,char *text,int capacity) {
     const char *message = code == -1 ? "Invalid audio argument, stale device selection or unsupported stereo output" :
         code == -2 ? "An audio owner is already active" : code == -3 ? "Audio owner is closed or has the wrong output kind" : Pa_GetErrorText(code);
