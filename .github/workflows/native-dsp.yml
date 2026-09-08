@@ -81,50 +81,18 @@ jobs:
         run: cmake -S native -B artifacts/native -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
       - name: Build native library and tests
         run: cmake --build artifacts/native --config Release --parallel 4
-      - name: Offline native ABI, DSP and lifecycle tests
-        run: ctest --test-dir artifacts/native -C Release --verbose
       - name: Restore pinned managed dependencies
         run: dotnet restore Thetis.CrossPlatform.slnx --locked-mode
       - name: Build managed harness
         run: dotnet build Thetis.CrossPlatform.slnx -c Release --no-restore
-      - name: Build pinned independent P1 reference (confined loopback adapter)
-        if: runner.os != 'Windows'
-        run: bash scripts/build-hpsdrsim.sh --loopback
-      - name: Independent P1 reference interoperability (owned process, no hardware)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: THETIS_P1_REFERENCE_SIM="$GITHUB_WORKSPACE/artifacts/external/pihpsdr/hpsdrsim-loopback" dotnet test tests/Thetis.Engine.Tests -c Release --no-build --no-restore --filter FullyQualifiedName~P1ReferenceTests --logger "console;verbosity=normal" --blame-hang-timeout 2m
-      - name: Linux reconnect allocator regression (loopback only)
-        if: runner.os == 'Linux'
-        # Fresh processes: allocator history from one mode must not contaminate another.
-        # No forced GC, allocator trimming or global allocator environment tuning.
+      # Exercise the new slice before the longer inherited lifecycle campaigns.
+      # All existing full-suite, sanitizer and memory-budget gates remain below.
+      - name: Focused playback and desktop regressions (loopback/no-device)
         run: |
-          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" same 6
-          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" async 20 --check-linux-budget
-          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" hopping 20 --check-linux-budget
-      - name: Offline CLI self-test (native library required)
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- dsp-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
-      - name: Offline ChannelMaster CLI (100 lifecycles, no devices)
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- session-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
-      - name: Simulator to native P2, ChannelMaster and WDSP audio/spectrum
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
-      - name: Receive mode and filter switching (loopback only)
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-controls-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
-      - name: P1 receive audio, spectrum, controls and reconnect (loopback only)
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- p1-receive-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
-      - name: P1/P2 gain, mute and AGC signal steps (loopback only)
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-gain-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+          dotnet test tests/Thetis.Engine.Tests -c Release --no-build --no-restore --filter FullyQualifiedName~PlaybackTests --blame-hang-timeout 2m
+          dotnet test tests/Thetis.Desktop.Tests -c Release --no-build --no-restore --blame-hang-timeout 2m
       - name: P1/P2 playback, mute and reconnect (no physical audio devices)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- playback-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
-      - name: Short receive endurance and fault campaign (loopback only)
-        if: github.event_name != 'workflow_dispatch' || inputs.receive_soak != '30-minutes'
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 10 --reconnects 2
-      - name: Opt-in 30-minute receive endurance and fault campaign (loopback only)
-        if: github.event_name == 'workflow_dispatch' && inputs.receive_soak == '30-minutes'
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 1800 --reconnects 10
-      - name: Managed and native integration regressions
-        # All transport fixture traffic is hard-restricted to IPv4 loopback.
-        run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger trx --results-directory artifacts/test-results
       - name: Publish framework-dependent desktop with source-built native libraries
         shell: pwsh
         run: |
@@ -152,6 +120,44 @@ jobs:
           else { dotnet Thetis.Desktop.dll --smoke --native-dir $missingNative }
           if ($LASTEXITCODE -ne 4) { throw "Expected desktop startup failure exit 4, got $LASTEXITCODE" }
           exit 0
+      - name: Offline native ABI, DSP and lifecycle tests
+        run: ctest --test-dir artifacts/native -C Release --verbose
+      - name: Build pinned independent P1 reference (confined loopback adapter)
+        if: runner.os != 'Windows'
+        run: bash scripts/build-hpsdrsim.sh --loopback
+      - name: Independent P1 reference interoperability (owned process, no hardware)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: THETIS_P1_REFERENCE_SIM="$GITHUB_WORKSPACE/artifacts/external/pihpsdr/hpsdrsim-loopback" dotnet test tests/Thetis.Engine.Tests -c Release --no-build --no-restore --filter FullyQualifiedName~P1ReferenceTests --logger "console;verbosity=normal" --blame-hang-timeout 2m
+      - name: Linux reconnect allocator regression (loopback only)
+        if: runner.os == 'Linux'
+        # Fresh processes: allocator history from one mode must not contaminate another.
+        # No forced GC, allocator trimming or global allocator environment tuning.
+        run: |
+          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" same 6
+          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" async 20 --check-linux-budget
+          dotnet run --project tools/Thetis.MemoryProbe -c Release --no-build --no-restore -- "${{ env.THETIS_NATIVE_DIR }}" hopping 20 --check-linux-budget
+      - name: Offline CLI self-test (native library required)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- dsp-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: Offline ChannelMaster CLI (100 lifecycles, no devices)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- session-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: Simulator to native P2, ChannelMaster and WDSP audio/spectrum
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: Receive mode and filter switching (loopback only)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-controls-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: P1 receive audio, spectrum, controls and reconnect (loopback only)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- p1-receive-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: P1/P2 gain, mute and AGC signal steps (loopback only)
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-gain-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
+      - name: Short receive endurance and fault campaign (loopback only)
+        if: github.event_name != 'workflow_dispatch' || inputs.receive_soak != '30-minutes'
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 10 --reconnects 2
+      - name: Opt-in 30-minute receive endurance and fault campaign (loopback only)
+        if: github.event_name == 'workflow_dispatch' && inputs.receive_soak == '30-minutes'
+        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 1800 --reconnects 10
+      - name: Managed and native integration regressions
+        # All transport fixture traffic is hard-restricted to IPv4 loopback.
+        run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger trx --results-directory artifacts/test-results
       - name: Loopback transport CLI (100 socket lifecycles, no radio commands)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- transport-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: macOS dependency inspection

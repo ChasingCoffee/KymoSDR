@@ -14,7 +14,7 @@ public static class HeadlessBootstrap
     public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>().WithInterFont().UseSkia()
         .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
 }
-[TestClass]
+[TestClass,DoNotParallelize]
 public sealed class DesktopTests
 {
     [TestMethod]
@@ -28,8 +28,7 @@ public sealed class DesktopTests
     [TestMethod]
     public async Task InitialWindowIsMutedSilentAccessibleAndResizesWithoutNativeCode()
     {
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(HeadlessBootstrap));
-        await session.Dispatch<int>(async () =>
+        await UiTestHost.RunAsync(async () =>
         {
             var window = new MainWindow(new(Path.GetTempPath())); window.Show();
             try
@@ -60,16 +59,14 @@ public sealed class DesktopTests
                 while (window.IsVisible && closeClock.Elapsed.TotalSeconds < 10) await Task.Delay(10);
                 Assert.IsFalse(window.IsVisible);
             }
-            return 0;
-        },CancellationToken.None);
+        });
     }
     [TestMethod,TestCategory("Native"),DataRow(1),DataRow(2)]
     public async Task ActualControlsConnectTuneApplyMuteAndRenderTheSimulator(int protocol)
     {
         var directory = Environment.GetEnvironmentVariable("THETIS_NATIVE_DIR");
         if (string.IsNullOrWhiteSpace(directory)) Assert.Inconclusive("Requires native receiver/audio libraries; no physical devices.");
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(HeadlessBootstrap));
-        await session.Dispatch<int>(async () =>
+        await UiTestHost.RunAsync(async () =>
         {
             var window = new MainWindow(new(directory)); window.Show();
             try
@@ -116,16 +113,14 @@ public sealed class DesktopTests
                     await Task.Delay(25);
                 }
             }
-            return 0;
-        },CancellationToken.None);
+        });
     }
     [TestMethod,TestCategory("Native")]
     public async Task CloseDuringStartupJoinsTheOwnedSession()
     {
         string? directory = Environment.GetEnvironmentVariable("THETIS_NATIVE_DIR");
         if (string.IsNullOrWhiteSpace(directory)) Assert.Inconclusive("Requires native libraries; no physical devices.");
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(HeadlessBootstrap));
-        await session.Dispatch<int>(async () =>
+        await UiTestHost.RunAsync(async () =>
         {
             var window = new MainWindow(new(directory)); window.Show();
             var connect = window.Connect(); window.Close();
@@ -134,8 +129,7 @@ public sealed class DesktopTests
             while (window.IsVisible && clock.Elapsed.TotalSeconds < 20) await Task.Delay(25);
             Assert.IsFalse(window.IsVisible); Assert.IsFalse(window.Controller.Connected);
             await window.Controller.DisposeAsync();
-            return 0;
-        },CancellationToken.None);
+        });
     }
     private static void Save(Bitmap bitmap,string name)
     {

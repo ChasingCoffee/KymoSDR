@@ -35,7 +35,6 @@ public sealed class ReceivePlayback : IAsyncDisposable
     {
         double[] input = new double[4096]; float[] rendered = new float[1920];
         var clock = Stopwatch.StartNew(); double nextSnapshot = 0;
-        int nullSourceCredit = 0;
         ReceiveSpectrumFrame? spectrum = null;
         double energy = 0, rms = 0, hz = 0, previous = 0; int measured = 0, crossings = 0;
         try
@@ -48,15 +47,12 @@ public sealed class ReceivePlayback : IAsyncDisposable
                 double now = clock.Elapsed.TotalSeconds;
                 if (!device.Physical)
                 {
-                    // The silent monitor is sample-driven, not a fake hardware
-                    // clock. A delayed producer must not render a wall-clock
-                    // catch-up burst before draining PCM still in CM's queue.
-                    // Each read is <=2048 source frames, so this is <=5 blocks.
-                    nullSourceCredit += frames;
+                    // Sample-driven with an explicit reserve for native prefill
+                    // and FIR look-ahead. Queue occupancy also handles flush:
+                    // input credit alone becomes stale when queued PCM is discarded.
                     int block = device.Rate/100;
-                    while (nullSourceCredit >= 480)
+                    for (int burst = 0; burst < 5 && RenderMonitorBlock(output,rendered,block); ++burst)
                     {
-                        output.RenderNull(rendered,block); nullSourceCredit -= 480;
                         for (int i = 0; i < block; ++i)
                         {
                             double v = rendered[2*i]; energy += v*v;
@@ -84,6 +80,14 @@ public sealed class ReceivePlayback : IAsyncDisposable
         {
             try { output.SetMuted(true); } catch (Exception ex) { Interlocked.CompareExchange(ref error,ex,null); }
         }
+    }
+    internal static bool RenderMonitorBlock(PlaybackOutput output,float[] samples,int block)
+    {
+        // One 10 ms output block consumes 480 source frames at all supported
+        // rates. Retain 1024 source frames; never drain the FIR's final look-ahead.
+        if (output.QueuedSourceFrames < 1024+480) return false;
+        output.RenderNull(samples,block);
+        return true;
     }
     public ValueTask DisposeAsync()
     { lock (disposeGate) return new(disposal ??= DisposeCore()); }

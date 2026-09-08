@@ -23,6 +23,7 @@ public sealed class PlaybackOutput : IDisposable
     private static string? loadedPath;
     private static bool active;
     private readonly OutputHandle handle = new();
+    private readonly long[] stateBuffer = new long[16]; // accessed only under Gate
     private PlaybackOutput() { }
     static PlaybackOutput() => NativeLibrary.SetDllImportResolver(typeof(PlaybackOutput).Assembly, Resolve);
     private static nint Resolve(string name, Assembly _, DllImportSearchPath? __) => name == "thetis_audio"
@@ -92,11 +93,18 @@ public sealed class PlaybackOutput : IDisposable
         {
             lock (Gate)
             {
-                CheckOpen(); long[] s = new long[16]; int rc = AudioNative.ThetisAudioState(s,s.Length); GC.KeepAlive(handle); Check(rc);
-                if (rc != 16 || s[0] != 1 || s[1] != 1) throw new NotSupportedException("Native playback state is incompatible.");
+                ReadState(); long[] s = stateBuffer;
                 return new(s[2] == 1,s[3] == 1,(int)s[4],s[5] == 1,s[6],s[7],s[8],s[9],s[10],s[11],s[12],s[13],s[14],s[15]/1e6);
             }
         }
+    }
+    /// <summary>Current source-frame occupancy, without allocating a snapshot record.</summary>
+    public long QueuedSourceFrames
+    { get { lock (Gate) { ReadState(); return stateBuffer[6]; } } }
+    private void ReadState()
+    {
+        CheckOpen(); int rc = AudioNative.ThetisAudioState(stateBuffer,stateBuffer.Length); GC.KeepAlive(handle); Check(rc);
+        if (rc != 16 || stateBuffer[0] != 1 || stateBuffer[1] != 1) throw new NotSupportedException("Native playback state is incompatible.");
     }
     public int Write(double[] stereo,int frames)
     {

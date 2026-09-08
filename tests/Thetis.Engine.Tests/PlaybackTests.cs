@@ -35,6 +35,34 @@ public sealed class PlaybackTests
         Assert.IsTrue(result.Passed); Assert.IsFalse(result.PhysicalAudio); Assert.HasCount(2,result.Checks);
         Assert.AreEqual(0,ReceiveSession.ReadNativeState()[6]);
     }
+    [TestMethod,TestCategory("Native"),DataRow(44100),DataRow(48000),DataRow(96000)]
+    public void SilentMonitorPreservesLookAheadAcrossLargeBatchesAndFlush(int rate)
+    {
+        using var output = PlaybackOutput.OpenNull(NativeDirectory(),rate);
+        output.SetMuted(false);
+        double[] input = new double[4096]; Array.Fill(input,.125);
+        float[] rendered = new float[1920];
+        int[] batches = [2048,128,512,1920,64,480];
+        for (int cycle = 0; cycle < 250; ++cycle)
+        {
+            int frames = batches[cycle%batches.Length]; Assert.AreEqual(frames,output.Write(input,frames));
+            int blocks = 0;
+            while (blocks < 5 && ReceivePlayback.RenderMonitorBlock(output,rendered,rate/100))
+            {
+                ++blocks;
+                for (int i = 0; i < 2*(rate/100); ++i)
+                    Assert.IsTrue(rendered[i] == 0 || Math.Abs(rendered[i]-.125f) < 1e-6);
+            }
+            // A delayed first read must not consume all 2048 input frames. The
+            // old credit-only monitor eventually consumed the FIR look-ahead.
+            if (cycle == 0) { Assert.AreEqual(2,blocks); Assert.IsTrue(output.QueuedSourceFrames >= 1024); }
+            if (cycle%17 == 10) output.Flush();
+        }
+        var state = output.State;
+        Assert.IsTrue(state.Rendered > rate && state.StarvationFrames > 0);
+        Assert.AreEqual(0,state.Underruns); Assert.AreEqual(0,state.Rejected);
+        Assert.AreEqual(0,state.ClippedSamples); Assert.AreEqual(0,state.NonfiniteSamples);
+    }
     [TestMethod,TestCategory("Native")]
     public async Task OutputLossStopsPumpAndConcurrentShutdownReleasesOwners()
     {
