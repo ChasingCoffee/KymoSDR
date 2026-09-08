@@ -103,11 +103,18 @@ uses `xvfb-run -a`; this tests X11, not Wayland. Smoke waits have deadlines, and
 CI adds a three-minute process timeout. No smoke command can select physical
 audio or unmute.
 
-Source `e9c352ce2f90a686460a3aeb590915f068b70616` passes both headless tests and
+The initial source `e9c352ce2f90a686460a3aeb590915f068b70616` passes both headless tests and
 published native-window launches on Windows x64, macOS 26 arm64 and Ubuntu
 24.04 x64/X11 in CI. All three also verify exit 4 for missing native libraries.
 See [exact hosted results](NATIVE_CI_RESULTS.md). No physical audio stream is
 opened by these checks.
+
+The [desktop reliability checkpoint](DESKTOP_RELIABILITY.md) adds bounded report
+export, safe preferences and 27 desktop regressions. A 30-minute local headless
+Skia run and three-OS 60-second native-window campaigns now exercise retune,
+resize and P2/P1/P2 reconnects. Exact source revisions, counts and observed
+cadence/resource limits are recorded in [the results log](NATIVE_CI_RESULTS.md#desktop-diagnostics-endurance-and-preferences-checkpoint).
+These do not close the physical audio, 30 Hz display or G2 hardware gates.
 
 On the initial local macOS agent session, no attached display was reported and
 Avalonia's native render timer failed with code −6661 before window startup.

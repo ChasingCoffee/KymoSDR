@@ -1,5 +1,120 @@
 # Native cross-platform CI results
 
+## Desktop diagnostics, endurance and preferences checkpoint
+
+Implementation/benchmark source: `2c52092230e09df17a1cd848bc1d5ff7788eef57`, recorded
+2026-09-08 Pacific. The [managed-only workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34200148029)
+passes Windows/macOS/Linux; the optional legacy Windows reference was not
+dispatched. The [native workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34200148034)
+passes all four jobs, including all three native-window endurance/failure-report
+checks and Linux ASan/UBSan/LeakSanitizer (14/14, 303.10 s, no suppressions).
+Full managed suites pass 208 cases / one reference skip per OS; the separate
+POSIX reference gives 209 distinct passing cases on macOS/Linux. Native CTest
+passes 13/13 on Windows (232.52 s), 14/14 on macOS (292.84 s) and 14/14 on Linux
+(184.54 s). Existing lifecycle and Linux reconnect-memory gates pass unchanged.
+
+Final runtime source `f90de9a9626eeb0238efcee2b9746aff72210fea` adds a temporary-file
+ownership guard and one regression: a failed exclusive create must not delete a
+pre-existing temporary name. Its [managed-only CI](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34202579079)
+passes all three OSes; [final native CI](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34202579030)
+also passes all four jobs. Managed-only runs have 157 passes / 53 explicit
+native-dependent skips per OS; full native-backed suites have 209 passes / one
+reference skip, with the separate POSIX reference giving 210 distinct passing
+cases on macOS/Linux. Final native CTest passes 13/13 on Windows (295.39 s),
+14/14 on macOS (286.54 s), and 14/14 on Linux (183.71 s); Linux sanitizer/leak
+tests pass 14/14 in 360.07 s without suppressions. Native-window endurance and
+failed-startup reports, signal/control/playback campaigns and all inherited
+lifecycle/reconnect-memory gates pass again. Its native-window campaigns finish
+in 65.301 / 65.833 / 64.702 s on Windows/macOS/Linux respectively, with all three
+negative startup checks retaining failed reports and returning exit 4.
+Locally the final source builds with zero warnings/errors and
+passes **210/210** managed cases (124 core / 59 engine / 27 desktop), including
+the independent P1 reference; engine 4 m 30 s and desktop 43 s. The published
+developer app has been refreshed to this source. The long benchmark below remains
+`2c520922`: its binaries were not rebuilt/replaced for this isolated file-I/O change.
+
+Local macOS arm64 Release builds with zero warnings/errors and passes **209/209
+managed cases**, no skips: 124 core, 59 engine (including the confined independent
+P1 reference) and 26 desktop. Engine duration is 4 m 30 s; desktop duration is
+43 s. Native algorithms, ABI 2, queue limits and existing memory guards are
+unchanged by this increment. Published managed binaries match the built DLLs;
+the refreshed developer artifact keeps the existing source-built native libraries.
+No physical window/audio stream was opened by the local agent.
+
+The short hosted desktop campaign uses an actual native window, P2 → P1 → P2,
+20 connected seconds per phase, retune/mode/filter/AGC changes and resize every
+five seconds. All phases remain muted on the sample-driven no-device monitor.
+Both intermediate and final receive/output error counters are clean on all OSes;
+all three sessions join successfully. Native-window measurements are:
+
+| Target | Total wall time | P2 / P1 / P2 rendered frames | Approx. distinct-frame cadence, Hz | Sampled peak RSS, MiB | Process CPU, % of one core |
+| --- | --- | --- | --- | --- | --- |
+| Windows x64, build 26100 | 63.991 s | 354 / 218 / 357 | 17.70 / 10.89 / 17.84 | 1,342.52 | 48.23 |
+| macOS 26.6.2 arm64 | 66.959 s | 183 / 172 / 175 | 9.08 / 8.59 / 8.65 | 1,357.19 | 23.88 |
+| Ubuntu 24.04.4 x64, X11/Xvfb | 64.722 s | 365 / 219 / 362 | 18.19 / 10.92 / 18.06 | 1,406.54 | 44.20 |
+
+Each cadence divides distinct rendered frames by the corresponding connected
+observation time; it includes retunes and resizing. The 30 Hz M5 target is **not
+met by these hosted campaigns**. CPU divides first-to-last sampled process CPU
+time by the same samples' monotonic wall interval; it includes reconnect work,
+the simulator/runtime and rendering, not only WDSP. RSS is a sampled process
+working set, not private/native allocation or a leak result. In particular,
+Windows releases much of its working set after cleanup; comparing that endpoint
+to an active-session start is not a steady-state memory-growth measurement.
+
+P2 source-clock loss remains visible even with clean playback counters. Windows
+records two rebases / 9.394 ms lost source time in its first phase, zero in its
+last. Hosted macOS records 119 / 865.893 ms and 74 / 602.515 ms in its two P2
+phases. Linux records zero in both. These are source scheduling deficits, not
+wire sequence gaps, and the sample-driven monitor is not a physical-clock test.
+No source-clock allowance was changed; these are measured limitations, not a
+claim that real-device endurance or real-time host scheduling is solved.
+
+All three deliberately missing-native launches retain a schema-1 **failed**
+report and return exit 4, with zero successful sessions. The original
+`DllNotFoundException` is retained in the connection event; the campaign's
+bounded spectrum wait subsequently times out. Reports are available as
+`desktop-diagnostics-<runner>` artifacts on the native run for 14 days.
+
+New regression coverage includes safe restored controls on both protocols,
+disconnected/muted/no-device startup, orderly-close persistence, invalid window
+dimensions, corrupted/null/oversized/future/unknown-field files, external edits,
+serialized concurrent saves, unchanged legacy data, and injected pre-rename
+failure/cancellation. Diagnostic tests cover bounded sample/event/session
+eviction, unit calculations, immutable export during receive and after stop,
+and retention of a latched output fault after automatic cleanup. All automated
+settings files use owned temporary directories, not the user's real settings.
+
+The **30-connected-minute headless Skia** campaign passes locally at `2c520922`:
+1,801.936 total wall seconds, with three ten-minute P2/P1/P2 phases. It draws
+11,059 / 6,538 / 11,074 distinct frames (18.43 / 10.90 / 18.46 Hz). Every normal
+and terminal receive/output error gate is clean: zero packet gaps/order/malformed/
+foreign packets, native socket/DSP errors, CM overruns/audio drops, output
+rejections, underruns/driver underruns, nonfinite samples or clipping. All three
+sessions end without a fault and remain muted/nonphysical. The first P2 phase
+has one source-clock rebase / 23.240 ms lost time; the final P2 phase has zero.
+Priming/flush silence is recorded separately, not reclassified as an underrun.
+
+The sampled peak working set is 1,354.72 MiB. First-to-last sampled RSS increases
+49.48 MiB across warm-up/reconnects; the final ten-minute phase changes by
+−0.016 MiB. Average process CPU is 32.42% of one core, sampled peak 61.74%, with
+a maximum sample gap of 1.00346 s. These observations are not a general memory/
+CPU qualification or leak proof. No other native campaign ran concurrently; an
+early non-native, no-build publish attempt stalled in the sandbox and was stopped
+and retried with build-server reuse disabled. It did not rebuild the running DLLs.
+
+The report retains 1,810 samples and three session summaries. Its event history
+caps at 256 and explicitly reports 468 evicted events; no sample/session history
+is evicted. This exercises real bounded retention beyond the deterministic unit
+tests. The report is saved locally as
+`artifacts/desktop-endurance-30m-2c520922.json`, with its passing TRX in the matching
+`artifacts/test-results/desktop-endurance-30m-2c520922` directory.
+
+This is separate from the hosted native-window measurements above, and is not
+a physical-audio listening run. See [the reliability contract](DESKTOP_RELIABILITY.md)
+for commands, fixed safety/progress gates, retention limits and remaining M4/M5
+hardware/audio/performance qualification.
+
 ## Audio clock recovery and output-loss checkpoint
 
 Runtime source: `9311607cd9ae4c0f24c746954bafa9384d2078f0`, recorded
