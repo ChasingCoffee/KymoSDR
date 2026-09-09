@@ -1,5 +1,45 @@
 # Native cross-platform CI results
 
+## Windows receive-soak reader scheduling correction — local validation
+
+The failed Windows packet-loss phase at `ffe5bad7` motivated an isolated caller
+scheduler experiment. Without changing native code, simulator pacing, OS/global
+ThreadPool settings or buffer sizes, a one-second delay of the caller's
+continuation reproduced **24832 unplanned audio drops**, with a full 16384-frame
+queue and zero native socket/DSP/input-overrun errors. Its steady phase and
+owned STOP/disposal/port-release checks passed. The retained failing TRX is in
+`artifacts/test-results/soak-scheduling-repro`. This proves a delayed-continuation
+failure mechanism; the earlier hosted report did not trace the exact scheduler
+stall that occurred on Windows.
+
+`receive-soak` now runs its complete simulator campaign on a dedicated worker,
+including source cleanup, instead of draining through timer continuations. Its
+public API remains asynchronous, cancellation interrupts polling waits, and the
+engine's existing native allocation/free owner is unchanged. Additive bounded
+reader timing counters expose poll/read gaps, waits, work, resource/progress
+calls and queue occupancy. No native library, production desktop/G2 receive
+path, simulator packet pacing, queue capacity or acceptance limit is changed.
+
+Three new cases cover caller-scheduler delay (must pass) and a genuinely blocked
+reader or terminal reporter (must fail with retained drops and complete cleanup).
+The terminal reporter case also guards the previously unchecked interval between
+the observation's last validation and source disposal. Final-state failures do
+not skip STOP/port-release checks. Existing cancellation/observer-error and
+normal fault/reconnect campaigns remain required. The hosted early checkpoint
+includes these tests with no skips, and standalone simulator campaign JSON is
+retained even after failed gates.
+
+Local Release build passes with zero warnings/errors. All **5 focused cases
+pass**, no skips, in **1 m 25 s** (`artifacts/test-results/soak-scheduling-final`).
+The standalone 10-second/two-reconnect campaign passes all six phases in
+**29.434 s** (`artifacts/test-results/soak-scheduling-cli.json`). Every reader
+reports `usesThreadPool: false`; steady maximum poll gap is 28.42 ms and the
+packet-loss phase is 5.75 ms, with zero unplanned drops/input overruns. Its
+intentional slow-reader phase still records 31680 audio drops, a full bounded
+queue and a 1001.59 ms read gap. Both reconnects and owned cleanup pass.
+Full local managed regression and hosted Windows/macOS/Linux validation are
+pending; these local timing measurements are not Windows or hardware results.
+
 ## Hosted validation branch — initial CI findings
 
 Commit `1ac83e8b` was published to `validation/g2-rx-audio-endurance`.

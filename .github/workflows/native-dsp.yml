@@ -103,7 +103,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $suites = @(
             @{ Project = 'Thetis.Core.Tests'; Filter = 'FullyQualifiedName~G2'; Required = @('G2ReceiveCliTests','G2ListenCliTests','G2SoakCliTests') },
-            @{ Project = 'Thetis.Engine.Tests'; Filter = 'FullyQualifiedName~PlaybackTests|FullyQualifiedName~OutputSwitchTests|FullyQualifiedName~AudioControlsTests'; Required = @('HardwarePlaybackTests','OutputSwitchTests','AudioControlsTests') },
+            @{ Project = 'Thetis.Engine.Tests'; Filter = 'FullyQualifiedName~PlaybackTests|FullyQualifiedName~OutputSwitchTests|FullyQualifiedName~AudioControlsTests|FullyQualifiedName~ReceiveSoakSchedulingTests'; Required = @('HardwarePlaybackTests','OutputSwitchTests','AudioControlsTests','ReceiveSoakSchedulingTests') },
             @{ Project = 'Thetis.Desktop.Tests'; Filter = ''; Required = @('HardwareUiTests','ConnectionPreferencesTests','LiveOutputTests','AudioControlsTests','PreferencesTests') }
           )
           foreach ($suite in $suites) {
@@ -231,10 +231,26 @@ jobs:
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-gain-selftest --native-dir "${{ env.THETIS_NATIVE_DIR }}"
       - name: Short receive endurance and fault campaign (loopback only)
         if: github.event_name != 'workflow_dispatch' || inputs.receive_soak != '30-minutes'
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 10 --reconnects 2
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts/receive-campaign | Out-Null
+          dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 10 --reconnects 2 | Tee-Object -FilePath artifacts/receive-campaign/short.json
+          exit $LASTEXITCODE
       - name: Opt-in 30-minute receive endurance and fault campaign (loopback only)
         if: github.event_name == 'workflow_dispatch' && inputs.receive_soak == '30-minutes'
-        run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 1800 --reconnects 10
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts/receive-campaign | Out-Null
+          dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- receive-soak --native-dir "${{ env.THETIS_NATIVE_DIR }}" --duration-seconds 1800 --reconnects 10 | Tee-Object -FilePath artifacts/receive-campaign/long.json
+          exit $LASTEXITCODE
+      - name: Retain simulator receive campaign, including failed counter gates
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: receive-campaign-${{ matrix.os }}
+          path: artifacts/receive-campaign/*.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Managed and native integration regressions
         # All transport fixture traffic is hard-restricted to IPv4 loopback.
         run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger trx --results-directory artifacts/test-results

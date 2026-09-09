@@ -20,12 +20,16 @@ public sealed record ReceiveSoakResources(long Samples, long InitialWorkingSetBy
     long PeakWorkingSetBytes, long WorkingSetGrowthBytes, long? InitialPrivateBytes, long? FinalPrivateBytes,
     long InitialManagedBytes, long FinalManagedBytes, long AllocatedManagedBytes, double CpuSeconds,
     double AverageCpuPercentOfOneCore, int InitialThreads, int FinalThreads);
+public sealed record ReceiveSoakReaderTiming(long Polls,long Reads,bool UsesThreadPool,
+    double StartupMilliseconds,double MaxPollGapMilliseconds,double MaxReadGapMilliseconds,
+    double MaxWaitMilliseconds,double MaxWorkMilliseconds,double MaxResourceMilliseconds,
+    double MaxProgressMilliseconds,long PeakQueuedFrames);
 public sealed record ReceiveSoakPhase(string Name, bool Passed, string? Failure, double ObservedSeconds,
     int Retunes, long AudioFramesRead, long SpectrumFramesRead, long SpectrumFramesProduced, long SpectrumFramesCoalesced,
     double SpectrumFramesPerSecond, double MaxSpectrumReadGapMilliseconds, int AudioSignalChecks,
     int SpectrumSignalChecks, ReceiveState? Native, SimulatorState? Simulator,
     ReceiveSoakResources? Resources, bool NativeDisposed, bool StopObserved, bool PortRebound,
-    bool ExpectedPeerFailureObserved);
+    bool ExpectedPeerFailureObserved,ReceiveSoakReaderTiming? ReaderTiming = null);
 public sealed record ReceiveSoakResult(int SchemaVersion, bool Passed, bool Cancelled, string? Failure,
     bool LoopbackOnly, bool TransmitAllowed, int RequestedSteadySeconds, int ReconnectsCompleted,
     long ElapsedMilliseconds, IReadOnlyList<ReceiveSoakPhase> Phases);
@@ -37,24 +41,36 @@ public static class ReceiveSoak
         Action<ReceiveSoakProgress>? progress = null, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(options); options.Validate(); token.ThrowIfCancellationRequested();
+        // Simulator/native producers have independent workers. Do not drain their
+        // bounded audio queue through timer continuations on a caller scheduler or
+        // the ThreadPool. Keep cleanup here too: a delayed caller continuation must
+        // not leave a live producer running after its observation interval ends.
+        // Native topology allocation/free still uses the engine's lifecycle owner.
+        return await Task.Factory.StartNew(() => Run(nativeDirectory,options,progress,token),
+            CancellationToken.None,TaskCreationOptions.LongRunning,TaskScheduler.Default).ConfigureAwait(false);
+    }
+
+    private static ReceiveSoakResult Run(string nativeDirectory,ReceiveSoakOptions options,
+        Action<ReceiveSoakProgress>? progress,CancellationToken token)
+    {
         var clock = Stopwatch.StartNew();
         var phases = new List<ReceiveSoakPhase>();
         string? failure = null; bool cancelled = false; int reconnects = 0, reconnectPort = 0;
         try
         {
-            await Phase("steady", options.DurationSeconds, retune: true);
-            await Phase("packet-loss", 3, loss: true);
-            await Phase("slow-reader", 4, slow: true);
-            await Phase("peer-disappearance", 2, disconnect: true);
+            Phase("steady", options.DurationSeconds, retune: true);
+            Phase("packet-loss", 3, loss: true);
+            Phase("slow-reader", 4, slow: true);
+            Phase("peer-disappearance", 2, disconnect: true);
             for (int i = 0; i < options.Reconnects; ++i)
-            { await Phase($"reconnect-{i + 1}", 2, basePort: reconnectPort); ++reconnects; }
+            { Phase($"reconnect-{i + 1}", 2, basePort: reconnectPort); ++reconnects; }
         }
         catch (OperationCanceledException) { cancelled = true; failure = "Cancelled; partial measurements retained."; }
         catch (Exception ex) when (IsMeasurementFailure(ex)) { failure = ex.Message; }
         return new(1, failure is null, cancelled, failure, true, false, options.DurationSeconds, reconnects,
             clock.ElapsedMilliseconds, phases);
 
-        async Task Phase(string name, int seconds, bool retune = false, bool loss = false, bool slow = false, bool disconnect = false, int basePort = 0)
+        void Phase(string name, int seconds, bool retune = false, bool loss = false, bool slow = false, bool disconnect = false, int basePort = 0)
         {
             token.ThrowIfCancellationRequested();
             G2Simulator? simulator = null; P2ReceiveSession? session = null;
@@ -75,16 +91,16 @@ public static class ReceiveSoak
                     ReceiveSelfTest.MeasureSpectrum(session, 14_199_000, 14_200_000, 1, token);
                 }
                 observation = new();
-                await ObserveAsync(name, seconds, session, simulator, observation, retune, loss, slow, progress, token);
+                Observe(name, seconds, session, simulator, observation, retune, loss, slow, progress, token);
                 if (disconnect)
                 {
-                    await simulator.DisposeAsync(); peerGone = true;
-                    await WaitUntil(() => session.State.SocketErrors > 0, 6000, token);
+                    simulator.DisposeAsync().AsTask().GetAwaiter().GetResult(); peerGone = true;
+                    WaitUntil(() => session.State.SocketErrors > 0, 6000, token);
                     // Error accounting may precede the worker's final STOP. Allow
                     // it to exit before checking that heartbeats/tuning stopped.
-                    await Task.Delay(250, token);
+                    Pause(250, token);
                     long commands = session.State.CommandsSent;
-                    await Task.Delay(250, token);
+                    Pause(250, token);
                     Require(session.State.CommandsSent == commands, "Heartbeats continued after peer failure.");
                     bool rejected = false;
                     try { session.Tune(14_198_500); }
@@ -103,11 +119,22 @@ public static class ReceiveSoak
                 {
                     if (session is not null)
                     {
-                        try { native = session.State; }
+                        try
+                        {
+                            native = session.State;
+                            // Resource/progress reporting also happens while RX
+                            // is live. Do not hide a late reader drop between the
+                            // observation's final check and owned shutdown.
+                            if (phaseFailure is null && !peerFailure)
+                            {
+                                try { ValidateState(native,loss,slow); }
+                                catch (InvalidOperationException ex) { phaseFailure = ex.Message; }
+                            }
+                        }
                         finally { session.Dispose(); disposed = true; }
                         if (!peerGone && simulator is not null)
                         {
-                            await WaitUntil(() => !simulator.State.Running, 2000, CancellationToken.None);
+                            WaitUntil(() => !simulator.State.Running, 2000, CancellationToken.None);
                             Require(simulator.State.WatchdogStops == 0, "Peer stopped by watchdog, not native STOP.");
                             stopped = true;
                         }
@@ -123,7 +150,7 @@ public static class ReceiveSoak
                 {
                     if (simulator is not null)
                     {
-                        try { await simulator.DisposeAsync(); }
+                        try { simulator.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
                         catch (Exception ex) when (IsMeasurementFailure(ex)) { phaseFailure = $"{phaseFailure} Simulator cleanup: {ex.Message}".Trim(); }
                         finally { peer = simulator.State; }
                     }
@@ -132,17 +159,18 @@ public static class ReceiveSoak
                         observation?.SpectrumFrames ?? 0, observation?.ProducedSpectrumFrames ?? 0, observation?.CoalescedFrames ?? 0,
                         observation?.SpectrumCadence ?? 0, observation?.MaxSpectrumGapMs ?? 0,
                         observation?.AudioChecks ?? 0, observation?.SpectrumChecks ?? 0, native, peer,
-                        observation?.Resources, disposed, stopped, rebound, peerFailure));
+                        observation?.Resources, disposed, stopped, rebound, peerFailure,observation?.ReaderTiming));
                 }
             }
             Require(phases[^1].Passed, phases[^1].Failure ?? $"Incomplete cleanup in {name}.");
         }
     }
 
-    private static async Task ObserveAsync(string name, int seconds, P2ReceiveSession session, G2Simulator simulator,
+    private static void Observe(string name, int seconds, P2ReceiveSession session, G2Simulator simulator,
         ReceiveSoakObservation result, bool retune, bool loss, bool slow, Action<ReceiveSoakProgress>? progress, CancellationToken token)
     {
         var clock = Stopwatch.StartNew();
+        result.ReaderUsesThreadPool = Thread.CurrentThread.IsThreadPoolThread;
         using var resources = new ReceiveSoakResourceSampler();
         double[] audio = new double[32768];
         var signal = new ReceiveSoakSignal();
@@ -151,11 +179,15 @@ public static class ReceiveSoak
         double iqAt = 0, audioAt = 0, spectrumAt = 0, tunedAt = 0, nextTune = Math.Min(15, seconds / 2.0), nextProgress = 0, nextResource = 0;
         bool held = false;
         var initial = session.State;
+        double lastPoll = 0,lastRead = 0;
+        result.StartupMs = clock.Elapsed.TotalMilliseconds;
         try
         {
             while (clock.Elapsed.TotalSeconds < seconds)
             {
                 token.ThrowIfCancellationRequested(); double now = clock.Elapsed.TotalSeconds;
+                ++result.Polls;
+                result.MaxPollGapMs = Math.Max(result.MaxPollGapMs,(now-lastPoll)*1000); lastPoll = now;
                 if (retune && now >= nextTune)
                 {
                     center = center == 14_199_000 ? 14_198_500 : 14_199_000;
@@ -163,6 +195,7 @@ public static class ReceiveSoak
                     tunedAt = now; nextTune = now + Math.Min(15, seconds / 2.0); signal.Reset();
                 }
                 var state = session.State;
+                result.PeakQueuedFrames = Math.Max(result.PeakQueuedFrames,state.AudioQueued);
                 ValidateState(state, loss, slow);
                 var peer = simulator.State;
                 Require(peer.UnsafeRequests == 0 && peer.RejectedPackets == 0 && peer.WatchdogStops == 0 &&
@@ -175,7 +208,9 @@ public static class ReceiveSoak
                 held |= hold;
                 if (!hold)
                 {
-                    int count = session.ReadAudio(audio); result.AudioFrames += count;
+                    double readAt = clock.Elapsed.TotalSeconds;
+                    result.MaxReadGapMs = Math.Max(result.MaxReadGapMs,(readAt-lastRead)*1000); lastRead = readAt;
+                    int count = session.ReadAudio(audio); result.AudioFrames += count; ++result.Reads;
                     for (int i = 0; i < 2 * count; ++i) Require(double.IsFinite(audio[i]), "Non-finite audio.");
                     if (!loss && !slow && now - tunedAt >= 1.2)
                         result.AudioChecks += signal.Add(audio.AsSpan(0, 2 * count), 14_200_000 - center);
@@ -208,13 +243,22 @@ public static class ReceiveSoak
                     }
                 }
                 result.ElapsedSeconds = now;
-                if (now >= nextResource) { resources.Sample(); nextResource = now + 5; }
+                if (now >= nextResource)
+                {
+                    double beforeResource = clock.Elapsed.TotalMilliseconds;
+                    try { resources.Sample(); }
+                    finally { result.MaxResourceMs = Math.Max(result.MaxResourceMs,clock.Elapsed.TotalMilliseconds-beforeResource); }
+                    nextResource = now + 5;
+                }
                 if (now >= nextProgress)
                 {
-                    progress?.Invoke(new(name, now, state.IqPackets, result.AudioFrames, result.SpectrumFrames, resources.WorkingSet));
+                    ReportProgress(now,state.IqPackets);
                     nextProgress = now + 30;
                 }
-                await Task.Delay(5, token);
+                result.MaxWorkMs = Math.Max(result.MaxWorkMs,clock.Elapsed.TotalMilliseconds-now*1000);
+                double beforeWait = clock.Elapsed.TotalMilliseconds;
+                try { Pause(5,token); }
+                finally { result.MaxWaitMs = Math.Max(result.MaxWaitMs,clock.Elapsed.TotalMilliseconds-beforeWait); }
             }
             var final = session.State;
             Require(result.AudioFrames > 0 && result.SpectrumFrames > 1, "No advancing audio/spectrum observations.");
@@ -227,8 +271,16 @@ public static class ReceiveSoak
         finally
         {
             result.ElapsedSeconds = clock.Elapsed.TotalSeconds;
-            result.Resources = resources.Finish(result.ElapsedSeconds);
-            progress?.Invoke(new(name, result.ElapsedSeconds, lastIq, result.AudioFrames, result.SpectrumFrames, resources.WorkingSet));
+            double beforeResource = clock.Elapsed.TotalMilliseconds;
+            try { result.Resources = resources.Finish(result.ElapsedSeconds); }
+            finally { result.MaxResourceMs = Math.Max(result.MaxResourceMs,clock.Elapsed.TotalMilliseconds-beforeResource); }
+            ReportProgress(result.ElapsedSeconds,lastIq);
+        }
+        void ReportProgress(double seconds,long iq)
+        {
+            double before = clock.Elapsed.TotalMilliseconds;
+            try { progress?.Invoke(new(name,seconds,iq,result.AudioFrames,result.SpectrumFrames,resources.WorkingSet)); }
+            finally { result.MaxProgressMs = Math.Max(result.MaxProgressMs,clock.Elapsed.TotalMilliseconds-before); }
         }
     }
 
@@ -243,14 +295,16 @@ public static class ReceiveSoak
     internal static void Require(bool condition, string message)
     { if (!condition) throw new InvalidOperationException(message); }
     private static bool IsMeasurementFailure(Exception ex) => ex is IOException or InvalidOperationException or TimeoutException or SocketException;
-    private static async Task WaitUntil(Func<bool> predicate, int milliseconds, CancellationToken token)
+    private static void Pause(int milliseconds,CancellationToken token)
+    { if (token.WaitHandle.WaitOne(milliseconds)) token.ThrowIfCancellationRequested(); }
+    private static void WaitUntil(Func<bool> predicate, int milliseconds, CancellationToken token)
     {
         var timer = Stopwatch.StartNew();
         while (!predicate())
         {
             token.ThrowIfCancellationRequested();
             if (timer.ElapsedMilliseconds > milliseconds) throw new TimeoutException("Timed out waiting for receive shutdown/failure.");
-            await Task.Delay(10, token);
+            Pause(10, token);
         }
     }
 }
@@ -262,6 +316,11 @@ internal sealed class ReceiveSoakObservation
     public long AudioFrames, SpectrumFrames, ProducedSpectrumFrames, CoalescedFrames;
     public double SpectrumCadence => ElapsedSeconds > 0 ? ProducedSpectrumFrames / ElapsedSeconds : 0;
     public ReceiveSoakResources? Resources;
+    public long Polls,Reads,PeakQueuedFrames;
+    public bool ReaderUsesThreadPool;
+    public double StartupMs,MaxPollGapMs,MaxReadGapMs,MaxWaitMs,MaxWorkMs,MaxResourceMs,MaxProgressMs;
+    public ReceiveSoakReaderTiming ReaderTiming => new(Polls,Reads,ReaderUsesThreadPool,StartupMs,MaxPollGapMs,
+        MaxReadGapMs,MaxWaitMs,MaxWorkMs,MaxResourceMs,MaxProgressMs,PeakQueuedFrames);
 }
 
 internal sealed class ReceiveSoakSignal

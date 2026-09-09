@@ -42,6 +42,9 @@ The Native DSP workflow runs the short campaign on every relevant push/PR.
 Manual **Run workflow → receive_soak → 30-minutes** opts into a long campaign
 on all three OSes; it is not the default. Native jobs allow 60 minutes to cover
 builds plus the optional long run. The existing sanitizer job is unchanged.
+Success and failed counter reports are retained as `receive-campaign-<runner>`
+artifacts for 14 days. The early no-skip checkpoint also exercises delayed caller
+scheduling and deliberate reader/reporting stalls before the inherited suites.
 
 ## Campaign and pass conditions
 
@@ -65,12 +68,21 @@ after disposal to check release. Existing native lifecycle tests separately
 check joined workers; process thread counts here are diagnostic, not a .NET
 thread-pool leak assertion.
 
-The monitoring loop requests a five-millisecond delay between pulls, but OS
-scheduling determines actual cadence. An unexpected five-second lapse in I/Q,
+The whole campaign runs on one dedicated, joined worker, not on the caller's
+scheduler or timer/ThreadPool continuations. Native topology open/close still
+uses the engine's existing lifecycle thread; allocator ownership is unchanged.
+The worker drains PCM through all observed phases and performs their shutdown
+before returning to an asynchronous caller. It requests a cancellable
+five-millisecond wait between pulls, but OS scheduling determines actual cadence.
+There is no global thread-pool tuning, affinity change or real-time guarantee.
+An unexpected five-second lapse in I/Q,
 audio production or spectrum observations fails the campaign. Phase-end checks
 also require actual audio and multiple spectrum frames, so short phases cannot
 pass simply by reaching a timer. The one-second intentional reader pause and
 native retune settling interval are included in observed spectrum gaps.
+Counter gates are checked again immediately before native disposal, so a late
+drop during final resource/progress reporting cannot be labeled a pass. A counter
+failure is retained while STOP observation and port-release checks still run.
 
 Healthy signal checks wait 1.2 seconds after phase start or retuning. Audio is
 measured in 8192-frame windows (RMS within 0.01 of 0.25/√2; tone within 20 Hz).
@@ -99,6 +111,13 @@ frame-read gap, signal-check counts, native/simulator snapshots and cleanup flag
   end of the observation window. Peak RSS means **sampled** peak, not every
   transient OS allocation. Private bytes are null if the platform reports no
   usable value; null is not zero memory consumption.
+- Additive `readerTiming` records poll/read counts, whether the reader uses a
+  pool thread, startup time, maximum poll/read gaps, requested-wait wall time,
+  completed loop-body time, resource-query/progress-callback times and sampled
+  peak queued frames. The intentional slow-reader interval appears in read gaps,
+  not necessarily poll gaps. These bounded maxima are diagnostics, not relaxed
+  acceptance limits or exact scheduler traces. Resource queries and the caller's
+  progress callback are still synchronous; blocking them can fail the campaign.
 - CPU is cumulative process CPU seconds divided by elapsed observation time,
   expressed as percent of **one logical core**; multi-core workloads can exceed
   100%. RSS/private memory, approximate managed live bytes, cumulative managed
