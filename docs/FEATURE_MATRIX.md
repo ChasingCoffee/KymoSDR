@@ -5,13 +5,15 @@ simulator coverage without any hardware validation. Last updated 2026-09-08.
 Counts in older rows refer to their linked feature checkpoint; the latest
 full-suite totals and exact sources are in the [CI record](NATIVE_CI_RESULTS.md).
 
-Validation branch update: `ffe5bad7` passes the new G2, discovery, schema-2
-preferences and live-output fixture checkpoint, desktop endurance and full native
-suites on all three platforms, plus Linux sanitizers. The later Windows simulator
-endurance campaign fails on unplanned audio-reader drops; investigation and
-hardware qualification remain open. Full macOS/Linux jobs finish successfully.
-Earlier `87fac247` full Windows/Linux jobs
-passed, but do not erase this new failure. These
+Validation branch update: `d0aeef2a` passes the full Windows/macOS/Linux portable
+and native workflows plus Linux sanitizers. A dedicated simulator-soak reader
+and three scheduling regressions address the unplanned Windows audio-reader
+drops at `ffe5bad7`, without changing native/desktop/G2 code or acceptance limits.
+The Windows standalone campaign now passes all six phases with zero unplanned
+audio drops. Each OS passes the no-skip focused checkpoint and 272 full managed
+cases (one explicit P1-reference skip; separate reference coverage on Linux/macOS).
+Local full regression passes 273 cases with no skips. Hardware qualification
+remains open; no physical session was started for this correction. These
 hosted results supersede "not yet hosted" notes in the historical feature rows
 below, but do not qualify physical hardware/audio on Windows or Linux.
 

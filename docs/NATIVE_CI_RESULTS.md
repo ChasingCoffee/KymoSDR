@@ -1,6 +1,6 @@
 # Native cross-platform CI results
 
-## Windows receive-soak reader scheduling correction — local validation
+## Windows receive-soak reader scheduling correction — cross-platform pass
 
 The failed Windows packet-loss phase at `ffe5bad7` motivated an isolated caller
 scheduler experiment. Without changing native code, simulator pacing, OS/global
@@ -37,8 +37,42 @@ reports `usesThreadPool: false`; steady maximum poll gap is 28.42 ms and the
 packet-loss phase is 5.75 ms, with zero unplanned drops/input overruns. Its
 intentional slow-reader phase still records 31680 audio drops, a full bounded
 queue and a 1001.59 ms read gap. Both reconnects and owned cleanup pass.
-Full local managed regression and hosted Windows/macOS/Linux validation are
-pending; these local timing measurements are not Windows or hardware results.
+Full local managed regression passes **273/273 cases**, no skips: Core 148
+(6 s), Desktop 48 (45 s), Engine 77 (5 m 33 s, including the independent confined
+P1 reference and the three scheduling cases). TRX reports are retained in
+`artifacts/test-results/soak-scheduling-full`.
+The correction is published as `d0aeef2a`; its
+[portable workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34309678769)
+passes Windows/macOS/Linux. [Full native hosted validation](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34309678771)
+also passes on this exact source: Windows **30 m 4 s**, macOS **28 m 43 s**,
+Linux **25 m 22 s**, and Linux sanitizers **9 m 37 s**. This includes full
+native suites, desktop endurance, signal/control campaigns, lifecycle checks,
+Linux reconnect-memory guards and the previously failing Windows short soak.
+
+The retained Windows standalone report passes all six phases and both reconnects
+in **32.135 s**. The packet-loss phase records **zero audio drops**, zero
+socket/DSP/input-overrun errors, 345 missing packets and 346 simulator-injected
+drops (native and simulator terminal snapshots are taken at different times).
+Its maximum poll gap is **6.77 ms**, with a peak queue of **320 frames**, not
+the former full 16384-frame queue. Steady maximum poll gap is **29.50 ms**.
+Every phase reports `usesThreadPool: false`. Only the intentional slow-reader
+phase drops audio (31936 frames; 1005.52 ms read gap). Owned disposal and port
+rebinding pass throughout; STOP is observed except for the deliberately removed
+peer, where the expected socket failure is observed instead. macOS and Linux
+also pass all six phases with zero unplanned audio drops, in 32.696 s and
+33.213 s respectively. No retry or relaxed gate is used.
+
+Each hosted focused checkpoint passes Core **24**, Engine **31** and Desktop
+**48** cases with no skips, including all three new scheduling cases. The full
+managed suite on each OS passes **272 cases** (148 Core, 76 Engine, 48 Desktop),
+with one explicit independent-P1-reference skip; that reference is run separately
+on Linux/macOS. Campaign JSON and checkpoint/full TRX artifacts are retained by
+CI and downloaded under `artifacts/ci/34309678771/final`.
+
+These results clear the Windows simulator endurance blocker, not physical radio
+or playback qualification. No G2 discovery, receive session, physical audio
+stream or hardware TX is started during this correction. The separate supervised
+G2 campaign remains unrun.
 
 ## Hosted validation branch — initial CI findings
 
