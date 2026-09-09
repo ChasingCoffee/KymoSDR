@@ -17,6 +17,19 @@ public sealed class OutputSwitchTests
     }
     private static PlaybackDevice Device(int index,int rates = 7) => new(index,$"Fixture {index}","Fixture",48000,rates,32,
         [new(0,"Main L","Main R",rates),new(10,"Phones L","Phones R",rates)],10);
+    private static bool OutputReady(PlaybackState? state,long generation) =>
+        state is { Active:true,Switching:false } && state.Generation == generation && state.Rendered > 4800;
+    private static async Task<PlaybackSnapshot> WaitForOutput(PreviewController controller,long generation)
+    {
+        PlaybackSnapshot? ready = null;
+        await P1ReceiveSelfTest.WaitUntil(() =>
+        {
+            var observed = controller.Snapshot;
+            if (!OutputReady(observed?.Output,generation)) return false;
+            ready = observed; return true;
+        });
+        return ready!; // retain the exact observation that satisfied readiness
+    }
 
     [TestMethod,TestCategory("Native"),DataRow(1),DataRow(2)]
     public async Task SwitchesRatesPairsAndSilentMonitorWithoutRestartingTheReceiver(int protocol)
@@ -32,8 +45,7 @@ public sealed class OutputSwitchTests
         foreach (var device in new PlaybackDevice?[] {Device(1,1),Device(2,4),null,Device(3),null})
         {
             await controller.SwitchOutputAsync(device); ++generation;
-            await P1ReceiveSelfTest.WaitUntil(() => controller.Snapshot is { } s && s.Output.Generation == generation && s.Output.Rendered > 4800);
-            var snapshot = controller.Snapshot!;
+            var snapshot = await WaitForOutput(controller,generation);
             Assert.IsTrue(controller.Connected); Assert.AreEqual(device,controller.CurrentOutput);
             Assert.AreEqual(settings,controller.Settings); Assert.IsFalse(snapshot.Output.Muted);
             Assert.AreEqual(device?.PreferredRate ?? 48000,snapshot.Output.Rate);
@@ -57,7 +69,7 @@ public sealed class OutputSwitchTests
             return PlaybackOutput.OpenNull(path);
         });
         await controller.ConnectAsync(Native());
-        await P1ReceiveSelfTest.WaitUntil(() => controller.Snapshot?.Receive.IqPackets > 100);
+        await WaitForOutput(controller,1);
         long before = controller.Snapshot!.Receive.IqPackets;
         var change = controller.SwitchOutputAsync(Device(1));
         try
@@ -67,9 +79,15 @@ public sealed class OutputSwitchTests
             Assert.IsTrue(controller.Connected); Assert.IsFalse(change.IsCompleted);
             Assert.AreEqual(0,controller.Snapshot!.Receive.AudioDropped); Assert.AreEqual(0,controller.Snapshot.Receive.InputOverruns);
             Assert.AreEqual(0,controller.Snapshot.Output.Levels!.LeftPeak);
+            // A detached snapshot has the new generation but retains the OLD
+            // output's frame count. It must not satisfy completed-handoff waits.
+            var detached = controller.Snapshot!.Output;
+            Assert.AreEqual(2L,detached.Generation); Assert.IsTrue(detached.Rendered > 4800);
+            Assert.IsTrue(detached.Muted); Assert.IsFalse(detached.Active);
+            Assert.IsFalse(OutputReady(detached,2));
         }
         finally { release.Set(); await change; }
-        await P1ReceiveSelfTest.WaitUntil(() => controller.Snapshot is { Output.Generation:2,Output.Switching:false } s && s.Output.Rendered > 4800);
+        await WaitForOutput(controller,2);
         Assert.AreEqual(0,controller.Snapshot!.Output.Rejected); Assert.IsNull(controller.Error);
     }
     [TestMethod,TestCategory("Native")]

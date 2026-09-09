@@ -5,10 +5,11 @@ simulator coverage without any hardware validation. Last updated 2026-09-08.
 Counts in older rows refer to their linked feature checkpoint; the latest
 full-suite totals and exact sources are in the [CI record](NATIVE_CI_RESULTS.md).
 
-Validation branch update: `bed5a595` passes the full Windows/Linux native
+Validation branch update: `87fac247` passes the full Windows/Linux native
 workflows, including the new G2, discovery, schema-2 preferences and live-output
-fixture checkpoint, and Linux sanitizers. macOS full validation remains blocked
-by the slow-wakeup G2 test fixture; its correction is under revalidation. These
+fixture checkpoint, and Linux sanitizers. macOS now passes the G2 native and
+Core checkpoint; full validation is blocked by a separate output-switch test
+snapshot race whose correction is under revalidation. These
 hosted results supersede "not yet hosted" notes in the historical feature rows
 below, but do not qualify physical hardware/audio on Windows or Linux.
 

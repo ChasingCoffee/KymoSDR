@@ -64,7 +64,28 @@ All eight mode/offset cases per build produce 72000 PCM frames, including
 1.45534826e-10. Every sideband case retains an active worker, stop reason zero,
 75 status packets and clean receive/DSP/overrun counters. JUnit reports are
 `artifacts/native/g2-wakeup-validation.xml` and the matching `native-asan` path.
-Hosted revalidation is pending. Passive local checks confirm the saved 828
+The [run at `87fac247`](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34303351448)
+passes the full Windows/Linux jobs and Linux sanitizers. On macOS, all six
+focused native cases pass, including G2 standard (39.36 s) and delayed-wakeup
+(69.51 s) cases with the expected signal levels and clean counters. The 24 G2
+Core cases also pass with no skips. The next managed checkpoint exposes a
+separate P1 output-switch test race (27 pass, 1 fail): a detached snapshot has
+the new output generation and the old rendered-frame count, while correctly
+remaining muted/inactive and marked as switching. The test incorrectly treated
+generation plus frame count alone as completion.
+
+A deterministically blocked-open fixture reproduces that mistaken readiness
+predicate locally (retained failing TRX: `artifacts/test-results/output-ready-repro`).
+The test correction requires an active, non-switching output as well as the
+generation and fresh frame threshold, and retains the exact snapshot that
+satisfies the wait. The blocked-open regression explicitly rejects the detached
+state. No production handoff, mute behavior or safety contract changes. The
+final local receive/playback checkpoint passes **28/28 cases**, no skips, in
+**1 m 25 s**, with zero build warnings/errors (TRX:
+`artifacts/test-results/output-ready-checkpoint`). Hosted validation of this
+correction is pending.
+
+Passive local checks confirm the saved 828
 Main Out L/R route is still available and is the system default; no physical
 stream, G2 discovery/RX, unplug or sleep/wake test has been started for this step.
 
