@@ -22,6 +22,7 @@ extern void ThetisWdspSetPlanningTimeLimit(double);
 extern int test_peer_send(cm_socket, int, const void *, int);
 static cm_socket peers[4] = {CM_INVALID_SOCKET,CM_INVALID_SOCKET,CM_INVALID_SOCKET,CM_INVALID_SOCKET};
 static const int offsets[4] = {0,1,3,13};
+static int sideband_sleep_ms = 5;
 static int checkpoint(int stage, void *context) { return stage == *(int *)context; }
 static void validate_sent(int *run_seen, int *stop_seen)
 {
@@ -40,7 +41,7 @@ static void verify_sideband(int mode, int offset)
 {
     int run_seen = 0, stop_seen = 0;
     validate_sent(&run_seen,&stop_seen); run_seen = stop_seen = 0;
-    CHECK(ThetisG2ReceiveTestOpen(14074000,2,NULL,NULL) == 0);
+    CHECK(ThetisG2ReceiveTestOpen(14074000,6,NULL,NULL) == 0);
     CHECK(ThetisP2ReceiveSetControls(1,mode,100,3000) == 0);
     CHECK(ThetisReceiveSetGain(1,-20,0,0,60) == 0); // deterministic unity AGC, no device
     int64_t state[24], safety[8], metadata[12];
@@ -53,28 +54,37 @@ static void verify_sideband(int mode, int offset)
         validate_sent(&run_seen,&stop_seen);
         if (run_seen)
         {
-            packet[0] = (unsigned char)(sequence>>24); packet[1] = (unsigned char)(sequence>>16);
-            packet[2] = (unsigned char)(sequence>>8); packet[3] = (unsigned char)sequence++;
-            for (int i = 0; i < 238; ++i, ++sample)
+            // At most four packets (952 complex samples) per wakeup.
+            // Supply enough PCM even with a 16 ms timer; wall-clock
+            // pacing here is a fixture property, not RF/audio qualification.
+            for (int batch = 0; batch < 4; ++batch)
             {
-                // Independent legacy/Saturn wire convention: positive RF
-                // offset rotates negatively, unlike the owned P2 simulator.
-                double phase = -6.283185307179586 * offset * sample / 192000.0;
-                for (int part = 0; part < 2; ++part)
+                packet[0] = (unsigned char)(sequence>>24); packet[1] = (unsigned char)(sequence>>16);
+                packet[2] = (unsigned char)(sequence>>8); packet[3] = (unsigned char)sequence++;
+                for (int i = 0; i < 238; ++i, ++sample)
                 {
-                    uint32_t v = (uint32_t)(int32_t)llround(8388607 * .1 * (part ? sin(phase) : cos(phase)));
-                    int k = 16 + i*6 + part*3;
-                    packet[k] = (unsigned char)(v>>16); packet[k+1] = (unsigned char)(v>>8); packet[k+2] = (unsigned char)v;
+                    // Independent legacy/Saturn wire convention: positive RF
+                    // offset rotates negatively, unlike the owned P2 simulator.
+                    double phase = -6.283185307179586 * offset * sample / 192000.0;
+                    for (int part = 0; part < 2; ++part)
+                    {
+                        uint32_t v = (uint32_t)(int32_t)llround(8388607 * .1 * (part ? sin(phase) : cos(phase)));
+                        int k = 16 + i*6 + part*3;
+                        packet[k] = (unsigned char)(v>>16); packet[k+1] = (unsigned char)(v>>8); packet[k+2] = (unsigned char)v;
+                    }
                 }
+                CHECK(test_peer_send(peers[3],(int)state[2],packet,1444) == 1444);
             }
-            CHECK(test_peer_send(peers[3],(int)state[2],packet,1444) == 1444);
             if (step % 30 == 0) CHECK(test_peer_send(peers[1],(int)state[2],status,60) == 60);
         }
         int count = ThetisP2ReceiveReadAudio(audio,4096); CHECK(count >= 0);
-        // Settle in samples, not Sleep iterations: Windows timer granularity
-        // can produce far fewer iterations inside this native two-second limit.
+        // Match the established CM controls/gain fixtures: discard one full
+        // second of produced 48 kHz PCM before measuring settled rejection.
         for (int i = 0; i < count; ++i)
-            if (warmup++ >= 4096) { energy += audio[2*i]*audio[2*i]; ++measured; }
+        {
+            CHECK(isfinite(audio[2*i]) && isfinite(audio[2*i+1]));
+            if (warmup++ >= 48000) { energy += audio[2*i]*audio[2*i]; ++measured; }
+        }
         int n = ThetisP2ReceiveReadSpectrum(1,pixels,4095,metadata,12); CHECK(n >= 0);
         if (n > 0)
         {
@@ -83,16 +93,23 @@ static void verify_sideband(int mode, int offset)
         }
         CHECK(ThetisG2ReceiveGetState(safety,8) == 8);
         if (!safety[2]) break;
-        Sleep(2);
+        Sleep(sideband_sleep_ms);
     }
     double rms = measured ? sqrt(energy/measured) : 0;
     int wanted = (mode == 1) == (offset > 0);
-    CHECK(measured > 1000 && spectra > 0 && safety[3] == 1 && !safety[4] && !safety[7]);
+    CHECK(ThetisP2ReceiveGetState(state,24) == 24);
+    printf("G2 sideband mode=%d offset=%d sleep=%dms: RMS=%.9g wanted=%d PCM=%ld measured=%ld spectra=%d missing=%lld input-overruns=%lld audio-drops=%lld\n",
+        mode,offset,sideband_sleep_ms,rms,wanted,warmup,measured,spectra,(long long)state[9],(long long)state[17],(long long)state[19]);
+    CHECK(measured >= 12000 && spectra > 0 && safety[3] == 1 && !safety[4] && !safety[7]);
+    CHECK(!state[9] && !state[10] && !state[11] && !state[12] && !state[15] && !state[17] && !state[19] && !state[21]);
     CHECK(wanted ? rms > .003 && rms < .02 : rms < .00001);
     CHECK(ThetisP2ReceiveClose() == 0);
 }
-int main(void)
+int main(int argc, char **argv)
 {
+    int coarse = argc == 2 && !strcmp(argv[1],"--coarse-timer");
+    CHECK(argc == 1 || coarse);
+    if (coarse) sideband_sleep_ms = 16;
     CHECK(g2_duration_valid(60,0) && !g2_duration_valid(61,0));
     CHECK(g2_duration_valid(3600,1) && !g2_duration_valid(3601,1) && !g2_duration_valid(0,1));
     CHECK(!g2_deadline_reached(12345,3612344,3600));
@@ -126,7 +143,7 @@ int main(void)
     int before_sockets = 1;
     CHECK(ThetisG2ReceiveEnduranceOpen(1,"192.0.2.1","192.0.2.2","255.255.255.0",14200000,3600,
         checkpoint,&before_sockets) == -4);
-    for (int stage = 1; stage <= 5; ++stage)
+    for (int stage = 1; !coarse && stage <= 5; ++stage)
     {
         CHECK(ThetisG2ReceiveTestOpen(14200000,1,checkpoint,&stage) == -4);
         CHECK(ThetisG2ReceiveEnduranceTestOpen(14200000,3600,checkpoint,&stage) == -4);
@@ -136,7 +153,7 @@ int main(void)
     { int bound; CHECK(cm_socket_open("127.0.0.1",1024+offsets[i],&peers[i],&bound) == 0); }
     // Deadline, every key bit, missing status, missing IQ, malformed status.
     const int keybits[] = {0,1,2,4,128,0,0,0};
-    for (int scenario = 0; scenario < 8; ++scenario)
+    for (int scenario = 0; !coarse && scenario < 8; ++scenario)
     {
         int run_seen = 0, stop_seen = 0;
         validate_sent(&run_seen,&stop_seen); run_seen = stop_seen = 0;
@@ -181,6 +198,7 @@ int main(void)
         for (int offset = -1500; offset <= 1500; offset += 3000) verify_sideband(mode,offset);
     for (int i = 0; i < 4; ++i) cm_socket_close(&peers[i]);
     destroy_impulse_cache();
-    puts("PASS: G2 wire firewall, rollback, deadlines, key/status/IQ fail-close, hardware IQ orientation and both sidebands");
+    puts(coarse ? "PASS: G2 settled sidebands and clean counters with a 16 ms fixture timer" :
+        "PASS: G2 wire firewall, rollback, deadlines, key/status/IQ fail-close, hardware IQ orientation and both sidebands");
     return 0;
 }

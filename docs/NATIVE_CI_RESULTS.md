@@ -1,5 +1,34 @@
 # Native cross-platform CI results
 
+## Hosted validation branch — initial CI findings
+
+Commit `1ac83e8b` was published to `validation/g2-rx-audio-endurance`.
+[Discovery/portable CI](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34299591587)
+passes on Windows/macOS/Linux. The initial
+[native run](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34299591465)
+fails: Linux Release and sanitizer builds expose the new G2 fixture's missing
+explicit `libm` link (`llround`), and macOS/Windows fail its sideband RMS gate.
+No default-branch merge or hardware test is performed.
+
+The follow-up links the G2 test executable with `m` on non-Windows platforms,
+matching the existing native signal tests. The two-second sideband fixture had
+discarded only 4096 PCM frames and sent one I/Q packet per sleep, making sample
+coverage dependent on host timer/scheduling behavior. It now discards 48000
+produced PCM frames (matching established control/gain fixtures), supplies
+bounded four-packet batches within a six-second native deadline, and requires
+at least 12000 measured frames plus clean transport/DSP/overrun counters. The
+wanted amplitude and unwanted-sideband RMS limits are unchanged. Logged RMS,
+sample counts and counters make any future failure inspectable.
+
+A separate `g2_receive_coarse_timer` case uses a deliberate 16 ms fixture timer.
+Both standard and coarse cases pass locally in 63.89 s total: wanted RMS
+0.00707106613, unwanted RMS 1.45534826e-10, with 24832–25344 measured frames
+even in the coarse case and zero loss/input-overrun/audio-drop counters.
+This is sample-chain/fixture evidence, not a physical playback timing result.
+The native workflow includes both cases, increasing the full native suite from
+15 to 16 tests. No production receiver/audio implementation or safety gate is
+changed by this follow-up. Hosted revalidation is pending.
+
 ## Controlled G2 endurance and CI catch-up infrastructure — local working tree
 
 The next 2026-09-08 increment adds `g2-soak`: explicit ANT1 and extended-RX

@@ -99,7 +99,7 @@ jobs:
         run: |
           $results = Join-Path '${{ github.workspace }}' 'artifacts/receive-checkpoint'
           New-Item -ItemType Directory -Force $results | Out-Null
-          ctest --test-dir artifacts/native -C Release --verbose -R 'g2_receive_safety|p2_receive_packet_codec|receive_playback' --output-junit (Join-Path $results 'native.xml')
+          ctest --test-dir artifacts/native -C Release --verbose -R 'g2_receive_|p2_receive_packet_codec|receive_playback' --output-junit (Join-Path $results 'native.xml')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $suites = @(
             @{ Project = 'Thetis.Core.Tests'; Filter = 'FullyQualifiedName~G2'; Required = @('G2ReceiveCliTests','G2ListenCliTests','G2SoakCliTests') },
