@@ -85,9 +85,41 @@ final local receive/playback checkpoint passes **28/28 cases**, no skips, in
 `artifacts/test-results/output-ready-checkpoint`). Hosted validation of this
 correction is pending.
 
-Passive local checks confirm the saved 828
-Main Out L/R route is still available and is the system default; no physical
-stream, G2 discovery/RX, unplug or sleep/wake test has been started for this step.
+The [run at `ffe5bad7`](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34306854215)
+clears the corrected G2/output-switch checkpoint and desktop endurance on all
+three platforms, as well as their full native suites. Linux sanitizers pass.
+The companion [portable workflow](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34306854260)
+also passes Windows/macOS/Linux. However, Windows subsequently fails the
+simulator `receive-soak` packet-loss phase with **11456 unplanned audio-reader
+drops** and a full 16384-frame queue. The preceding ten-second steady phase
+passes with no drops. Injected packet loss is accounted for (164 missing /
+164 injected); native socket/DSP/input-overrun and malformed/foreign/late
+counters remain zero. The failed phase stops the peer, disposes the native owner
+and rebinds its port successfully; remaining phases and full managed Windows
+tests do not run.
+
+This is a real failed counter gate, not the earlier stale-snapshot assertion.
+The report also shows simulator pacing resynchronizations and about 0.518 s of
+lost I/Q pacing time, but does not establish why the managed reader stopped
+keeping up. `ReceiveSoak.ObserveAsync` uses timer/ThreadPool continuations,
+whereas the desktop/G2 playback pump has a dedicated worker; this difference is
+an investigation lead, not a proved cause or hardware qualification. Do not
+allow audio drops merely because packet loss was deliberately injected, and do
+not retry until green as a substitute for investigation. Next: instrument reader
+wakeup/operation gaps, reproduce the starvation, and compare sampler scheduling
+while retaining the unchanged counter gates. The hardware campaign remains
+on hold. The full macOS and Linux jobs subsequently finish successfully; the
+overall run is failed because of this Windows campaign. No rerun or acceptance
+threshold change is used to conceal that result.
+
+Local checks confirm the saved 828 Main Out L/R route is still available and is
+the system default. A targeted Ethernet/P2 discovery-only scan completes in
+832 ms with exactly the expected idle G2 (code 27 / beta 50 / protocol 43 /
+10 DDCs), no socket errors and no deadline. It sends no receive-start or TX.
+The separate `artifacts/g2-supervised` bundle identifies managed source
+`ffe5bad7` and uses the production native hashes recorded below, with no G2 test
+openers. `g2-soak --help` and all 48 local desktop cases pass. No physical stream,
+G2 receive, unplug or sleep/wake test has been started during this step.
 
 ## Controlled G2 endurance and CI catch-up infrastructure — local working tree
 

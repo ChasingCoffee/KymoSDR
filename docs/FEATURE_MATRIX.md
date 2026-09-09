@@ -5,11 +5,13 @@ simulator coverage without any hardware validation. Last updated 2026-09-08.
 Counts in older rows refer to their linked feature checkpoint; the latest
 full-suite totals and exact sources are in the [CI record](NATIVE_CI_RESULTS.md).
 
-Validation branch update: `87fac247` passes the full Windows/Linux native
-workflows, including the new G2, discovery, schema-2 preferences and live-output
-fixture checkpoint, and Linux sanitizers. macOS now passes the G2 native and
-Core checkpoint; full validation is blocked by a separate output-switch test
-snapshot race whose correction is under revalidation. These
+Validation branch update: `ffe5bad7` passes the new G2, discovery, schema-2
+preferences and live-output fixture checkpoint, desktop endurance and full native
+suites on all three platforms, plus Linux sanitizers. The later Windows simulator
+endurance campaign fails on unplanned audio-reader drops; investigation and
+hardware qualification remain open. Full macOS/Linux jobs finish successfully.
+Earlier `87fac247` full Windows/Linux jobs
+passed, but do not erase this new failure. These
 hosted results supersede "not yet hosted" notes in the historical feature rows
 below, but do not qualify physical hardware/audio on Windows or Linux.
 
