@@ -27,7 +27,20 @@ even in the coarse case and zero loss/input-overrun/audio-drop counters.
 This is sample-chain/fixture evidence, not a physical playback timing result.
 The native workflow includes both cases, increasing the full native suite from
 15 to 16 tests. No production receiver/audio implementation or safety gate is
-changed by this follow-up. Hosted revalidation is pending.
+changed by this follow-up.
+
+The [run at `32521fab`](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34300289036)
+confirms that the hosted macOS standard sideband cases now produce the correct
+settled wanted/rejected RMS with clean counters. Its new coarse-timer case
+reveals that a fixed six-second interval still yields too little PCM on that
+runner (28544 frames, before the 48000-frame settling requirement).
+The next fixture revision therefore separates signal validation from deadline
+validation: every sideband case must produce 48000 settling frames plus at
+least 24000 measured frames, then explicitly closes its owned loopback session.
+A 60-second native fallback and the CTest wall deadline still bound a stalled
+fixture. Dedicated native deadline and key/watchdog fail-close scenarios remain
+unchanged. No amplitude/rejection or clean-counter threshold is relaxed.
+Hosted revalidation is pending.
 
 ## Controlled G2 endurance and CI catch-up infrastructure — local working tree
 

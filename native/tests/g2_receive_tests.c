@@ -41,7 +41,10 @@ static void verify_sideband(int mode, int offset)
 {
     int run_seen = 0, stop_seen = 0;
     validate_sent(&run_seen,&stop_seen); run_seen = stop_seen = 0;
-    CHECK(ThetisG2ReceiveTestOpen(14074000,6,NULL,NULL) == 0);
+    // Signal correctness is sample-driven, not a timer-speed benchmark. The
+    // safety scenarios below independently require actual native deadlines.
+    // This long fallback still bounds a broken/stalled fixture.
+    CHECK(ThetisG2ReceiveTestOpen(14074000,60,NULL,NULL) == 0);
     CHECK(ThetisP2ReceiveSetControls(1,mode,100,3000) == 0);
     CHECK(ThetisReceiveSetGain(1,-20,0,0,60) == 0); // deterministic unity AGC, no device
     int64_t state[24], safety[8], metadata[12];
@@ -92,7 +95,7 @@ static void verify_sideband(int mode, int offset)
             CHECK(fabs((peak-n/2)*192000.0/4096-offset) < 50); ++spectra;
         }
         CHECK(ThetisG2ReceiveGetState(safety,8) == 8);
-        if (!safety[2]) break;
+        if (!safety[2] || measured >= 24000) break;
         Sleep(sideband_sleep_ms);
     }
     double rms = measured ? sqrt(energy/measured) : 0;
@@ -100,7 +103,7 @@ static void verify_sideband(int mode, int offset)
     CHECK(ThetisP2ReceiveGetState(state,24) == 24);
     printf("G2 sideband mode=%d offset=%d sleep=%dms: RMS=%.9g wanted=%d PCM=%ld measured=%ld spectra=%d missing=%lld input-overruns=%lld audio-drops=%lld\n",
         mode,offset,sideband_sleep_ms,rms,wanted,warmup,measured,spectra,(long long)state[9],(long long)state[17],(long long)state[19]);
-    CHECK(measured >= 12000 && spectra > 0 && safety[3] == 1 && !safety[4] && !safety[7]);
+    CHECK(measured >= 24000 && spectra > 0 && safety[2] && safety[3] == 0 && !safety[4] && !safety[7]);
     CHECK(!state[9] && !state[10] && !state[11] && !state[12] && !state[15] && !state[17] && !state[19] && !state[21]);
     CHECK(wanted ? rms > .003 && rms < .02 : rms < .00001);
     CHECK(ThetisP2ReceiveClose() == 0);
