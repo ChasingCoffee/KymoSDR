@@ -61,6 +61,16 @@ bandpass, which was disabled in this SSB configuration; its active primary
 filter still used constructor defaults. Explicit both-sideband/filter rejection
 tests now cover the convention instead of relying on those defaults.
 
+Physical Saturn/G2 wire samples have the opposite complex rotation for a
+positive RF offset. The G2-only ingress therefore conjugates Q once before
+both the spectrum tap and WDSP. The shared RF-edge translation above remains
+unchanged, as do P1/P2 simulator codecs. This distinction was established by
+live FT8 decoding during the [G2 checkpoint](G2_HARDWARE_RECEIVE.md): before
+normalization, selecting LSB instead of USB recovered 14.074 MHz FT8. Native
+hardware-profile fixtures now check positive/negative RF spectrum positions,
+wanted-sideband audio and opposite-sideband rejection with legacy/Saturn-order
+samples. A matching simulator alone is not independent wire-orientation proof.
+
 Changes are dispatched to the existing native lifecycle thread to preserve
 allocation locality. The existing managed gate serializes session operations;
 the native command gate rejects reentrancy. Native updates acquire CM RX0's

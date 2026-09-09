@@ -7,10 +7,21 @@ those names.
 This implements discovery, offline DSP checks and simulator-to-native receive
 from the [port plan](CROSS_PLATFORM_IMPLEMENTATION_PLAN.md).
 The discovery harness does **not** open hardware radio streams, play audio or
-transmit. The separate [simulator receiver desktop](DESKTOP_PREVIEW.md) now
+transmit. The separate [receiver desktop](DESKTOP_PREVIEW.md) now
 provides rendered spectrum/waterfall and opt-in [playback](AUDIO_PLAYBACK.md).
 Set `AVALONIA_TELEMETRY_OPTOUT=1` when building/restoring the full solution.
 The legacy Windows solution remains separate.
+
+There is now a separate, explicitly confirmed [Ethernet G2 receive-only
+measurement](G2_HARDWARE_RECEIVE.md), limited to ANT1/20m and 5–60 seconds.
+Discovery commands remain non-streaming. The desktop offers a separate G2 source
+with fresh ANT1 confirmation per connection. `g2-listen --help` describes bounded
+playback and opt-in offline capture; no TX controls are available.
+For deliberate longer qualification, `g2-soak --help` describes the separately
+confirmed 60–3600-second test command, optional ten-second reconnects and retained
+diagnostic reports. It does not raise the normal desktop limit. See the
+[controlled campaign](G2_HARDWARE_RECEIVE.md#controlled-longer-receive-campaign)
+before starting any hardware run.
 
 ## Prerequisites and build
 

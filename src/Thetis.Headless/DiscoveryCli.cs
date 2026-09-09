@@ -25,11 +25,17 @@ internal sealed class DiscoveryBackend : IDiscoveryBackend
 internal static class DiscoveryCli
 {
     internal const string Help = """
-        Thetis.Headless — discovery and offline DSP tests (does not start RX or TX on a radio)
+        Thetis.Headless — discovery, simulator tests and opt-in G2 hardware RX
 
         Commands:
           nics       List usable IPv4 interfaces. Sends no discovery packets.
           discover   Send HPSDR discovery requests; finish after the scan/deadline.
+          g2-receive --help
+                     Explicit Ethernet/ANT1 hardware RX, 5..60 seconds. No TX or sound output.
+          g2-listen --help
+                     Same bounded G2 owner as the desktop; opt-in output and offline capture, no TX.
+          g2-soak --help
+                     Explicit extended G2 RX qualification, 60..3600 seconds and optional reconnects; no TX.
           dsp-selftest --native-dir ABSOLUTE_PATH
                      Run offline DSP checks; JSON output. No radio or audio devices.
           session-selftest --native-dir ABSOLUTE_PATH

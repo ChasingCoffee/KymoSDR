@@ -16,7 +16,7 @@ public sealed class CliTests
         using var output = new StringWriter();
         int code = DiscoveryCli.Run([], output, TextWriter.Null, backend);
         Assert.AreEqual(0, code);
-        StringAssert.Contains(output.ToString(), "does not start RX or TX");
+        StringAssert.Contains(output.ToString(), "opt-in G2 hardware RX");
         Assert.AreEqual(0, backend.Calls);
     }
 

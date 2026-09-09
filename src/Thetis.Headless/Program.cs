@@ -9,6 +9,9 @@ Console.CancelKeyPress += (_, args) =>
 
 return args.FirstOrDefault() switch
 {
+    "g2-soak" => await G2SoakCli.RunAsync(args,Console.Out,Console.Error,cancellation.Token),
+    "g2-listen" => await G2ListenCli.RunAsync(args,Console.Out,Console.Error,cancellation.Token),
+    "g2-receive" => await G2ReceiveCli.RunAsync(args, Console.Out, Console.Error, cancellation.Token),
     "playback-selftest" => await PlaybackCli.RunAsync(args,Console.Out,Console.Error,cancellation.Token),
     "audio-devices" => await PlaybackCli.RunAsync(args,Console.Out,Console.Error,cancellation.Token),
     "playback-listen" => await PlaybackCli.RunAsync(args,Console.Out,Console.Error,cancellation.Token),

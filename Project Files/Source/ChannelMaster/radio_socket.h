@@ -23,4 +23,10 @@ int cm_socket_receive_peer(cm_socket socket, void *buffer, int capacity, int tim
     uint32_t *address, int *port);
 /* Private loopback-only sender. No broadcast, hostname resolution or LAN target. */
 int cm_socket_send_loopback(cm_socket socket, uint32_t address, int port, const void *buffer, int length);
+/* Private hardware transport primitives. Caller must validate RX packet policy.
+ * Selected receiver accepts only this exact source, not other LAN/loopback peers. */
+int cm_socket_receive_selected(cm_socket socket, void *buffer, int capacity, int timeout_ms,
+    uint32_t selected, uint32_t *address, int *port);
+int cm_socket_send_selected(cm_socket socket, uint32_t address, int port, const void *buffer, int length);
+int cm_socket_rx_subnet(const char *remote, const char *local, const char *mask, uint32_t *remote_address);
 #endif

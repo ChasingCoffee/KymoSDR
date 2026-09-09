@@ -5,6 +5,9 @@
       "thetis.audio": {
         "type": "Project"
       },
+      "thetis.core": {
+        "type": "Project"
+      },
       "thetis.engine": {
         "type": "Project",
         "dependencies": {

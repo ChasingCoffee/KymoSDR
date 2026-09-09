@@ -7,14 +7,24 @@ public sealed record ReceiveState(int LocalPort, int BasePort, int Ddc, int Inpu
     long ForeignPackets, long MicPacketsDiscarded, long StatusPackets, long SocketErrors, long CommandsSent,
     long InputOverruns, long AudioQueued, long AudioDropped, long AudioProduced, long DspErrors);
 
-/// <summary>Shared loopback receive lifecycle, controls, diagnostics and bounded audio/spectrum pulls.</summary>
+/// <summary>Shared receive lifecycle, controls and pulls; each opener enforces its transport policy.</summary>
 public abstract class ReceiveSession : IDisposable
 {
     private static bool active;
     private readonly ReceiveHandle handle = new();
     private readonly float[] spectrumPixels = new float[ReceiveSpectrumFrame.NativePixelCount];
     private readonly long[] spectrumMetadata = new long[12];
-    private protected ReceiveSession() { }
+    private readonly bool loopbackOnly;
+    private protected ReceiveSession(bool loopbackOnly = true) { this.loopbackOnly = loopbackOnly; }
+
+    private protected static T OpenHardwareSession<T>(string nativeDirectory, G2ReceiveOptions options,
+        CancellationToken token, Func<T> create) where T : ReceiveSession
+    {
+        ArgumentNullException.ThrowIfNull(options); options.Validate(); token.ThrowIfCancellationRequested();
+        DspRuntime.Initialize(nativeDirectory);
+        var dsp = new P2ReceiveOptions(1024, FrequencyHz: options.FrequencyHz);
+        return NativeLifecycle.Invoke(() => OpenOnLifecycle(dsp, 2, token, null, create, options));
+    }
 
     private protected static T OpenSession<T>(string nativeDirectory, P2ReceiveOptions options, int protocol,
         CancellationToken token, Func<int, int>? checkpoint, Func<T> create) where T : ReceiveSession
@@ -25,7 +35,7 @@ public abstract class ReceiveSession : IDisposable
     }
 
     private static T OpenOnLifecycle<T>(P2ReceiveOptions options, int protocol, CancellationToken token,
-        Func<int, int>? checkpoint, Func<T> create) where T : ReceiveSession
+        Func<int, int>? checkpoint, Func<T> create, G2ReceiveOptions? hardware = null) where T : ReceiveSession
     {
         lock (DspRuntime.Gate)
         {
@@ -40,6 +50,8 @@ public abstract class ReceiveSession : IDisposable
             if (P2ReceiveNative.ThetisReceiveGainAbi() != 1)
                 throw new NotSupportedException("Native receive gain ABI is incompatible.");
             var gain = options.Gain ?? new();
+            if (hardware is not null && G2ReceiveNative.ThetisG2ReceiveAbi() != 1)
+                throw new NotSupportedException("Native G2 receive ABI is incompatible.");
             var session = create();
             Exception? callbackError = null;
             ChannelMasterNative.Checkpoint callback = (stage, _) =>
@@ -49,7 +61,12 @@ public abstract class ReceiveSession : IDisposable
             };
             NativeMethods.ThetisWdspSetPlanningTimeLimit(0);
             int rc;
-            try { rc = P2ReceiveNative.ThetisReceiveOpenWithGain(1, protocol, options.Address, options.BasePort, options.Ddc,
+            try { rc = hardware is not null ? (hardware.ConfirmExtendedReceive
+                ? G2ReceiveNative.ThetisG2ReceiveEnduranceOpen(1, hardware.RadioAddress,
+                    hardware.LocalAddress, hardware.SubnetMask, hardware.FrequencyHz, hardware.DurationSeconds, callback, 0)
+                : G2ReceiveNative.ThetisG2ReceiveOpen(1, hardware.RadioAddress,
+                    hardware.LocalAddress, hardware.SubnetMask, hardware.FrequencyHz, hardware.DurationSeconds, callback, 0)) :
+                P2ReceiveNative.ThetisReceiveOpenWithGain(1, protocol, options.Address, options.BasePort, options.Ddc,
                 options.InputRate, options.FrequencyHz, (int)controls.Mode, controls.LowCutHz, controls.HighCutHz,
                 gain.AudioGainDb, gain.Muted ? 1 : 0, (int)gain.AgcMode, gain.AgcMaxGainDb, callback, 0); }
             finally { GC.KeepAlive(callback); NativeMethods.ThetisWdspSetPlanningTimeLimit(-1); }
@@ -71,7 +88,7 @@ public abstract class ReceiveSession : IDisposable
         {
             lock (DspRuntime.Gate)
             {
-                CheckOpen(); var s = ReadNativeState(); GC.KeepAlive(handle);
+                CheckOpen(); var s = ReadNativeState(loopbackOnly); GC.KeepAlive(handle);
                 if (s[1] != 1) throw new InvalidOperationException("Native receive session is not open.");
                 return new((int)s[2], (int)s[3], (int)s[4], (int)s[5], (int)s[6], s[7], s[8], s[9], s[10],
                     s[11], s[12], s[13], s[14], s[15], s[16], s[17], s[18], s[19], s[20], s[21]);
@@ -81,6 +98,7 @@ public abstract class ReceiveSession : IDisposable
     public void Tune(int frequencyHz)
     {
         P2ReceiveOptions.ValidateFrequency(frequencyHz);
+        if (!loopbackOnly) G2ReceiveOptions.ValidateFrequency(frequencyHz);
         lock (DspRuntime.Gate)
         {
             CheckOpen(); int rc = P2ReceiveNative.ThetisP2ReceiveTune(frequencyHz); GC.KeepAlive(handle);
@@ -187,11 +205,12 @@ public abstract class ReceiveSession : IDisposable
             return new((float[])spectrumPixels.Clone(), spectrumMetadata);
         }
     }
-    internal static long[] ReadNativeState()
+    internal static long[] ReadNativeState(bool loopbackOnly = true)
     {
         long[] state = new long[24];
-        if (P2ReceiveNative.ThetisP2ReceiveGetState(state, state.Length) != 24 || state[0] != 1 || state[22] != 1 || state[23] != 0)
-            throw new NotSupportedException("Native receive ABI does not match the loopback-only, RX-only contract.");
+        if (P2ReceiveNative.ThetisP2ReceiveGetState(state, state.Length) != 24 || state[0] != 1 ||
+            state[22] != (loopbackOnly ? 1 : 0) || state[23] != 0)
+            throw new NotSupportedException("Native receive ABI does not match the selected RX-only transport contract.");
         return state;
     }
     internal static void RequireIdle()

@@ -25,10 +25,10 @@ public sealed record ReceiveCounters(int InputRate,long IqPackets,long IqSamples
 public sealed record SimulatorClockDiagnostics(long IqPacingResyncs,long IqPacingLostNanoseconds);
 public sealed record DiagnosticSample(double ElapsedSeconds,long SessionId,ProcessTelemetry Process,double? CpuPercentOneCore,
     double? DisplayFramesPerSecond,double? RenderFramesPerSecond,double? SampleGapSeconds,DisplayTelemetry Display,
-    ReceiveCounters? Receive,PlaybackState? Output,SimulatorClockDiagnostics? SimulatorClock);
+    ReceiveCounters? Receive,PlaybackState? Output,SimulatorClockDiagnostics? SimulatorClock,G2ReceiveSafetyState? Hardware = null);
 public sealed record DiagnosticEvent(double ElapsedSeconds,long SessionId,string Kind,string? ErrorType = null,PreviewSettings? Controls = null);
 public sealed record DiagnosticSession(long Id,int Protocol,double StartedSeconds,double? EndedSeconds,
-    PreviewSettings InitialControls,DiagnosticSample? LastObserved,string? ErrorType);
+    PreviewSettings InitialControls,DiagnosticSample? LastObserved,string? ErrorType,bool Hardware = false);
 public sealed record ResourceSummary(ProcessTelemetry? First,ProcessTelemetry? Last,long PeakWorkingSetBytes,
     double PeakCpuPercentOneCore,double MaxSampleGapSeconds,long SamplesRecorded);
 public sealed record DiagnosticReport(int SchemaVersion,DateTimeOffset CreatedUtc,string SourceVersion,string Runtime,
@@ -53,19 +53,21 @@ public sealed class PreviewDiagnostics
     private ProcessTelemetry? first,last;
     private long nextId,activeId,failed,evictedSamples,evictedEvents,evictedSessions,sampleCount,peakMemory;
     private double peakCpu,maxGap;
+    private bool hardwareEver;
     public PreviewDiagnostics() : this(Stopwatch.StartNew(),ProcessTelemetry.Read) { }
     private PreviewDiagnostics(Stopwatch clock,Func<ProcessTelemetry> process) : this(() => clock.Elapsed.TotalSeconds,process) { }
     internal PreviewDiagnostics(Func<double> seconds,Func<ProcessTelemetry> process)
     { this.seconds = seconds; readProcess = process; }
     public void PublishDisplay(DisplayTelemetry value) => Volatile.Write(ref display,value);
-    public long Begin(int protocol,PreviewSettings controls)
+    public long Begin(int protocol,PreviewSettings controls,bool hardware = false)
     {
         lock (gate)
         {
             if (activeId != 0) throw new InvalidOperationException("A diagnostic session is already active.");
             activeId = ++nextId;
+            hardwareEver |= hardware;
             if (sessions.Count == SessionCapacity) { sessions.RemoveAt(0); ++evictedSessions; }
-            sessions.Add(new(activeId,protocol,seconds(),null,controls,null,null));
+            sessions.Add(new(activeId,protocol,seconds(),null,controls,null,null,hardware));
             AddEvent(new(seconds(),activeId,"connected",Controls:controls)); return activeId;
         }
     }
@@ -83,7 +85,7 @@ public sealed class PreviewDiagnostics
             double? rendered = gap >= .25 ? Math.Max(0,(drawing.RenderedFrames-previous!.Display.RenderedFrames)/gap.Value) : null;
             var sample = new DiagnosticSample(now,id,process,cpu,fps,rendered,gap,drawing,
                 snapshot is null ? null : ReceiveCounters.From(snapshot.Receive),snapshot?.Output,
-                simulator ?? (previous?.SessionId == id ? previous.SimulatorClock : null));
+                simulator ?? (previous?.SessionId == id ? previous.SimulatorClock : null),snapshot?.Hardware);
             if (samples.Count == SampleCapacity) { samples.Dequeue(); ++evictedSamples; }
             samples.Enqueue(sample); previous = sample; first ??= process; last = process; ++sampleCount;
             peakMemory = Math.Max(peakMemory,process.WorkingSetBytes); peakCpu = Math.Max(peakCpu,cpu ?? 0); maxGap = Math.Max(maxGap,gap ?? 0);
@@ -109,8 +111,9 @@ public sealed class PreviewDiagnostics
         lock (gate) return new(1,DateTimeOffset.UtcNow,
             typeof(PreviewDiagnostics).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
             RuntimeInformation.FrameworkDescription,RuntimeInformation.OSDescription,RuntimeInformation.ProcessArchitecture.ToString(),
-            Environment.ProcessorCount,true,
-            "Simulator observations only. Silent-monitor timing is sample-driven, not physical audio endurance. CPU 100% equals one logical core; process memory includes the full application. Samples target 1 second; gaps and bounded-history evictions are explicit. No RF/TX, waveform, device names, network addresses or local paths are exported.",
+            Environment.ProcessorCount,!hardwareEver,
+            (hardwareEver ? "Includes opt-in G2 hardware RX; each session identifies its source. No transmit. " : "Simulator observations only. No RF/TX. ") +
+            "Silent-monitor timing is sample-driven, not physical audio endurance. CPU 100% equals one logical core; process memory includes the full application. Samples target 1 second; gaps and bounded-history evictions are explicit. No waveform, device names, network addresses or local paths are exported.",
             SampleCapacity,EventCapacity,SessionCapacity,evictedSamples,evictedEvents,evictedSessions,nextId,failed,
             new(first,last,peakMemory,peakCpu,maxGap,sampleCount),samples.ToArray(),events.ToArray(),sessions.ToArray());
     }

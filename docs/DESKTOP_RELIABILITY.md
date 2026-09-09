@@ -1,7 +1,8 @@
 # Desktop diagnostics, endurance and safe preferences
 
-This increment remains **simulator-only**. It cannot discover/connect a LAN
-radio, open a microphone, or enable hardware TX. The G2's receive-only ANT1
+Automated endurance campaigns remain **simulator-only**. Interactive use now
+also supports a separately confirmed, bounded G2 Ethernet receive source. It
+cannot open a microphone or enable hardware TX. The G2's receive-only ANT1
 restriction is unchanged. See [the desktop](DESKTOP_PREVIEW.md) and
 [playback contract](AUDIO_PLAYBACK.md) for connection and audio safety.
 
@@ -17,9 +18,14 @@ Schema 1 records:
 
 - Compiled source/informational version, .NET runtime, OS, process architecture
   and logical CPU count. This identifies the managed build, not a cryptographic
-  attestation of the loaded native libraries; playback still checks native ABI 2.
+  attestation of the loaded native libraries; playback checks ABI 2 plus additive
+  routing/meter ABI 1.
 - Monotonic elapsed time, distinct session IDs/protocols, initial/applied receive
   settings, lifecycle events and exception **types**, not raw exception messages.
+- Hardware sessions carry an additive `hardware` flag and observed G2 safety
+  counters/stop reason. `loopbackOnly` remains false after any hardware session,
+  even if its detailed history is later evicted. Hardware has no simulator-clock
+  observation. These additive fields retain schema 1.
 - I/Q counts, packet loss/order/malformed traffic, socket/DSP errors, input
   overruns and audio drops. These counters belong to individual sessions; do
   not subtract them across reconnects.
@@ -28,6 +34,16 @@ Schema 1 records:
   latched faults. Terminal playback counters are retained before the native
   output is closed. `lastObserved.output.active` describes that last observation;
   `endedSeconds` records the later completion of owned cleanup.
+- Additive output `levels` contains a 100 ms window sequence and linear L/R
+  peak/RMS amplitudes after mute. `firstOutputChannel` is zero-based;
+  `streamChannels` is callback width (two for CoreAudio's mapped stereo stream,
+  a channel prefix on WASAPI/ALSA). No channel names are exported. Older `peak`
+  and clipping counters remain pre-mute lifetime statistics, not rolling levels.
+- Output `generation` increments on each live handoff/refresh, while the receive
+  session ID and its counters stay continuous. Output counters reset across
+  generations: never subtract them across a switch. `switching` identifies a
+  temporary detached output; `switchDiscardedFrames` counts cumulative 48 kHz
+  receive PCM discarded during handoffs, separately from transport/audio overruns.
 - For P2, simulator I/Q clock rebases and lost source time. These are not wire
   packet loss. P1 currently has no equivalent lost-time measurement, represented
   by null, not a claimed zero. A silent sample-driven monitor can remain free
@@ -61,21 +77,60 @@ sampler even when owned cleanup fails.
 
 ## Safe settings
 
-Interactive windows automatically load/save schema-1 JSON in
+Interactive windows automatically load/save schema-2 JSON in
 `Environment.SpecialFolder.ApplicationData/KymoSDR/preview-settings.json`.
 The exact platform-resolved location is printed by desktop `--help`.
 This is separate from legacy Thetis/SDR-VST3 state: there is no profile search,
-calibration import, migration, or write into a legacy installation.
+calibration import, migration, or write into a legacy installation. Existing
+KymoSDR schema-1 files migrate in memory with no saved radio/output selection;
+the file changes to schema 2 only on the next normal save. Older builds will
+reject schema 2 and preserve it rather than partially restoring it.
 
 The allow-list is simulator protocol, requested frequency, USB/LSB, filter edges,
-AGC preset/maximum, normal window size and maximized state. No audio-device
-selection, AF level, mute/unmute state, connection state, native-library path,
-TX/PTT state or arbitrary command can be restored. Every launch starts
-**disconnected, muted, at AF −40 dB, with No device selected**. Connect is explicit
-and uses the restored/displayed controls. Reconnect keeps the existing conservative
-gain/mute rule. Refresh/reselect is still required after output loss.
+AGC preset/maximum, normal window size and maximized state. At the user's request,
+schema 2 also remembers the last valid G2 local IPv4, radio IPv4/MAC, bounded test
+duration, G2/source selection, and chosen audio interface/stereo pair. These are
+**selection bookmarks, not permission to connect**. Every launch starts
+**disconnected, muted, at AF −40 dB, with ANT1 confirmation unchecked**. No AF
+level, mute/unmute state, connected state, consent, native-library path, TX/PTT
+state or arbitrary command can be restored. Saving G2 connection fields preserves
+the separate simulator receive preferences. Invalid drafts retain the last valid
+connection fields. Command-line G2 prefill overrides the saved target.
 
-Save occurs after successful Connect/Apply and during orderly close. A valid
+Saved audio uses name, host backend, advertised channel count and pair number/
+channel names, never a transient device index. On interactive startup with a
+bookmark, background enumeration restores it only when exactly one name/backend
+match has the same layout and supported pair. It opens no stream. Missing,
+ambiguous or changed output remains **No device** with a visible explanation;
+the bookmark is retained for a later Refresh. Names are not unique hardware IDs,
+so reconnecting an indistinguishable replacement cannot be identified as a
+different physical device. Review the restored output/pair before Connect.
+After an output fault, refresh/review and explicit muted reconnect are required.
+**Forget saved output** clears the bookmark even if the device is unavailable.
+
+For a new preferences store only, the first automatic enumeration selects the
+system default output and saves its supported pair. The additive
+`audioSelectionInitialized` flag distinguishes this first-run case from an
+explicit No-device choice. Existing schema-1/2 profiles without that field are
+treated as already initialized, preserving their prior silent choice. A saved
+device still takes precedence over the system default. No supported default
+leaves No device and allows a later retry. Invalid/protected settings and
+`--no-settings`/automated launches do not auto-enumerate/select a default.
+**Forget saved output** also records an explicit No-device choice; it does not
+reenable automatic default selection.
+
+The local preferences file now contains device/channel names and network
+addresses/MACs; treat it accordingly before sharing it. These bookmarks are not
+included in exported diagnostic reports. `--no-settings`, smoke and endurance
+ignore them, never auto-enumerate saved outputs, and cannot run LAN discovery
+as part of an automated campaign. No discovery runs at interactive startup.
+
+Save occurs after first-run default selection, disconnected audio/pair and
+discovered-radio choices, successful Connect/Apply/live output switch, explicit
+bookmark clearing and orderly close. Live output selections are drafts until
+**Switch output** succeeds; failed/unapplied drafts do not replace the bookmark.
+Only output is replaced; existing gain/mute and the receive source persist
+during a successful handoff. Startup/reconnect still reset gain/mute. A valid
 unapplied draft can be remembered on close; an invalid draft preserves the last
 valid receiver preferences while still saving layout. Window dimensions must be
 finite and within 900×700–3840×2160 logical units, are constrained to the current

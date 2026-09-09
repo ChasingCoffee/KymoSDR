@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:Thetis.Desktop"
-        x:Class="Thetis.Desktop.MainWindow" Title="KymoSDR — simulator receiver"
+        x:Class="Thetis.Desktop.MainWindow" Title="KymoSDR — receive preview"
         Width="1140" Height="800" MinWidth="900" MinHeight="700" UseLayoutRounding="True">
   <Grid RowDefinitions="70,*,42">
     <Border Background="#121D2A" BorderBrush="#263449" BorderThickness="0,0,0,1" Padding="24,14">
@@ -13,20 +13,37 @@
         </StackPanel>
         <Button Grid.Column="1" x:Name="ExportButton" Content="Export diagnostics…" Click="OnExport" Margin="0,0,16,0" VerticalAlignment="Center" />
         <Border Grid.Column="2" Background="#253123" CornerRadius="5" Padding="12,7">
-          <TextBlock Text="SIMULATOR ONLY · NO RF / TX" Foreground="#C6D991" FontSize="11" FontWeight="SemiBold" />
+          <TextBlock x:Name="SafetyBanner" Text="SIMULATOR · NO RF / TX" Foreground="#C6D991" FontSize="11" FontWeight="SemiBold" />
         </Border>
       </Grid>
     </Border>
     <Grid Grid.Row="1" ColumnDefinitions="230,*" Margin="18,18,18,12" ColumnSpacing="18">
       <Border Background="#121D2A" CornerRadius="8" Padding="18">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
           <StackPanel Spacing="6" Margin="0,0,0,20">
             <TextBlock Text="SOURCE" Classes="caption" />
             <ComboBox x:Name="ProtocolInput" SelectedIndex="0">
-              <ComboBoxItem Content="G2 / Protocol 2" />
-              <ComboBoxItem Content="Protocol 1" />
+              <ComboBoxItem Content="P2 simulator" />
+              <ComboBoxItem Content="P1 simulator" />
+              <ComboBoxItem Content="G2 Ethernet · RX only" />
             </ComboBox>
-            <TextBlock Text="Owned loopback signal at 14.200 MHz. No LAN discovery." TextWrapping="Wrap" FontSize="11" Foreground="#8D9FB5" Margin="0,5,0,0" />
+            <TextBlock x:Name="SourceDescription" Text="Owned loopback signal at 14.200 MHz. No LAN discovery." TextWrapping="Wrap" FontSize="11" Foreground="#8D9FB5" Margin="0,5,0,0" />
+            <StackPanel x:Name="HardwarePanel" IsVisible="False" Spacing="5">
+              <Button x:Name="DiscoverButton" Content="Discover radios · Ethernet" Click="OnDiscover" HorizontalAlignment="Stretch" FontSize="11" />
+              <ComboBox x:Name="DiscoveredRadioInput" PlaceholderText="Choose a discovered G2" FontSize="11" IsEnabled="False" />
+              <TextBlock x:Name="DiscoveryStatus" Text="Discovery only; never starts receive. Manual connection fields also work." TextWrapping="Wrap" FontSize="11" Foreground="#8D9FB5" />
+              <TextBlock Text="LOCAL ETHERNET · IPv4" Classes="caption" />
+              <TextBox x:Name="EthernetInput" FontSize="11" PlaceholderText="Local Ethernet address" />
+              <TextBlock Text="G2 ADDRESS · IPv4" Classes="caption" />
+              <TextBox x:Name="RadioInput" FontSize="11" PlaceholderText="Radio address" />
+              <TextBlock Text="G2 MAC ADDRESS" Classes="caption" />
+              <TextBox x:Name="MacInput" FontSize="11" PlaceholderText="XX:XX:XX:XX:XX:XX" />
+              <TextBlock Text="RX TEST · 5–60 SECONDS" Classes="caption" />
+              <TextBox x:Name="DurationInput" Text="60" FontSize="11" />
+              <CheckBox x:Name="ConfirmHardwareInput"><TextBlock Text="ANT1 receive only.&#10;No PTT / keying." FontSize="11" /></CheckBox>
+              <Button x:Name="Ft8Button" Content="14.074 MHz · USB preset" Click="OnFt8Preset" HorizontalAlignment="Stretch" FontSize="11" />
+            </StackPanel>
           </StackPanel>
           <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,22">
             <Button x:Name="ConnectButton" Content="Connect simulator" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnConnect" />
@@ -35,8 +52,14 @@
           <StackPanel Grid.Row="2" Spacing="8" Margin="0,0,0,20">
             <TextBlock Text="AUDIO OUTPUT" Classes="caption" />
             <ComboBox x:Name="OutputInput" />
+            <TextBlock Text="STEREO OUTPUT PAIR" Classes="caption" />
+            <ComboBox x:Name="PairInput" IsEnabled="False" />
+            <TextBlock x:Name="PairDescription" Text="No physical output selected." TextWrapping="Wrap" FontSize="11" Foreground="#8D9FB5" />
+            <TextBlock x:Name="AudioRestoreText" TextWrapping="Wrap" FontSize="11" Foreground="#F2C778" />
             <Button x:Name="RefreshButton" Content="Refresh devices" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnRefresh" />
-            <TextBlock Text="Device changes require disconnect. Reconnect always starts muted." TextWrapping="Wrap" FontSize="11" Foreground="#8D9FB5" />
+            <Button x:Name="SwitchOutputButton" Content="Switch output" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnSwitchOutput" IsEnabled="False" ToolTip.Tip="Apply the selected device/pair without restarting receive. Brief audio gap; applied AF and mute state are preserved. Check monitor volume first." />
+            <Button x:Name="ForgetOutputButton" Content="Forget saved output" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnForgetOutput" FontSize="11" />
+            <TextBlock Text="Choose a device/pair, then Switch output while receiving. Refresh briefly pauses audio. Reconnect starts muted." TextWrapping="Wrap" FontSize="11" Foreground="#8D9FB5" />
           </StackPanel>
           <StackPanel Grid.Row="3" Margin="0,0,0,20">
             <TextBlock Text="NATIVE LIBRARIES" Classes="caption" />
@@ -51,9 +74,10 @@
           </StackPanel>
           <TextBlock Grid.Row="8" Text="Open-source radio,&#10;across platforms." FontSize="12" Foreground="#627991" Margin="0,20,0,0" />
         </Grid>
+        </ScrollViewer>
       </Border>
-      <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" RowSpacing="14">
-        <Border Background="#121D2A" CornerRadius="8" Padding="20,14">
+      <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" RowSpacing="10">
+        <Border Background="#121D2A" CornerRadius="8" Padding="20,10">
           <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
             <TextBlock Text="VFO A · REQUESTED FREQUENCY" Classes="caption" />
             <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12">
@@ -69,8 +93,8 @@
         <Border Grid.Row="1" Background="#0A111B" BorderBrush="#263449" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
           <local:SpectrumView x:Name="SpectrumDisplay" MinHeight="180" />
         </Border>
-        <Border Grid.Row="2" Background="#121D2A" CornerRadius="8" Padding="16">
-          <StackPanel Spacing="12">
+        <Border Grid.Row="2" Background="#121D2A" CornerRadius="8" Padding="14">
+          <StackPanel Spacing="8">
             <Grid ColumnDefinitions="2*,*,*,*" ColumnSpacing="12">
               <StackPanel><TextBlock Text="FREQUENCY · Hz" Classes="caption" /><TextBox x:Name="FrequencyInput" Text="14199000" KeyDown="OnInputKey" /></StackPanel>
               <StackPanel Grid.Column="1"><TextBlock Text="MODE" Classes="caption" /><ComboBox x:Name="ModeInput" SelectedIndex="0"><ComboBoxItem Content="USB" /><ComboBoxItem Content="LSB" /></ComboBox></StackPanel>
@@ -80,18 +104,30 @@
             <Grid ColumnDefinitions="*,*,2*" ColumnSpacing="12">
               <StackPanel><TextBlock Text="AGC" Classes="caption" /><ComboBox x:Name="AgcInput" SelectedIndex="2"><ComboBoxItem Content="Off" /><ComboBoxItem Content="Slow" /><ComboBoxItem Content="Medium" /><ComboBoxItem Content="Fast" /></ComboBox></StackPanel>
               <StackPanel Grid.Column="1"><TextBlock Text="AGC MAX · dB" Classes="caption" /><TextBox x:Name="AgcMaxInput" Text="60" KeyDown="OnInputKey" /></StackPanel>
-              <StackPanel Grid.Column="2"><TextBlock x:Name="GainText" Text="AF GAIN · −40 dB" Classes="caption" /><Slider x:Name="GainInput" Minimum="-60" Maximum="0" Value="-40" TickFrequency="1" IsSnapToTickEnabled="True" /></StackPanel>
+              <StackPanel Grid.Column="2"><TextBlock x:Name="GainText" Text="AF · −40 dB · Apply to change" Classes="caption" /><Slider x:Name="GainInput" Minimum="-60" Maximum="0" Value="-40" TickFrequency="1" IsSnapToTickEnabled="True" ToolTip.Tip="AF changes require Apply controls. Each connection starts muted at −40 dB or lower." /></StackPanel>
             </Grid>
-            <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="3">
+              <TextBlock x:Name="MeterStatus" Text="OUTPUT · disconnected · dBFS (RMS bars / peak labels)" FontSize="10" Foreground="#8D9FB5" />
+              <Grid ColumnDefinitions="14,*,64,14,*,64" ColumnSpacing="5">
+                <TextBlock Text="L" FontSize="10" />
+                <ProgressBar Grid.Column="1" x:Name="LeftMeter" Minimum="-96" Maximum="0" Value="-96" Height="9" VerticalAlignment="Center" Foreground="#33D6BE" Background="#263449" />
+                <TextBlock Grid.Column="2" x:Name="LeftPeakText" Text="−∞ dBFS" FontSize="10" TextAlignment="Right" />
+                <TextBlock Grid.Column="3" Text="R" FontSize="10" />
+                <ProgressBar Grid.Column="4" x:Name="RightMeter" Minimum="-96" Maximum="0" Value="-96" Height="9" VerticalAlignment="Center" Foreground="#33D6BE" Background="#263449" />
+                <TextBlock Grid.Column="5" x:Name="RightPeakText" Text="−∞ dBFS" FontSize="10" TextAlignment="Right" />
+              </Grid>
+            </StackPanel>
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
               <CheckBox x:Name="MuteInput" Content="Mute output" IsChecked="True" IsEnabled="False" Click="OnMute" />
-              <Button Grid.Column="1" x:Name="ApplyButton" Content="Apply controls" IsEnabled="False" Classes="primary" Click="OnApply" Padding="20,9" />
+              <Button Grid.Column="1" x:Name="ListenButton" Content="Start listening" IsEnabled="False" Click="OnListen" Padding="12,9" />
+              <Button Grid.Column="2" x:Name="ApplyButton" Content="Apply controls" IsEnabled="False" Classes="primary" Click="OnApply" Padding="12,9" />
             </Grid>
           </StackPanel>
         </Border>
       </Grid>
     </Grid>
     <Border Grid.Row="2" Background="#121D2A" BorderBrush="#263449" BorderThickness="0,1,0,0" Padding="22,10">
-      <TextBlock x:Name="StatusText" Text="Ready. Connect the simulator to view spectrum and receive audio." FontSize="12" TextTrimming="CharacterEllipsis" />
+      <TextBlock x:Name="StatusText" Text="Ready. Select a receive source. Connections start muted; Start listening is explicit." FontSize="12" TextTrimming="CharacterEllipsis" />
     </Border>
   </Grid>
 </Window>

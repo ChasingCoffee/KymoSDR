@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * Shared loopback-only P1/P2 receive owner. P2-prefixed pull/control exports
+ * Shared P1/P2 receive owner, with separate guarded G2 hardware entry point.
+ * P2-prefixed pull/control exports
  * are retained for ABI compatibility and operate on the single active owner.
  * One bounded packet/control worker owns the socket and never feeds mic/TX.
  */
@@ -11,6 +12,7 @@
 #include "cm_spectrum.h"
 #include "p2_rx_packet.h"
 #include "p1_rx_packet.h"
+#include "g2_receive_policy.h"
 
 #define AUDIO_CAPACITY 16384
 static volatile LONG command_busy;
@@ -18,7 +20,8 @@ static CRITICAL_SECTION state_lock;
 static int lock_owned, core_owned, rnet_owned, socket_owned, worker_started, opened;
 static HANDLE stop_event;
 static cm_thread worker;
-static int base_port, selected_ddc, sample_rate, protocol_one;
+static int base_port, selected_ddc, sample_rate, protocol_one, g2_hardware, g2_seconds;
+static int64_t g2_state[8];
 static uint32_t frequency_hz, high_sequence;
 static int64_t state[24];
 static double audio[2 * AUDIO_CAPACITY];
@@ -104,7 +107,13 @@ static void observe_iq(int samples, const double *iq)
 }
 static int send_control(int offset, const unsigned char *packet, int length)
 {
-    int sent = cm_socket_send_loopback(listenSock, MetisAddr, base_port + offset, packet, length);
+    if (g2_hardware && !p2_g2_packet_allowed(offset, packet, length))
+    {
+        EnterCriticalSection(&state_lock); ++g2_state[7]; LeaveCriticalSection(&state_lock);
+        count(15, 1); return -1;
+    }
+    int sent = g2_hardware ? cm_socket_send_selected(listenSock, MetisAddr, base_port + offset, packet, length) :
+        cm_socket_send_loopback(listenSock, MetisAddr, base_port + offset, packet, length);
     count(sent == length ? 16 : 15, 1);
     return sent == length ? 0 : -1;
 }
@@ -122,8 +131,11 @@ static int send_high(int run)
     }
     else
     {
-        p2_rx_high(packet, selected_ddc, frequency, run, high_sequence++);
+        if (g2_hardware) p2_g2_high(packet, frequency, run, high_sequence++);
+        else p2_rx_high(packet, selected_ddc, frequency, run, high_sequence++);
         result = send_control(3, packet, 1444);
+        if (g2_hardware && !run && !result)
+        { EnterCriticalSection(&state_lock); ++g2_state[6]; LeaveCriticalSection(&state_lock); }
     }
     EnterCriticalSection(&state_lock);
     // There is no sample-accurate P2 tuning acknowledgement. Wait after the
@@ -136,12 +148,14 @@ static int send_high(int run)
 static void receive_main(void *unused)
 {
     (void)unused;
-    uint64_t start = now_ms(), heartbeat = 0, setup = 0, last_iq = start;
+    uint64_t start = now_ms(), heartbeat = 0, setup = 0, last_iq = start, last_status = start;
+    int reason = 0, primed = 0;
     uint32_t last_sequence = 0;
     int have_sequence = 0;
     while (WaitForSingleObject(stop_event, 0) == WAIT_TIMEOUT)
     {
         uint64_t now = now_ms();
+        if (g2_hardware && g2_deadline_reached(start, now, g2_seconds)) { reason = 1; break; }
         if (protocol_one && !have_sequence && now >= setup)
         {
             unsigned char config[1032]; p1_rx_setup(config, high_sequence++);
@@ -153,20 +167,43 @@ static void receive_main(void *unused)
         {
             unsigned char general[60], rx[1444];
             p2_rx_general(general, base_port); p2_rx_receivers(rx, selected_ddc, sample_rate);
+            if (g2_hardware) p2_g2_general(general);
             if (send_control(0, general, 60) || send_control(1, rx, 1444)) break;
             setup = now + 1000;
+            if (g2_hardware && !primed)
+            {
+                // Idle was checked by discovery. STOP clears stale MOX/CW before RUN.
+                if (send_high(0)) break;
+                if (WaitForSingleObject(stop_event, 150) != WAIT_TIMEOUT) break;
+                if (send_high(0)) break;
+                if (WaitForSingleObject(stop_event, 50) != WAIT_TIMEOUT) break;
+                primed = 1;
+            }
         }
         if (now >= heartbeat)
         { if (send_high(1)) break; heartbeat = now + 100; }
         uint32_t source; int port;
-        int length = cm_socket_receive_peer(listenSock, prn->ReadBufp, 1444, 20, &source, &port);
+        int length = cm_socket_receive_selected(listenSock, prn->ReadBufp, 1444, 20,
+            g2_hardware ? MetisAddr : 0, &source, &port);
         if (length == -1) { /* bounded wait */ }
         else if (length == -2) count(11, 1);
         else if (length == -4) count(12, 1);
         else if (length < 0) { count(15, 1); break; }
         else if (source != MetisAddr) count(12, 1);
         else if (!protocol_one && port == base_port + 1)
-        { count(length == 60 ? 14 : 11, 1); }
+        {
+            count(length == 60 ? 14 : 11, 1);
+            if (g2_hardware)
+            {
+                if (length != 60) { reason = 7; break; }
+                last_status = now_ms();
+                unsigned char keys = prn->ReadBufp[4] & 0x87;
+                EnterCriticalSection(&state_lock);
+                g2_state[4] |= keys; g2_state[5] |= prn->ReadBufp[5] & 3;
+                LeaveCriticalSection(&state_lock);
+                if (keys) { reason = 4; break; }
+            }
+        }
         else if (!protocol_one && port == base_port + 2)
         { count(length == 132 ? 13 : 11, 1); } // mic deliberately discarded, never Inbound(TX)
         else if (port != base_port + (protocol_one ? 0 : 11 + selected_ddc)) count(12, 1);
@@ -174,6 +211,7 @@ static void receive_main(void *unused)
         {
             uint32_t sequence;
             int samples = protocol_one ? p1_rx_decode(prn->ReadBufp, length, prn->RxReadBufp, 476, &sequence)
+                : g2_hardware ? p2_g2_decode(prn->ReadBufp, length, prn->RxReadBufp, 476, &sequence)
                 : p2_rx_decode(prn->ReadBufp, length, prn->RxReadBufp, 476, &sequence);
             if (samples < 0) count(11, 1);
             else
@@ -192,10 +230,19 @@ static void receive_main(void *unused)
             }
         }
         // Missing/stalled peer cannot leave an endless heartbeat sender behind.
-        if (now_ms() - last_iq >= 3000) { count(15, 1); break; }
+        if (now_ms() - last_iq >= 3000) { count(15, 1); reason = 2; break; }
+        if (g2_hardware && now_ms() - last_status >= 3000) { count(15, 1); reason = 3; break; }
+    }
+    if (g2_hardware)
+    {
+        EnterCriticalSection(&state_lock);
+        g2_state[3] = reason ? reason : state[15] ? 5 : 6;
+        LeaveCriticalSection(&state_lock);
     }
     SetEvent(stop_event);
     send_high(0);
+    if (g2_hardware) { send_high(0); send_high(0); }
+    EnterCriticalSection(&state_lock); g2_state[2] = 0; LeaveCriticalSection(&state_lock);
 }
 static void close_owned(void)
 {
@@ -214,6 +261,7 @@ static void close_owned(void)
     lock_owned = opened = 0;
     memset(state, 0, sizeof(state)); audio_count = audio_read = audio_write = 0;
     spectrum_ready = spectrum_count = spectrum_skip = 0;
+    g2_hardware = 0; memset(g2_state, 0, sizeof(g2_state));
 }
 static int valid_controls(int mode, int low, int high)
 { return (mode == 0 || mode == 1) && low >= 0 && high <= 12000 && high > low && high - low >= 100; }
@@ -299,19 +347,20 @@ CM_API int ThetisReceiveProtocolAbi(void) { return 1; }
 CM_API int ThetisReceiveOpenWithControls(int abi, int protocol, const char *remote, int base, int ddc, int rate,
     int frequency, int mode, int low, int high, cm_checkpoint checkpoint, void *context)
 { return ThetisReceiveOpenWithGain(abi, protocol, remote, base, ddc, rate, frequency, mode, low, high, 0, 0, 0, 60, checkpoint, context); }
-CM_API int ThetisReceiveOpenWithGain(int abi, int protocol, const char *remote, int base, int ddc, int rate,
+static int receive_open(int abi, int protocol, const char *remote, int base, int ddc, int rate,
     int frequency, int mode, int low, int high, int gain_db, int muted, int agc, int max_gain,
-    cm_checkpoint checkpoint, void *context)
+    cm_checkpoint checkpoint, void *context, int hardware, const char *local, int seconds)
 {
     uint32_t address;
     if (abi != 1 || (protocol != 1 && protocol != 2) || (protocol == 1 && (ddc != 0 || rate != 48000)) ||
-        cm_socket_address(remote, &address, 1) || base < 1024 || base > (protocol == 1 ? 65535 : 65515) ||
+        cm_socket_address(remote, &address, !hardware) || base < 1024 || base > (protocol == 1 ? 65535 : 65515) ||
         ddc < 0 || ddc > 9 || (rate != 48000 && rate != 96000 && rate != 192000 && rate != 384000) ||
         frequency < 0 || frequency > 61440000 || !valid_controls(mode, low, high) || !valid_gain(gain_db, muted, agc, max_gain)) return -1;
     if (!enter()) return -2;
     if (opened || core_owned || prn || listenSock != CM_INVALID_SOCKET) { leave(); return -2; }
     int result = -3;
     memset(state, 0, sizeof(state));
+    memset(g2_state, 0, sizeof(g2_state)); g2_hardware = hardware; g2_seconds = seconds;
     audio_read = audio_write = audio_count = 0;
     spectrum_ready = spectrum_count = spectrum_skip = 0;
     spectrum_sequence = spectrum_coalesced = 0; spectrum_generation = 1;
@@ -344,13 +393,21 @@ CM_API int ThetisReceiveOpenWithGain(int abi, int protocol, const char *remote, 
         }
         if (stage == 3)
         {
-            if (nativeInitMetis((char *)remote, base, "127.0.0.1", 0, protocol_one ? USB : ETH,
+            if (hardware)
+            {
+                // Do not weaken nativeInitMetis's simulator-only hardware gate.
+                if (cm_socket_open(local, 0, &listenSock, &radio_local_port)) goto failed;
+                MetisAddr = address; RadioProtocol = ETH; HPSDRModel = HPSDRModel_ANAN_G2;
+                prn->base_outbound_port = 1024; prn->p2_custom_port_base = 1025;
+            }
+            else if (nativeInitMetis((char *)remote, base, "127.0.0.1", 0, protocol_one ? USB : ETH,
                 protocol_one ? HPSDRModel_HPSDR : HPSDRModel_ANAN_G2, protocol_one ? 0 : 1)) goto failed;
             socket_owned = 1;
         }
         if (stage == 4 && (FAIL_AT(4) || !(stop_event = CreateEvent(NULL, TRUE, FALSE, NULL)))) goto failed;
         if (stage == 5)
         {
+            g2_state[2] = hardware;
             if (FAIL_AT(5) || cm_try_start_thread(&worker, receive_main, NULL)) goto failed;
             worker_started = 1;
         }
@@ -361,12 +418,43 @@ CM_API int ThetisReceiveOpenWithGain(int abi, int protocol, const char *remote, 
 failed:
     close_owned(); leave(); return result;
 }
+CM_API int ThetisReceiveOpenWithGain(int abi, int protocol, const char *remote, int base, int ddc, int rate,
+    int frequency, int mode, int low, int high, int gain_db, int muted, int agc, int max_gain,
+    cm_checkpoint checkpoint, void *context)
+{ return receive_open(abi, protocol, remote, base, ddc, rate, frequency, mode, low, high,
+    gain_db, muted, agc, max_gain, checkpoint, context, 0, "127.0.0.1", 0); }
+CM_API int ThetisG2ReceiveAbi(void) { return 1; }
+static int g2_open(int abi, const char *remote, const char *local, const char *mask,
+    int frequency, int seconds, cm_checkpoint checkpoint, void *context, int extended)
+{
+    uint32_t address;
+    if (abi != 1 || !p2_g2_frequency_valid(frequency) || !g2_duration_valid(seconds, extended) ||
+        cm_socket_rx_subnet(remote, local, mask, &address)) return -1;
+    return receive_open(1, 2, remote, 1024, 2, 192000, frequency, 1, 300, 3000,
+        -40, 0, 3, 60, checkpoint, context, 1, local, seconds);
+}
+CM_API int ThetisG2ReceiveOpen(int abi, const char *remote, const char *local, const char *mask,
+    int frequency, int seconds, cm_checkpoint checkpoint, void *context)
+{ return g2_open(abi, remote, local, mask, frequency, seconds, checkpoint, context, 0); }
+CM_API int ThetisG2ReceiveEnduranceOpen(int abi, const char *remote, const char *local, const char *mask,
+    int frequency, int seconds, cm_checkpoint checkpoint, void *context)
+{ return g2_open(abi, remote, local, mask, frequency, seconds, checkpoint, context, 1); }
+CM_API int ThetisG2ReceiveGetState(int64_t *values, int capacity)
+{
+    if (!values || capacity < 8) return -1;
+    if (!enter()) return -2;
+    if (lock_owned) EnterCriticalSection(&state_lock);
+    memcpy(values, g2_state, sizeof(g2_state)); values[0] = 1; values[1] = opened && g2_hardware;
+    if (lock_owned) LeaveCriticalSection(&state_lock);
+    leave(); return 8;
+}
 CM_API int ThetisP2ReceiveClose(void)
 { if (!enter()) return -2; close_owned(); leave(); return 0; }
 CM_API int ThetisP2ReceiveTune(int frequency)
 {
     if (frequency < 0 || frequency > 61440000) return -1;
     if (!enter()) return -2;
+    if (g2_hardware && !p2_g2_frequency_valid(frequency)) { leave(); return -1; }
     if (!opened || WaitForSingleObject(stop_event, 0) != WAIT_TIMEOUT) { leave(); return -3; }
     EnterCriticalSection(&state_lock);
     frequency_hz = (uint32_t)frequency; ++spectrum_generation;
@@ -408,7 +496,7 @@ CM_API int ThetisP2ReceiveGetState(int64_t *values, int capacity)
     values[3] = opened ? base_port : 0; values[4] = opened ? selected_ddc : 0;
     values[5] = opened ? sample_rate : 0; values[6] = worker_started;
     values[17] = core_owned ? InterlockedAnd(&pcm->pcbuff[0]->overruns, -1) : 0;
-    values[18] = audio_count; values[22] = 1; values[23] = 0;
+    values[18] = audio_count; values[22] = !g2_hardware; values[23] = 0;
     if (lock_owned) LeaveCriticalSection(&state_lock);
     leave(); return 24;
 }
@@ -444,6 +532,18 @@ CM_API int ThetisP2ReceiveReadSpectrum(int abi, float *pixels, int capacity, int
     LeaveCriticalSection(&state_lock); leave(); return count;
 }
 #ifdef THETIS_TESTING
+CM_API int ThetisG2ReceiveTestOpen(int frequency, int seconds, cm_checkpoint checkpoint, void *context)
+{
+    if (!p2_g2_frequency_valid(frequency) || !g2_duration_valid(seconds, 0)) return -1;
+    return receive_open(1, 2, "127.0.0.1", 1024, 2, 192000, frequency, 1, 300, 3000,
+        -40, 0, 3, 60, checkpoint, context, 1, "127.0.0.1", seconds);
+}
+CM_API int ThetisG2ReceiveEnduranceTestOpen(int frequency, int seconds, cm_checkpoint checkpoint, void *context)
+{
+    if (!p2_g2_frequency_valid(frequency) || !g2_duration_valid(seconds, 1)) return -1;
+    return receive_open(1, 2, "127.0.0.1", 1024, 2, 192000, frequency, 1, 300, 3000,
+        -40, 0, 3, 60, checkpoint, context, 1, "127.0.0.1", seconds);
+}
 CM_API int ThetisP2ReceiveTestFault(int stage)
 {
     if (stage != 0 && stage != 4 && stage != 5) return -1;

@@ -18,9 +18,23 @@ AUDIO_API int ThetisAudioAbi(void);
 AUDIO_API int ThetisAudioInitialize(void);
 AUDIO_API int ThetisAudioTerminate(void);
 AUDIO_API int ThetisAudioDeviceCount(void);
+/* Default output device in the current enumeration, or -1 when unavailable.
+ * Metadata only; never opens a stream. Requires initialization. */
+AUDIO_API int ThetisAudioDefaultOutputDevice(void);
 /* Five int32: ABI, device index, output channels, default rate, supported rates
  * bitmask 1=44100, 2=48000, 4=96000. Names are UTF-8, including terminator. */
 AUDIO_API int ThetisAudioDevice(int index,int *values,int capacity,char *name,int name_capacity,char *host,int host_capacity);
+/* Additive routing/meter ABI 1; original playback ABI 2 remains unchanged.
+ * Adjacent pairs, zero-based even first channel, at most 128 advertised outputs.
+ * Four int32: ABI 1, first channel, callback channel count, supported rate bits.
+ * Channel names are driver-reported where available, otherwise numbered. */
+AUDIO_API int ThetisAudioRoutingAbi(void);
+AUDIO_API int ThetisAudioPair(int device,int first,int *values,int capacity,char *left,int left_capacity,char *right,int right_capacity);
+AUDIO_API int ThetisAudioOpenPair(int abi,int device,int rate,int first,int expected_channels,const char *expected_name,const char *expected_host);
+/* Six int64: ABI 1, 100 ms window sequence, L/R peak, L/R RMS (amplitude *1e9).
+ * Post-mute software samples, not ADC/RF, DAC or monitor readback. Returns 0
+ * if publication is in progress; caller may retain its preceding sample. */
+AUDIO_API int ThetisAudioLevels(int64_t *values,int capacity);
 AUDIO_API int ThetisAudioOpen(int abi,int device,int rate,const char *expected_name,const char *expected_host);
 /* No-device fixture with independent consumer clock; same adaptive renderer and
  * watchdog as physical output. Caller must render AND poll state continuously. */

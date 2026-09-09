@@ -3,7 +3,11 @@
 #include "pcm_queue.h"
 #include "playback_health.h"
 #include "portaudio.h"
+#ifdef __APPLE__
+#include "pa_mac_core.h"
+#endif
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <new>
@@ -15,6 +19,8 @@ PaStream *stream = nullptr;
 bool initialized = false, physical = false;
 PlaybackHealth health;
 int driver_status = 0;
+int callback_channels = 2,callback_first = 0;
+constexpr int max_channels = 128;
 int64_t now_ms() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 bool valid_rate(int rate) { return rate == 44100 || rate == 48000 || rate == 96000; }
 int initialize_audio() {
@@ -31,10 +37,48 @@ int copy_text(const char *from,char *to,int capacity) {
     if (!from || !to || capacity <= 0 || std::strlen(from) >= static_cast<size_t>(capacity)) return -1;
     std::memcpy(to,from,std::strlen(from)+1); return 0;
 }
+bool valid_pair(const PaDeviceInfo *device,int first) {
+    return device && device->maxOutputChannels >= 2 && device->maxOutputChannels <= max_channels &&
+        first >= 0 && first % 2 == 0 && first <= device->maxOutputChannels-2;
+}
+struct OutputFormat {
+    PaStreamParameters parameters;
+    int first;
+#ifdef __APPLE__
+    PaMacCoreStreamInfo mac{};
+    std::array<SInt32,max_channels> map{};
+#endif
+    OutputFormat(int index,const PaDeviceInfo *d,const PaHostApiInfo *h,int channel) :
+        parameters{index,channel+2,paFloat32,std::max(.02,d->defaultLowOutputLatency),nullptr},first(channel) {
+#ifdef __APPLE__
+        if (h->type == paCoreAudio) {
+            map.fill(-1); map[channel] = 0; map[channel+1] = 1;
+            PaMacCore_SetupStreamInfo(&mac,paMacCorePlayNice);
+            PaMacCore_SetupChannelMap(&mac,map.data(),static_cast<unsigned long>(d->maxOutputChannels));
+            parameters.channelCount = 2; parameters.hostApiSpecificStreamInfo = &mac; first = 0;
+        }
+#else
+        (void)h;
+#endif
+    }
+    OutputFormat(const OutputFormat &) = delete; // parameters may point into this object
+};
+int channel_name(int device,int channel,const PaHostApiInfo *host,char *text,int capacity) {
+#ifdef __APPLE__
+    if (host->type == paCoreAudio) {
+        const char *label = PaMacCore_GetChannelName(device,channel,false);
+        if (label && label[0]) return copy_text(label,text,capacity);
+    }
+#else
+    (void)device; (void)host;
+#endif
+    char fallback[40]; std::snprintf(fallback,sizeof(fallback),"Output %d",channel+1);
+    return copy_text(fallback,text,capacity);
+}
 int callback(const void *,void *output,unsigned long count,const PaStreamCallbackTimeInfo *,PaStreamCallbackFlags flags,void *context) {
     auto *q = static_cast<PcmQueue *>(context);
     if (flags & paOutputUnderflow) q->driver_underruns.fetch_add(1,std::memory_order_relaxed);
-    q->render(static_cast<float *>(output),static_cast<int>(count));
+    q->render_routed(static_cast<float *>(output),static_cast<int>(count),callback_channels,callback_first);
     return q->active.load() ? paContinue : paAbort;
 }
 void finished(void *context) { static_cast<PcmQueue *>(context)->fail(1); }
@@ -56,14 +100,16 @@ int close_audio() {
         if (rc != 0) return rc;
         stream = nullptr;
     }
-    delete queue; queue = nullptr; physical = false;
+    delete queue; queue = nullptr; physical = false; callback_channels = 2; callback_first = 0;
     return terminate_audio();
 }
 }
 int ThetisAudioAbi(void) { return 2; }
+int ThetisAudioRoutingAbi(void) { return 1; }
 int ThetisAudioInitialize(void) { std::lock_guard<std::mutex> lock(gate); return initialize_audio(); }
 int ThetisAudioTerminate(void) { std::lock_guard<std::mutex> lock(gate); return terminate_audio(); }
 int ThetisAudioDeviceCount(void) { std::lock_guard<std::mutex> lock(gate); return initialized ? Pa_GetDeviceCount() : -3; }
+int ThetisAudioDefaultOutputDevice(void) { std::lock_guard<std::mutex> lock(gate); return initialized ? Pa_GetDefaultOutputDevice() : -3; }
 int ThetisAudioDevice(int index,int *values,int capacity,char *name,int nc,char *host,int hc) {
     std::lock_guard<std::mutex> lock(gate);
     if (!values || capacity < 5 || !name || !host || nc < 1 || hc < 1 || index < 0) return -1;
@@ -79,21 +125,37 @@ int ThetisAudioDevice(int index,int *values,int capacity,char *name,int nc,char 
     int result[] = {2,index,d->maxOutputChannels,static_cast<int>(d->defaultSampleRate),bits};
     std::memcpy(values,result,sizeof(result)); return 5;
 }
-static int open_audio(int abi,int device,int rate,const char *expected_name,const char *expected_host,bool tracking) {
+int ThetisAudioPair(int device,int first,int *values,int capacity,char *left,int lc,char *right,int rc) {
     std::lock_guard<std::mutex> lock(gate);
-    if (abi != 2 || device < -1 || !valid_rate(rate) || (device >= 0 && (!expected_name || !expected_host))) return -1;
+    if (!initialized) return -3;
+    const PaDeviceInfo *d = device < 0 ? nullptr : Pa_GetDeviceInfo(device);
+    const PaHostApiInfo *h = d ? Pa_GetHostApiInfo(d->hostApi) : nullptr;
+    if (!h || !valid_pair(d,first) || !values || capacity < 4 || !left || !right || lc < 1 || rc < 1) return -1;
+    if (channel_name(device,first,h,left,lc) || channel_name(device,first+1,h,right,rc)) return -1;
+    OutputFormat format(device,d,h,first); int bits = 0; const int rates[] = {44100,48000,96000};
+    for (int i = 0; i < 3; ++i)
+        if (Pa_IsFormatSupported(nullptr,&format.parameters,rates[i]) == paFormatIsSupported) bits |= 1<<i;
+    int result[] = {1,first,format.parameters.channelCount,bits};
+    std::memcpy(values,result,sizeof(result)); return 4;
+}
+static int open_audio(int abi,int device,int rate,const char *expected_name,const char *expected_host,bool tracking,int first = 0,int expected_channels = 0) {
+    std::lock_guard<std::mutex> lock(gate);
+    if (abi != 2 || device < -1 || !valid_rate(rate) || (device >= 0 && (!expected_name || !expected_host)) ||
+        (device == -1 && (first != 0 || expected_channels != 0))) return -1;
     if (queue) return -2;
     driver_status = 0; health.start(now_ms());
     if (device >= 0) {
         int rc = initialize_audio(); if (rc != 0) return rc;
         const PaDeviceInfo *d = Pa_GetDeviceInfo(device);
         const PaHostApiInfo *h = d ? Pa_GetHostApiInfo(d->hostApi) : nullptr;
-        if (!d || !h || d->maxOutputChannels < 2 || std::strcmp(d->name,expected_name) || std::strcmp(h->name,expected_host)) { terminate_audio(); return -1; }
-        PaStreamParameters output{device,2,paFloat32,std::max(.02,d->defaultLowOutputLatency),nullptr};
-        rc = Pa_IsFormatSupported(nullptr,&output,rate); if (rc != 0) { terminate_audio(); return rc; }
+        if (!h || !valid_pair(d,first) || (expected_channels && expected_channels != d->maxOutputChannels) ||
+            std::strcmp(d->name,expected_name) || std::strcmp(h->name,expected_host)) { terminate_audio(); return -1; }
+        OutputFormat format(device,d,h,first);
+        rc = Pa_IsFormatSupported(nullptr,&format.parameters,rate); if (rc != 0) { terminate_audio(); return rc; }
         queue = new(std::nothrow) PcmQueue(rate,true); if (!queue) { terminate_audio(); return paInsufficientMemory; }
+        callback_channels = format.parameters.channelCount; callback_first = format.first;
         physical = true;
-        rc = Pa_OpenStream(&stream,nullptr,&output,rate,paFramesPerBufferUnspecified,paClipOff,callback,queue);
+        rc = Pa_OpenStream(&stream,nullptr,&format.parameters,rate,paFramesPerBufferUnspecified,paClipOff,callback,queue);
         if (rc == 0) rc = Pa_SetStreamFinishedCallback(stream,finished);
         if (rc == 0) rc = Pa_StartStream(stream);
         if (rc != 0) { close_audio(); return rc; }
@@ -105,6 +167,10 @@ static int open_audio(int abi,int device,int rate,const char *expected_name,cons
 }
 int ThetisAudioOpen(int abi,int device,int rate,const char *expected_name,const char *expected_host) {
     return open_audio(abi,device,rate,expected_name,expected_host,device >= 0);
+}
+int ThetisAudioOpenPair(int abi,int device,int rate,int first,int expected_channels,const char *name,const char *host) {
+    if (abi != 1 || device < 0 || expected_channels < 2 || expected_channels > max_channels) return -1;
+    return open_audio(2,device,rate,name,host,true,first,expected_channels);
 }
 int ThetisAudioOpenClockedNull(int abi,int rate) { return open_audio(abi,-1,rate,nullptr,nullptr,true); }
 int ThetisAudioWrite(const double *stereo,int frames) {
@@ -155,6 +221,15 @@ int ThetisAudioState(int64_t *values,int capacity) {
         result[19] = queue->reprimes.load(); result[20] = queue->fault.load(); result[21] = driver_status;
     }
     std::memcpy(values,result,sizeof(result)); return 22;
+}
+int ThetisAudioLevels(int64_t *values,int capacity) {
+    std::lock_guard<std::mutex> lock(gate);
+    if (!values || capacity < 6) return -1;
+    if (!queue) return -3;
+    int64_t result[6];
+    if (!queue->levels.snapshot(result)) return 0;
+    if (queue->muted.load() || !queue->active.load()) std::fill(result+2,result+6,0);
+    std::memcpy(values,result,sizeof(result)); return 6;
 }
 int ThetisAudioClose(void) { std::lock_guard<std::mutex> lock(gate); return close_audio(); }
 int ThetisAudioError(int code,char *text,int capacity) {

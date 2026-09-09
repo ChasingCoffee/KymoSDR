@@ -14,6 +14,9 @@ or completion of M4. **Every endpoint is IPv4 loopback; no live radio is contact
 The physical G2 remains receive-only on ANT1. Previous approval of simulator TX
 does not authorize hardware TX, and this receive API exposes no transmit control.
 
+A separate [G2 hardware receive boundary](G2_HARDWARE_RECEIVE.md) now exists;
+it does not relax the simulator API's loopback gate described in this document.
+
 ## Run the complete test
 
 Build the [native module](NATIVE_DSP.md) and managed solution, then:

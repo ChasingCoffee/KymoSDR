@@ -48,7 +48,16 @@ public sealed class DesktopTests
                     Assert.IsTrue(frame.PixelSize.Width >= 900 && frame.PixelSize.Height >= 700);
                     var plot = window.Control<SpectrumView>("SpectrumDisplay");
                     Assert.IsTrue(plot.Bounds.Height >= 180);
-                    Assert.IsTrue(plot.Bounds.Height <= ((Control)plot.Parent!).Bounds.Height);
+                    Assert.IsTrue(plot.Bounds.Height <= ((Control)plot.Parent!).Bounds.Height,
+                        $"Window {size}: plot {plot.Bounds.Height}, parent {((Control)plot.Parent!).Bounds.Height}");
+                    foreach (string name in new[] {"ListenButton","ApplyButton","LeftMeter","RightMeter"})
+                    {
+                        var control = window.Control<Control>(name);
+                        var bottom = control.TranslatePoint(new(control.Bounds.Width,control.Bounds.Height),window);
+                        Assert.IsNotNull(bottom);
+                        Assert.IsTrue(bottom.Value.X <= window.Bounds.Width && bottom.Value.Y <= window.Bounds.Height-42,
+                            $"Window {size}: {name} extends beyond usable content at {bottom}.");
+                    }
                     Save(frame,$"initial-{size.Width}.png");
                 }
                 Assert.IsTrue(window.Control<TextBox>("FrequencyInput").Focus());

@@ -2,6 +2,22 @@
 #ifndef THETIS_CM_P2_RECEIVE_H
 #define THETIS_CM_P2_RECEIVE_H
 #include "cm_session.h"
+/* Explicit opt-in hardware boundary. Same-subnet unicast endpoints; standard
+ * ports only, ANT1/ADC0/DDC2 192k, USB300..3000, AF -40dB/medium AGC.
+ * Native deadline 1..60 seconds; no TX controls. Discovery/identity is caller's job.
+ * Existing simulator open exports retain their loopback gates. */
+CM_API int ThetisG2ReceiveAbi(void);
+CM_API int ThetisG2ReceiveOpen(int abi, const char *remote, const char *local, const char *mask,
+    int frequency, int seconds, cm_checkpoint checkpoint, void *context);
+/* Explicit endurance opt-in, ABI 1, hard deadline 1..3600 seconds. All other
+ * hardware restrictions are identical; the normal opener still rejects >60. */
+CM_API int ThetisG2ReceiveEnduranceOpen(int abi, const char *remote, const char *local, const char *mask,
+    int frequency, int seconds, cm_checkpoint checkpoint, void *context);
+/* 8 int64: ABI, hardware open, worker running, stop reason (0 running,
+ * 1 deadline, 2 IQ timeout, 3 status timeout, 4 key/PTT, 5 socket,
+ * 6 disposed/cancelled, 7 malformed status), ORed key bits, ORed ADC overload,
+ * successful STOP datagrams, policy rejections. Snapshot before disposal. */
+CM_API int ThetisG2ReceiveGetState(int64_t *values, int capacity);
 /* Shared P1/P2 owner; old P2-prefixed pull/control ABI operates on either.
  * Protocol 1 is restricted to one receiver (DDC0), 48000 Hz, loopback UDP. */
 CM_API int ThetisReceiveProtocolAbi(void);
@@ -63,5 +79,9 @@ CM_API int ThetisP2ReceiveSpectrumAbi(void);
 CM_API int ThetisP2ReceiveReadSpectrum(int abi, float *pixels, int capacity, int64_t *metadata, int metadata_capacity);
 #ifdef THETIS_TESTING
 CM_API int ThetisP2ReceiveTestFault(int stage);
+/* Same hardware worker/policy, but endpoints fixed to loopback, standard ports.
+ * Not present in production native builds. Never permits a LAN target. */
+CM_API int ThetisG2ReceiveTestOpen(int frequency, int seconds, cm_checkpoint checkpoint, void *context);
+CM_API int ThetisG2ReceiveEnduranceTestOpen(int frequency, int seconds, cm_checkpoint checkpoint, void *context);
 #endif
 #endif

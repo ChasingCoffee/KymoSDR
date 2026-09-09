@@ -1,5 +1,311 @@
 # Native cross-platform CI results
 
+## Controlled G2 endurance and CI catch-up infrastructure — local working tree
+
+The next 2026-09-08 increment adds `g2-soak`: explicit ANT1 and extended-RX
+confirmations, a bounded 60–3600-second continuous phase, and optionally 0–10
+ten-second reconnect phases. It uses the existing desktop receive/playback
+controller, fresh identity/idle preflight per connection, no-device/muted defaults
+and a separately selected native endurance export. The original native opener
+and normal desktop/listen paths remain limited to 60 seconds. No TX controls,
+automatic fallback, deadline renewal or persisted extended-run consent is added.
+See the [contract and staged procedure](G2_HARDWARE_RECEIVE.md#controlled-longer-receive-campaign).
+
+A new report path is reserved before touching any devices/network. Success,
+failure and cancellation retain per-phase counters plus bounded CPU/memory and
+receive/output diagnostics after disposal is attempted. No addresses, device
+names or waveform arrays are exported. Polled spectrum progress is not rendered
+cadence; a no-device run cannot qualify physical playback.
+
+Locked dependency restore and Release build/publish pass with zero build
+warnings/errors. **270/270 managed cases pass**, with no skips: Core/CLI 148
+(6 s), Desktop 48 (45 s), Engine 74 (4 m 36 s, including the independent confined
+P1 reference). The 19 new Core cases use an injected session and virtual clock,
+including a virtual hour plus ten reconnects, early/missing deadlines, stalled
+progress, packet loss versus application overruns, key/driver/nonfinite faults,
+failed idle confirmation, cancellation/startup/cleanup failures and protected
+existing report files. These do not run an hour of DSP or contact a radio.
+Results: `artifacts/test-results/g2-endurance-full` and `g2-soak-focused`.
+
+All **15/15 native CTests pass** in **101.25 s**, including extended-duration
+boundary checks, a production extended-open cancellation before any socket can
+open, all-stage rollback, and loopback key/status/IQ fail-close cases with an
+hour limit. The actual short native deadline and exact one-hour deadline
+arithmetic are separately checked. Native packet allowlist/orientation and
+existing playback/clock/fake-driver suites remain in the full run. JUnit result:
+`artifacts/native/receive-validation.xml`.
+
+All **5/5 targeted native ASan/UBSan cases pass** in **35.64 s** on the final
+source, with `halt_on_error=1` and macOS `detect_leaks=0` (not LeakSanitizer or
+full sanitizer-suite qualification). The first final rerun overlapped the
+regular suite's exclusive loopback ports and failed to bind its fixture; the
+serial rerun after regular-suite completion passes without a code workaround.
+Do not run separate G2 CTest builds concurrently on the same host. Sanitizer
+JUnit: `artifacts/native-asan/receive-validation.xml`.
+
+The separate developer bundle `artifacts/g2-endurance` includes the new headless
+command and production (`BUILD_TESTING=OFF`) native libraries. The production
+WDSP exports the new endurance opener and no G2 test openers. SHA-256:
+
+- WDSP: `5ade1786e0b1239c31179ea32fc4ba3b8b87a8bfe1cffc8dc2fe557c61b16765`
+- Audio: `1d630cfcd78e2acd44f803c57bb7bfddcffa5af7df3ac958e9e255845b383f2d`
+
+Published `g2-soak --help` succeeds without hardware. The production bundle's
+P1/P2 `playback-selftest` passes in **12.021 s**, with loopback-only transport,
+no physical output and clean receive/output counters. This is an ordinary
+simulated playback smoke, not a physical or hour-long endurance result.
+
+The existing `artifacts/desktop` publish is not overwritten by this increment.
+No G2 discovery/receive, physical output stream, sleep/wake exercise or hardware
+TX is performed. Long hardware qualification remains open.
+
+The native workflow now runs a named G2/discovery/preferences/live-output
+checkpoint early on Windows/macOS/Linux, checks nonzero TRX totals with all
+cases passing (no skips), and requires the expected test classes to be present.
+Focused CTest JUnit/TRX and full managed reports are retained, including failures.
+Only `g2-soak --help` runs as a CLI smoke in hosted CI; hardware campaigns are
+never launched by the workflow. The discovery-only workflow retains its TRX
+artifacts separately, with native-dependent skips explicitly expected there.
+Both workflow YAML files parse locally; the new PowerShell checkpoint and
+Windows/Linux builds still need hosted execution after the working tree is
+committed/pushed. No new hosted qualification is claimed. Read-only GitHub
+inspection still shows the preceding successful native/discovery runs at
+`f90de9a9`, not this increment. A stopped Parallels Windows 11 VM was listed,
+but no guest was started or modified.
+
+## System-default output and live handoffs — local working tree
+
+The next 2026-09-08 increment selects the system's default **output** on first
+interactive launch with new valid preferences, without opening a stream. Saved
+devices and explicit No-device choices take precedence later. Old profiles
+without the additive `audioSelectionInitialized` field preserve their previous
+selection; invalid/protected settings and no-settings/automation do not trigger
+automatic output enumeration. Native metadata adds `ThetisAudioDefaultOutputDevice`
+without changing the existing playback/routing ABI or state-array layouts.
+
+While receiving, device/pair choices are drafts until **Switch output**. The
+same radio and receive pump stay active; old audio is muted/closed before new
+audio opens, while PCM continues to drain without queuing a delayed backlog.
+Applied gain/mute/tuning persist, and meter/rate/resampler state resets. Connected
+Refresh uses the same handoff to re-enumerate/revalidate the active route, never
+following a different system default. Failure stops receive safely with no
+alternate-device fallback. Output generation and discarded-handoff-frame
+counters disambiguate output resets from continuous receive-session counters.
+
+Local Release build/publish has zero warnings/errors. **251/251 managed cases
+pass**, no skips: 129 Core/CLI (5 s), 74 Engine (4 m 37 s including confined
+independent P1 reference), 48 Desktop (45 s). The seven new engine cases cover
+both P1/P2, 44.1/48/96 kHz no-device outputs, pair selection, silent monitor,
+continuous receiver identity/session counters, gain/mute preservation, a blocked
+open with continued PCM draining/spectrum progress, failure without fallback,
+disconnect cancellation and hardware-deadline fixtures. Four new desktop cases
+cover first-run default metadata, remembered No-device/missing-output behavior,
+automation, explicit live switch and unapplied receive-control preservation.
+Reports/captures: `artifacts/test-results/live-output-full`.
+
+All **3/3 targeted native audio CTests pass** (4.17 s), including a fake
+default-device lookup that verifies no stream open, and **3/3 targeted ASan/UBSan
+audio CTests pass** (10.23 s, halt-on-error, `detect_leaks=0` on macOS). These are
+not new full native-suite or LeakSanitizer results. Production native audio is
+rebuilt and copied into `artifacts/desktop/native`, with matching SHA-256 hashes.
+The refreshed publish passes a native-window smoke run in 2.042 s, with 20
+displayed/rendered frames, muted no-device output and clean receive/output
+counters. Screenshots include the 900×700 headless layout and native window.
+
+Read-only real CoreAudio enumeration reports the **828** as the system default
+(index 6, 32 channels, first pair 1–2). No physical stream is opened for that
+check. All execution tests use fixtures/simulators and no-device audio: actual
+physical-device handoff audibility, latency and unplug behavior remain manual
+checks. No G2 receive connection, network discovery or hardware TX was performed
+for this increment. These are local working-tree results, not new hosted
+Windows/Linux qualification.
+
+## G2 discovery and remembered selections — local working tree
+
+The next 2026-09-08 increment adds the requested **Discover radios · Ethernet**
+picker, remembered G2 connection form/source, and remembered audio interface/
+stereo pair. Discovery is explicit, P2-only, Ethernet-only, and bounded to four
+seconds; results never start receive or auto-select even a single radio. Every
+Connect still performs the strict targeted identity/idle preflight and requires
+fresh ANT1 consent. Startup remains disconnected, muted and AF −40 dB.
+
+Preferences schema 2 migrates existing schema 1 in memory. The saved audio
+bookmark has no device index: fresh name/backend/layout/pair metadata must match
+uniquely. Missing/ambiguous/changed outputs remain unselected with a visible
+message; the saved choice survives until explicitly replaced or forgotten.
+Settings may contain addresses/MACs and device/channel names; diagnostic exports
+do not include these bookmarks. Automated campaigns ignore settings and cannot
+invoke LAN discovery or metadata enumeration.
+
+The Release solution builds with zero warnings/errors. **240/240 managed cases
+pass**, no skips: 129 Core/CLI (6 s), 67 Engine (4 m 32 s, including the confined
+independent P1 reference), 44 Desktop (44 s). Nine new cases cover strict schema
+migration/validation, changed device indices, duplicate/missing/changed outputs,
+remembered safe startup, forgetting an unplugged output, deliberate discovery
+selection, busy/profile/subnet policy, automation/no-settings guards and joined
+discovery cancellation on window close. The initial targeted run exposed a
+test-fixture cleanup race with asynchronous window-close saving; waiting for
+the shown window's completed close fixes it. Full suite results are under
+`artifacts/test-results/connection-preferences-full`; final desktop assertions
+and captures are under `artifacts/test-results/connection-preferences-verified`.
+Native/audio implementation is unchanged from the preceding checkpoint; no new
+native or sanitizer qualification is claimed for this managed-only increment.
+
+A separate live **discovery-only** subnet scan on verified Ethernet `en7`
+(`169.254.47.65/16`) completes in **830 ms**, sends two P2 requests and receives
+two replies (one unique radio). It finds the idle G2 at `169.254.187.120`, MAC
+`2C-CF-67-FC-A3-DF`, Saturn/code27/beta50/protocol43/10 DDCs, with no socket error,
+malformed/subnet rejection or deadline. No receive-start, audio stream or TX is
+used. This exercises the shared discovery backend on Ethernet; picker tests use
+injected metadata and do not constitute a live GUI-to-radio connection test.
+
+The production developer publish under `artifacts/desktop` is refreshed, with
+native hashes matching the preceding production audio/WDSP build. Local
+**native-window simulator smoke passes**: 21 distinct displayed/rendered frames
+in **2.061 s**, muted no-device output and no receive/output errors. The earlier
+macOS render-timer failure is not reproduced in this session. No hardware RX,
+physical listening or TX was performed, and no old running user app was stopped.
+After the final picker-population guard/privacy assertions, all 44 desktop
+tests pass again and the refreshed publish passes native-window smoke again
+(20 displayed/rendered frames in 2.049 s, clean muted no-device counters).
+These are working-tree results, not new hosted Windows/Linux CI results.
+
+## Stereo output pairs, meters and listening controls — local working tree
+
+The next 2026-09-08 increment adds explicit adjacent stereo output pairs,
+CoreAudio channel names/maps, portable sparse-channel output and a bounded
+100 ms post-mute L/R RMS/peak meter. Playback ABI 2 remains unchanged, with an
+additive routing/meter ABI 1. Desktop controls show pending AF edits and offer
+an explicit G2 listening preset (AF −10 dB, medium AGC / max 80), preserving
+applied tuning and conservative muted reconnect. These are software controls;
+no hardware mixer/system volume or radio packet policy changes were made.
+
+Local macOS arm64 validation:
+
+- Release solution build: zero warnings/errors. Production and test native
+  audio libraries rebuild successfully.
+- **231/231 managed cases pass**, no skips: 129 Core/CLI (6 s), 67 Engine
+  (4 m 32 s, including confined independent P1 reference), 35 Desktop (44 s).
+  Initial broad testing caught a 900×700 plot-height regression. Compact control
+  spacing fixes it; the complete 35-case desktop rerun passes, with additional
+  bounds assertions for both meter bars and listening/apply buttons. Results:
+  `artifacts/test-results/audio-controls-full` (Core/Engine passes, original
+  desktop failure), `audio-controls-layout` and `audio-controls-desktop-final`.
+- **15/15 Release native CTests pass** in 104.17 s. Fake-driver routing covers
+  channels 1–2, 11–12, 13–14 and 127–128, zeroes unselected callback channels,
+  checks buffer canaries and muted callbacks, and rejects stale channel counts,
+  odd/out-of-range/unsupported pairs without fallback. Mac fixtures separately
+  verify the explicit CoreAudio map and stereo callback width.
+- **3/3 targeted audio ASan/UBSan CTests pass** in 9.23 s, halt-on-error enabled.
+  The first attempt with `detect_leaks=1` was rejected by the macOS sanitizer
+  runtime before tests; rerun uses `detect_leaks=0`. This is not LeakSanitizer
+  qualification or a new full sanitizer-suite result.
+- Rolling meters pass 44.1/48/96 kHz fixtures, stereo imbalance, a level step,
+  mute/silence/reset/reopen and ABI capacity checks. The lifetime peak test
+  explicitly allows the FIR resampler's step transient while requiring the
+  current-window peak/RMS to settle to the new lower input.
+- Read-only production enumeration reports the 32-channel **828**, 16 supported
+  pairs, including Main Out 1–2 and Phones 1/2 on 11–12 / 13–14. No stream was
+  opened. Actual headphone routing/driver behavior still needs manual listening.
+
+The published developer app in `artifacts/desktop` is refreshed; staged audio
+and WDSP library hashes match the production build. The new native-window smoke
+cannot launch in this session: both dotnet and apphost return exit 4 / Avalonia
+render-timer error **−6661**. `system_profiler SPDisplaysDataType` reports the GPU
+but no attached display. Headless Skia screenshots and resized layouts pass
+under `artifacts/audio-controls.V5iI89/headless`; this is not a successful native
+window launch. The pre-existing user app process was left running and must be
+closed/relaunched to load the changes.
+
+All radio/audio execution for this increment used fixtures, owned loopback
+simulators and no-device output. No G2 connection, physical playback or hardware
+TX was performed. The user's prior audible 828 receive confirmation is recorded
+in [G2 results](G2_HARDWARE_RECEIVE.md#human-listening-and-desktop-audio-controls),
+not a headphone-routing test. These are local working-tree results, not hosted
+Windows/Linux validation or a new release/CI claim.
+
+## G2 desktop/playback checkpoint — local working tree
+
+The subsequent 2026-09-08 increment adds explicit G2 form validation/shared
+preflight, bounded receive ownership through the desktop/audio controller,
+native-deadline playback cleanup, hardware-labelled diagnostics, FT8 controls
+and opt-in offline capture. Live FT8 testing exposed a hardware I/Q orientation
+mismatch: Saturn samples now have Q conjugated once at the G2-only ingress,
+before shared spectrum/DSP. Simulator codecs and all outbound packet/no-TX
+controls remain unchanged. Native fixtures cover signed conversion and all
+four USB/LSB × positive/negative RF-offset cases.
+
+Local managed validation passes **223/223**, no skips: 129 Core/CLI, 63 Engine
+(4 m 35 s, including the independent confined P1 reference), 31 Desktop (43 s).
+The Release solution builds with zero warnings/errors. New cases cover capture
+bounds/exclusive export, deadline/key/status-stop playback, hardware form rendering,
+unconfirmed connection rejection, automation guards and diagnostic labelling.
+No automated test contacts hardware or opens physical sound. Reports are under
+ignored `artifacts/test-results/g2-desktop`.
+After the final CLI sideband-selection change, all 129 Core/CLI cases pass again
+under `artifacts/test-results/g2-desktop-cli-final`; it changes no native packets.
+
+Separate real Ethernet/ANT1 runs exercised 14.074 MHz through the shared owner:
+60 seconds with silent monitor/capture, then 30 seconds of freshly selected
+MacBook speaker output at 48 kHz. Both ended at the native deadline, with zero
+receive errors/output underruns and idle verified afterward. Initially there
+were no FT8 decodes and the user heard no clear signal. The opposite-sideband
+comparison decoded three FT8 messages, isolating the orientation mismatch.
+**After the fix, correct USB decoded four FT8 messages** in a captured slot from
+a clean 60-second speaker run. Explicit AF −20 / AGC max 80 brought peak output
+to −39.2 dBFS, without system-volume or RF-routing changes. The radio returned
+to idle. The offline decoder also passed a synthetic fixture/resampling check.
+See [full measurements and remaining gates](G2_HARDWARE_RECEIVE.md).
+
+These are local working-tree results, not hosted Windows/Linux qualification
+or an updated CI/release claim. No hardware TX was performed.
+
+After the native orientation fix, **15/15 native CTests pass** (100.40 s), and
+the four targeted G2/packet/transport checks pass ASan/UBSan (31.65 s,
+halt-on-error; not full-suite LeakSanitizer qualification). The production build
+exports the G2 ABI but not its test opener/private packet helpers. The developer
+publish under `artifacts/desktop` has been refreshed with the corrected production
+native library. A local **native-window smoke run passes** in 2.333 s, displaying
+and rendering 22 distinct frames, with no receive/output errors. That graphical
+check uses only a muted simulator; it is not an actual GUI-to-hardware run.
+
+Final full managed rerun against the corrected native library passes **223/223**
+again, no skips: 129 Core, 31 Desktop (43 s), 63 Engine (4 m 32 s, independent
+P1 reference included), under `artifacts/test-results/g2-usb-final`. The G2
+sideband fixture was then made sample-warmup-based rather than dependent on
+Sleep iteration counts, to tolerate Windows timer granularity; its final
+Release/sanitizer reruns pass in 20.85/23.80 s. This test-only adjustment changes
+no runtime library or RF behavior. `git diff --check` is clean. New Windows/Linux
+hosted execution is still pending, not inferred from these local results.
+
+## G2 Ethernet receive checkpoint — local, not a new CI result
+
+The 2026-09-08 [hardware receive increment](G2_HARDWARE_RECEIVE.md) adds a
+separate guarded G2 ABI and explicit Ethernet-only CLI. At that headless
+checkpoint the desktop remained simulator-only; the later increment above adds
+its separate opt-in hardware source. Three real ANT1 receive-only sessions pass on
+local macOS arm64 (10/60/10 seconds, two 20m frequencies), with decoded audio,
+spectrum, zero loss/error/key counters and idle confirmed after each stop.
+No physical sound output or transmit test was performed. The radio was reached
+at its Ethernet link-local address, not the previously used Wi-Fi subnet.
+
+Current local Release build passes with zero warnings/errors, **128 Core/CLI
+tests pass**, and the **full 15/15 native CTests pass** in 98.95 seconds,
+including the new hardware-profile worker exercised only on loopback.
+The four targeted G2 packet/worker and transport checks also pass under local
+ASan/UBSan in 23.03 seconds, with halt-on-error enabled; this was not a full
+sanitizer-suite or leak qualification for the new increment.
+All 27 existing simulator desktop regressions pass locally (43 s), without a
+physical window, audio device or radio connection.
+The full native-backed managed engine suite passes **59/59** in 4 m 30 s,
+including the confined independent P1 reference: **214/214 managed tests total**
+(128 Core / 59 Engine / 27 Desktop), no skips. Test results are under ignored
+`artifacts/test-results/g2-rx-{core,engine,desktop}`. Live hardware measurements
+ran before the broad regression suites, without concurrent DSP test load.
+This is working-tree validation, not a published release or a new Windows/Linux
+CI claim. The earlier cross-platform results below belong to their stated
+commits and must not be attributed to this hardware increment.
+
 ## Desktop diagnostics, endurance and preferences checkpoint
 
 Implementation/benchmark source: `2c52092230e09df17a1cd848bc1d5ff7788eef57`, recorded

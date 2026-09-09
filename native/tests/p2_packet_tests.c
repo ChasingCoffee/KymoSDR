@@ -19,6 +19,12 @@ int main(void)
     CHECK(sequence == 0xfedcba98u && out[0] == 1234567 && out[477] == 1234567);
     CHECK(out[1] == -1 && out[2] == 8388607.0 / 8388608 && out[3] == -1.0 / 8388608 && out[4] == 1.0 / 8388608);
     for (int i = 5; i <= 476; ++i) CHECK(out[i] == 0);
+    CHECK(p2_g2_decode(packet, 1444, out + 1, 476, &sequence) == 238);
+    CHECK(out[1] == -1 && out[2] == -8388607.0 / 8388608 && out[3] == -1.0 / 8388608 && out[4] == -1.0 / 8388608);
+    CHECK(out[0] == 1234567 && out[477] == 1234567 && sequence == 0xfedcba98u);
+    CHECK(p2_g2_decode(NULL, 1444, out, 476, &sequence) == -1);
+    CHECK(p2_g2_decode(packet, 1443, out, 476, &sequence) == -1);
+    CHECK(p2_g2_decode(packet, 1444, out, 475, &sequence) == -1);
     for (int size = 0; size <= 1445; ++size)
         if (size != 1444) CHECK(p2_rx_decode(packet, size, out + 1, 476, &sequence) == -1);
     CHECK(p2_rx_decode(NULL, 1444, out, 476, &sequence) == -1);
@@ -61,6 +67,42 @@ int main(void)
             CHECK(packet[1444] == 99);
         }
     }
-    puts("PASS: signed24 boundaries, malformed headers/lengths, canaries, DDC0..9 and receive-only control fields");
+    // Hardware packet firewall: mutate EVERY non-variable bit, not just known TX bits.
+    for (int offset = 0; offset <= 3; ++offset)
+    {
+        if (offset == 2) continue;
+        int length = offset == 0 ? 60 : 1444;
+        if (offset == 0) p2_g2_general(packet);
+        else if (offset == 1) p2_rx_receivers(packet, 2, 192000);
+        else p2_g2_high(packet, 14200000, 1, 123);
+        CHECK(p2_g2_packet_allowed(offset, packet, length));
+        CHECK(!p2_g2_packet_allowed(offset, packet, length-1));
+        CHECK(!p2_g2_packet_allowed(offset, packet, length+1));
+        for (int i = 0; i < length; ++i)
+        {
+            if (offset == 3 && (i < 4 || (i >= 17 && i <= 20))) continue;
+            for (int bit = 0; bit < 8; ++bit)
+            {
+                packet[i] ^= (unsigned char)(1u << bit);
+                CHECK(p2_g2_packet_allowed(offset, packet, length) == (offset == 3 && i == 4 && bit == 0));
+                packet[i] ^= (unsigned char)(1u << bit);
+            }
+        }
+    }
+    CHECK(!p2_g2_packet_allowed(2, packet, 60) && !p2_g2_packet_allowed(4, packet, 260) && !p2_g2_packet_allowed(5, packet, 1444));
+    CHECK(!p2_g2_packet_allowed(0, NULL, 60));
+    for (int hz = 14000000; hz <= 14350000; hz += 350000)
+    {
+        for (int run = 0; run < 2; ++run)
+        {
+            p2_g2_high(packet, (uint32_t)hz, run, 0xffffffffu);
+            CHECK(p2_g2_packet_allowed(3, packet, 1444));
+            CHECK(packet[4] == run && packet[5] == 0 && get32(packet+329) == 0 && packet[345] == 0);
+            CHECK(get32(packet+1432) == 0x01100002u && packet[1400] == 2);
+        }
+    }
+    p2_g2_high(packet, 13999999, 1, 0); CHECK(!p2_g2_packet_allowed(3, packet, 1444));
+    p2_g2_high(packet, 14350001, 1, 0); CHECK(!p2_g2_packet_allowed(3, packet, 1444));
+    puts("PASS: signed24, simulator codecs and G2 ANT1 RX packet firewall, exhaustive fixed-bit mutations");
     return 0;
 }

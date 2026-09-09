@@ -7,6 +7,10 @@
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr,"Playback failure %d: %s\n",__LINE__,#x); std::exit(1); } } while (0)
 int main() {
     CHECK(ThetisAudioAbi() == 2);
+    CHECK(ThetisAudioRoutingAbi() == 1);
+    int64_t meter[7]; meter[6] = 76543;
+    CHECK(ThetisAudioLevels(nullptr,6) == -1 && ThetisAudioLevels(meter,5) == -1);
+    CHECK(ThetisAudioLevels(meter,6) == -3);
     int64_t state[23]; state[22] = 12345;
     CHECK(ThetisAudioState(nullptr,22) == -1 && ThetisAudioState(state,21) == -1);
     CHECK(ThetisAudioState(state,22) == 22 && state[1] == 0 && state[22] == 12345);
@@ -34,12 +38,17 @@ int main() {
         double rms = std::sqrt(energy/measured), hz = positive*static_cast<double>(rate)/measured;
         std::printf("Playback %d Hz: RMS %.9f, tone %.3f Hz\n",rate,rms,hz);
         CHECK(std::abs(rms-.2/std::sqrt(2.0)) < .002 && std::abs(hz-1000) < 2);
+        CHECK(ThetisAudioLevels(meter,6) == 6 && meter[0] == 1 && meter[1] >= 19 && meter[6] == 76543);
+        CHECK(std::abs(meter[2]/1e9-.2) < .002 && meter[2] == meter[3]);
+        CHECK(std::abs(meter[4]/1e9-rms) < .002 && meter[4] == meter[5]);
         CHECK(ThetisAudioState(state,22) == 22 && state[8] == 0 && state[11] == 0 && state[22] == 12345);
         CHECK(ThetisAudioMute(1) == 0 && ThetisAudioRenderNull(out,960) == 960);
+        CHECK(ThetisAudioLevels(meter,6) == 6 && !meter[2] && !meter[3] && !meter[4] && !meter[5]);
         for (int i = 0; i < 1920; ++i) CHECK(out[i] == 0);
         // Exhaust the queue deliberately, then require silence until a fresh
         // prefill exists. Starvation must not repeat the previous tone.
         for (int i = 0; i < 10; ++i) CHECK(ThetisAudioRenderNull(out,960) == 960);
+        CHECK(ThetisAudioLevels(meter,6) == 6 && !meter[2] && !meter[3]);
         CHECK(ThetisAudioState(state,22) == 22 && state[11] > 0);
         CHECK(ThetisAudioMute(0) == 0);
         double restart[2*1024]; for (double &v : restart) v = .125;
@@ -55,6 +64,7 @@ int main() {
         float empty[2] = {1,1};
         CHECK(ThetisAudioOpen(2,-1,48000,nullptr,nullptr) == 0);
         CHECK(ThetisAudioState(state,22) == 22 && state[5] == 1 && state[7] == 0);
+        CHECK(ThetisAudioLevels(meter,6) == 6 && meter[1] == 0 && meter[2] == 0 && meter[6] == 76543);
         CHECK(ThetisAudioRenderNull(empty,1) == 1 && empty[0] == 0 && empty[1] == 0);
         CHECK(ThetisAudioClose() == 0);
     }

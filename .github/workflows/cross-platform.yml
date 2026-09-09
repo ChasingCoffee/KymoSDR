@@ -52,7 +52,15 @@ jobs:
       - name: Build
         run: dotnet build Thetis.CrossPlatform.slnx -c Release --no-restore
       - name: Offline discovery and CLI tests
-        run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger "trx;LogFileName=discovery.trx"
+        run: dotnet test Thetis.CrossPlatform.slnx -c Release --no-build --no-restore --blame-hang-timeout 2m --logger trx --results-directory artifacts/discovery-tests
+      - name: Retain portable test results (native-dependent skips are expected here)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: discovery-tests-${{ matrix.os }}
+          path: artifacts/discovery-tests/**
+          if-no-files-found: warn
+          retention-days: 14
       - name: CLI help (no sockets)
         run: dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- --help
       - name: G2 receive simulator self-test (loopback only, no native libraries)

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include "clock_recovery.h"
+#include "level_meter.h"
 
 // One producer, one consumer. Callback does no allocation, locking, managed
 // calls, I/O or DSP configuration. Storage and rate tables are prepared on open.
@@ -25,7 +26,8 @@ public:
     std::atomic<int> fault{0}; // 0 healthy, 1 stopped, 2 driver error, 3 callback timeout, 4 fixture loss
     const int rate;
     const bool clock_tracking;
-    explicit PcmQueue(int output_rate,bool tracking = false) : rate(output_rate), clock_tracking(tracking), ratio(48000.0 / output_rate) {
+    OutputLevelMeter levels;
+    explicit PcmQueue(int output_rate,bool tracking = false) : rate(output_rate), clock_tracking(tracking), levels(output_rate), ratio(48000.0 / output_rate) {
         const double cutoff = .90 * std::min(1.0,output_rate / 48000.0);
         for (int p = 0; p < phases; ++p) {
             double sum = 0;
@@ -71,7 +73,7 @@ public:
                     underruns.fetch_add(1,std::memory_order_relaxed); reprimes.fetch_add(1,std::memory_order_relaxed);
                     priming = true; r = w; fraction = 0; reset_clock();
                 }
-                output[2*i] = output[2*i+1] = 0; ++zeros; continue;
+                output[2*i] = output[2*i+1] = 0; levels.frame(0,0); ++zeros; continue;
             }
             if (clock_tracking) {
                 depth_sum += static_cast<double>(w-r);
@@ -90,12 +92,28 @@ public:
                 max_peak = std::max(max_peak,static_cast<uint64_t>(std::abs(value)*1000000));
                 output[2*i+c] = muted.load(std::memory_order_relaxed) ? 0 : static_cast<float>(value);
             }
+            levels.frame(output[2*i],output[2*i+1]);
             fraction += ratio;
             auto advance = static_cast<uint64_t>(fraction); r += advance; fraction -= advance;
         }
         read.store(r,std::memory_order_release);
         rendered.fetch_add(frames,std::memory_order_relaxed); starvation.fetch_add(zeros,std::memory_order_relaxed);
         clipped.fetch_add(clips,std::memory_order_relaxed); peak.store(max_peak,std::memory_order_relaxed);
+    }
+    // Portable numbered-channel routing for WASAPI/ALSA. CoreAudio uses an
+    // explicit HAL map and retains the direct stereo callback. No heap allocation.
+    void render_routed(float *output,int frames,int channels,int first) {
+        if (channels == 2 && first == 0) { render(output,frames); return; }
+        std::array<float,2*256> stereo{};
+        for (int offset = 0; offset < frames; offset += 256) {
+            int count = std::min(256,frames-offset); render(stereo.data(),count);
+            float *destination = output + static_cast<size_t>(offset)*channels;
+            std::fill_n(destination,static_cast<size_t>(count)*channels,0.f);
+            for (int i = 0; i < count; ++i) {
+                destination[i*channels+first] = stereo[2*i];
+                destination[i*channels+first+1] = stereo[2*i+1];
+            }
+        }
     }
 private:
     static constexpr double pi = 3.14159265358979323846;

@@ -21,7 +21,7 @@ public sealed class PreferencesTests
     {
         var store = new PreviewPreferencesStore(path); var initial = store.Load();
         Assert.IsTrue(initial.CanSave); Assert.IsFalse(File.Exists(path));
-        var saved = new PreviewPreferences(1,new(1,7_101_000,ReceiveMode.Lsb,400,2400,ReceiveAgcMode.Fast,70),new(1250,850,true));
+        var saved = new PreviewPreferences(2,new(1,7_101_000,ReceiveMode.Lsb,400,2400,ReceiveAgcMode.Fast,70),new(1250,850,true));
         await store.SaveAsync(saved);
         var loaded = new PreviewPreferencesStore(path).Load(); Assert.AreEqual(saved,loaded.Value); Assert.IsNull(loaded.Warning);
         var receive = loaded.Value.Receiver.ToSettings(); Assert.IsTrue(receive.Muted); Assert.AreEqual(-40,receive.AudioGainDb);
@@ -36,9 +36,9 @@ public sealed class PreferencesTests
         string json = JsonSerializer.Serialize(PreviewPreferences.Default,AtomicJsonFile.Options);
         json = kind switch
         {
-            "corrupt" => "{unfinished", "future" => json.Replace("\"schemaVersion\": 1","\"schemaVersion\": 99"),
+            "corrupt" => "{unfinished", "future" => json.Replace("\"schemaVersion\": 2","\"schemaVersion\": 99"),
             "null" => JsonSerializer.Serialize(PreviewPreferences.Default with { Window = null! },AtomicJsonFile.Options),
-            "invalid" => json.Replace("14199000","-1"), "unsafe" => json.Replace("\"schemaVersion\": 1","\"connected\": true, \"schemaVersion\": 1"),
+            "invalid" => json.Replace("14199000","-1"), "unsafe" => json.Replace("\"schemaVersion\": 2","\"connected\": true, \"schemaVersion\": 2"),
             _ => new string(' ',65537)
         };
         File.WriteAllText(path,json); byte[] original = File.ReadAllBytes(path);
@@ -100,7 +100,7 @@ public sealed class PreferencesTests
     public async Task WindowRestoresControlsButStartsDisconnectedMutedWithoutOutputSelection()
     {
         var store = new PreviewPreferencesStore(path); store.Load();
-        await store.SaveAsync(new(1,new(1,7_101_000,ReceiveMode.Lsb,400,2400,ReceiveAgcMode.Fast,70),new(1250,850)));
+        await store.SaveAsync(new(2,new(1,7_101_000,ReceiveMode.Lsb,400,2400,ReceiveAgcMode.Fast,70),new(1250,850),AudioSelectionInitialized:true));
         await UiTestHost.RunAsync(async () =>
         {
             var window = new MainWindow(new(Path.GetTempPath()),new(),new(path)); window.Show();
@@ -139,7 +139,7 @@ public sealed class PreferencesTests
             foreach (int protocol in new[] {1,2})
             {
                 var store = new PreviewPreferencesStore(path); store.Load();
-                await store.SaveAsync(new(1,new(protocol,14_201_000,ReceiveMode.Lsb,400,2400,ReceiveAgcMode.Fast,70),new()));
+                await store.SaveAsync(new(2,new(protocol,14_201_000,ReceiveMode.Lsb,400,2400,ReceiveAgcMode.Fast,70),new(),AudioSelectionInitialized:true));
                 var window = new MainWindow(new(native),new(),new(path)); window.Show();
                 try
                 {

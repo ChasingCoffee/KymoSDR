@@ -45,7 +45,8 @@ set_target_properties(wdsp PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
 
 # M3 offline ChannelMaster core shares the existing WDSP module and its global
-# channel/cache ownership. A narrow loopback-only P1/P2 RX decoder/control worker
+# channel/cache ownership. A narrow P1/P2 RX decoder/control worker, with an
+# explicit guarded G2 hardware entry point alongside loopback-only simulators,
 # is linked; the full legacy network engine, audio devices and writers are not.
 set(CM_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/Source/ChannelMaster")
 set(cm_units aamix amix analyzers cmaster cmbuffs cmsetup ilv ivac pipe ring
@@ -60,6 +61,17 @@ target_include_directories(wdsp PRIVATE "${CM_SOURCE_DIR}" interop
   "${CMAKE_CURRENT_SOURCE_DIR}/../Project Files/lib/portaudio-19.7.0/include")
 
 if(BUILD_TESTING)
+  add_executable(g2_receive_tests tests/g2_receive_tests.c tests/loopback_peer.c
+    interop/p2_rx_packet.c "${CM_SOURCE_DIR}/radio_socket.c")
+  target_include_directories(g2_receive_tests PRIVATE interop "${CM_SOURCE_DIR}")
+  target_compile_definitions(g2_receive_tests PRIVATE THETIS_TESTING)
+  target_link_libraries(g2_receive_tests PRIVATE wdsp)
+  if(WIN32)
+    target_link_libraries(g2_receive_tests PRIVATE ws2_32)
+  endif()
+  set_target_properties(g2_receive_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/stage/$<CONFIG>")
+  add_test(NAME g2_receive_safety COMMAND g2_receive_tests)
+  set_tests_properties(g2_receive_safety PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
   add_executable(p1_packet_tests tests/p1_packet_tests.c interop/p1_rx_packet.c)
   target_include_directories(p1_packet_tests PRIVATE interop)
   add_test(NAME p1_receive_packet_codec COMMAND p1_packet_tests)

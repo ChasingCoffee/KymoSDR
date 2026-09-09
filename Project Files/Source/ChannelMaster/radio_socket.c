@@ -107,6 +107,9 @@ int cm_socket_receive_loopback(cm_socket sock, void *buffer, int capacity, int t
 }
 int cm_socket_receive_peer(cm_socket sock, void *buffer, int capacity, int timeout_ms,
     uint32_t *address, int *port)
+{ return cm_socket_receive_selected(sock, buffer, capacity, timeout_ms, 0, address, port); }
+int cm_socket_receive_selected(cm_socket sock, void *buffer, int capacity, int timeout_ms,
+    uint32_t selected, uint32_t *address, int *port)
 {
     if (!buffer || capacity < 1 || timeout_ms < 0) return -3;
 #ifdef _WIN32
@@ -139,7 +142,7 @@ int cm_socket_receive_peer(cm_socket sock, void *buffer, int capacity, int timeo
     if (count < 0) return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR ? -1 : -3;
     if (message.msg_flags & MSG_TRUNC) return -2;
 #endif
-    if ((ntohl(source.sin_addr.s_addr) >> 24) != 127) return -4;
+    if (selected ? source.sin_addr.s_addr != selected : (ntohl(source.sin_addr.s_addr) >> 24) != 127) return -4;
     if (address) *address = source.sin_addr.s_addr;
     if (port) *port = ntohs(source.sin_port);
     return count;
@@ -147,7 +150,26 @@ int cm_socket_receive_peer(cm_socket sock, void *buffer, int capacity, int timeo
 int cm_socket_send_loopback(cm_socket sock, uint32_t address, int port, const void *buffer, int length)
 {
     if ((ntohl(address) >> 24) != 127 || port < 1 || port > 65535 || !buffer || length < 0 || length > 1444) return -1;
+    return cm_socket_send_selected(sock, address, port, buffer, length);
+}
+int cm_socket_send_selected(cm_socket sock, uint32_t address, int port, const void *buffer, int length)
+{
+    uint32_t host = ntohl(address);
+    if ((host >> 24) == 0 || (host >> 24) >= 224 || port < 1 || port > 65535 ||
+        !buffer || length < 0 || length > 1444) return -1;
     struct sockaddr_in target = {0};
     target.sin_family = AF_INET; target.sin_addr.s_addr = address; target.sin_port = htons((uint16_t)port);
     return (int)sendto(sock, (const char *)buffer, length, 0, (struct sockaddr *)&target, sizeof(target));
+}
+int cm_socket_rx_subnet(const char *remote, const char *local, const char *mask, uint32_t *remote_address)
+{
+    uint32_t r, l, m;
+    if (!remote_address || cm_socket_address(remote, &r, 0) || cm_socket_address(local, &l, 0) || cm_socket_address(mask, &m, 0)) return -1;
+    uint32_t rh = ntohl(r), lh = ntohl(l), mh = ntohl(m), hosts = ~mh;
+    if (!mh || hosts < 3 || (hosts & (hosts + 1)) || r == l ||
+        rh >> 24 == 0 || rh >> 24 == 127 || rh >> 24 >= 224 ||
+        lh >> 24 == 0 || lh >> 24 == 127 || lh >> 24 >= 224 ||
+        (rh & mh) != (lh & mh) || !(rh & hosts) || (rh & hosts) == hosts ||
+        !(lh & hosts) || (lh & hosts) == hosts) return -1;
+    *remote_address = r; return 0;
 }

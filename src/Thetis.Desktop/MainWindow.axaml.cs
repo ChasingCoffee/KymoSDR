@@ -7,6 +7,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -25,27 +26,42 @@ public partial class MainWindow : Window
     private readonly PreviewPreferencesStore? preferencesStore;
     private PreviewPreferences preferences = PreviewPreferences.Default;
     private string? preferencesWarning;
+    private bool initializeAudioOnOpen;
     private double normalWidth = 1140,normalHeight = 800;
     private bool wasMaximized;
     private bool busy, closing, mayClose, handlingFault;
+    private PlaybackSnapshot? completedSnapshot;
     internal bool Busy => busy;
     internal long DisplayedFrames => Control<SpectrumView>("SpectrumDisplay").FramesDisplayed;
     public MainWindow() : this(new(PreviewLaunchOptions.DefaultDirectory)) { }
     public MainWindow(PreviewLaunchOptions options) : this(options,new()) { }
-    internal MainWindow(PreviewLaunchOptions options,PreviewController controller,PreviewPreferencesStore? store = null)
+    internal MainWindow(PreviewLaunchOptions options,PreviewController controller,PreviewPreferencesStore? store = null,ConnectionLookups? lookups = null)
     {
-        this.options = options; Controller = controller; AvaloniaXamlLoader.Load(this);
+        this.options = options; Controller = controller; connectionLookups = lookups ?? ConnectionLookups.Default; AvaloniaXamlLoader.Load(this);
         preferencesStore = options.Automated || !options.PersistSettings ? null : store ?? new(PreviewPreferencesStore.DefaultPath);
         if (preferencesStore is not null)
         {
             var loaded = preferencesStore.Load(); preferences = loaded.Value; preferencesWarning = loaded.Warning;
+            initializeAudioOnOpen = loaded.CanSave && (preferences.Audio is not null || !preferences.AudioSelectionInitialized);
             RestorePreferences();
             if (loaded.Warning is not null) Status(loaded.Warning);
         }
         Control<TextBox>("NativeDirectoryInput").Text = options.NativeDirectory;
         Control<ComboBox>("OutputInput").ItemsSource = outputs; Control<ComboBox>("OutputInput").SelectedIndex = 0;
+        Control<ComboBox>("OutputInput").SelectionChanged += (_,_) => OutputChanged();
+        Control<ComboBox>("PairInput").SelectionChanged += (_,_) => PairChanged();
+        Control<ComboBox>("ProtocolInput").SelectionChanged += (_,_) => SourceChanged();
+        Control<ComboBox>("DiscoveredRadioInput").SelectionChanged += (_,_) => DiscoverySelected();
+        foreach (string field in new[] {"EthernetInput","RadioInput","MacInput","DurationInput"})
+            Control<TextBox>(field).TextChanged += (_,_) => HardwareFieldEdited();
+        if ((options.G2Target ?? preferences.Connection?.LastG2) is { } target)
+        {
+            SetG2Form(target,preferences.Connection?.DurationSeconds ?? 60);
+            if (options.G2Target is not null || preferences.Connection?.UseG2 == true)
+                Control<ComboBox>("ProtocolInput").SelectedIndex = 2;
+        }
         Control<Slider>("GainInput").PropertyChanged += (_,e) =>
-        { if (e.Property == Slider.ValueProperty) Control<TextBlock>("GainText").Text = $"AF GAIN · {Control<Slider>("GainInput").Value:F0} dB"; };
+        { if (e.Property == Slider.ValueProperty) UpdateGainText(); };
         timer.Tick += (_,_) => RefreshSnapshot(); timer.Start();
         Closing += OnClosing;
         Closed += (_,_) => { timer.Stop(); Control<SpectrumView>("SpectrumDisplay").Dispose(); };
@@ -66,14 +82,88 @@ public partial class MainWindow : Window
         };
         if (options.Smoke) Opened += async (_,_) => await RunSmoke();
         if (options.EnduranceSeconds > 0) Opened += async (_,_) => await RunEndurance();
+        if (!options.Automated && initializeAudioOnOpen) Opened += async (_,_) => await RefreshOutputs();
     }
     internal T Control<T>(string name) where T : Control => this.FindControl<T>(name) ?? throw new InvalidOperationException($"Missing UI control {name}");
     private void Status(string message) => Control<TextBlock>("StatusText").Text = preferencesWarning is null ? message : $"{message} Settings: {preferencesWarning}";
+    private bool HardwareSelected => Control<ComboBox>("ProtocolInput").SelectedIndex == 2;
+    private void SourceChanged()
+    {
+        if (HardwareSelected && (options.Automated || enduranceRunning))
+        {
+            Control<ComboBox>("ProtocolInput").SelectedIndex = 0;
+            Status("Automated simulator campaigns cannot select a physical radio."); return;
+        }
+        bool hardware = HardwareSelected;
+        Control<StackPanel>("HardwarePanel").IsVisible = hardware;
+        Control<CheckBox>("ConfirmHardwareInput").IsChecked = false;
+        Control<Button>("ConnectButton").Content = hardware ? "Connect G2 · RX only" : "Connect simulator";
+        Control<TextBlock>("SafetyBanner").Text = hardware ? "G2 · ANT1 RX ONLY · NO TX" : "SIMULATOR · NO RF / TX";
+        Control<TextBlock>("SourceDescription").Text = hardware ?
+            "Explicit Ethernet/MAC check. Stops after 60 seconds maximum. PA-disable is not a physical interlock." :
+            "Owned loopback signal at 14.200 MHz. No LAN discovery.";
+        if (hardware && !Controller.Connected) SetFt8Preset();
+        if (!hardware) Control<SpectrumView>("SpectrumDisplay").SetView(0,-100,0);
+        Enabled();
+    }
+    private void OutputChanged()
+    {
+        bool previous = populatingAudio; populatingAudio = true;
+        try
+        {
+            var pairs = Control<ComboBox>("PairInput");
+            pairs.ItemsSource = (Control<ComboBox>("OutputInput").SelectedItem as PlaybackDevice)?.Pairs;
+            pairs.SelectedIndex = pairs.ItemCount > 0 ? 0 : -1;
+            OutputChoiceLabels(); Enabled();
+        }
+        finally { populatingAudio = previous; }
+        RememberAudioChoice();
+    }
+    private void PairChanged()
+    { OutputChoiceLabels(); RememberAudioChoice(); }
+    private void OutputChoiceLabels()
+    {
+        var pair = Control<ComboBox>("PairInput").SelectedItem as PlaybackPair;
+        Control<TextBlock>("PairDescription").Text = pair is null ? "No physical output selected." : pair.ToString();
+        ToolTip.SetTip(Control<ComboBox>("PairInput"),pair?.ToString());
+    }
+    private void UpdateGainText()
+    {
+        int draft = (int)Control<Slider>("GainInput").Value;
+        bool pending = Controller.Connected && draft != Controller.Settings.AudioGainDb;
+        Control<TextBlock>("GainText").Text = $"AF · {draft} dB · {(pending ? "Apply needed" : "Apply to change")}";
+        ToolTip.SetTip(Control<Slider>("GainInput"),Controller.Connected
+            ? $"Applied AF: {Controller.Settings.AudioGainDb} dB. Slider edits require Apply controls; mute uses the applied gain."
+            : "Connect starts muted at AF −40 dB or lower. Start listening is an explicit action.");
+    }
+    private void SetFt8Preset()
+    {
+        Control<TextBox>("FrequencyInput").Text = "14074000";
+        Control<ComboBox>("ModeInput").SelectedIndex = 0;
+        Control<TextBox>("LowInput").Text = "100"; Control<TextBox>("HighInput").Text = "3000";
+        Control<TextBlock>("FrequencyText").Text = "14.074000";
+        Control<TextBlock>("ModeText").Text = "USB · 100–3000 Hz";
+        Control<SpectrumView>("SpectrumDisplay").SetView(12000,-150,-50);
+    }
+    private void OnFt8Preset(object? sender,RoutedEventArgs e) { SetFt8Preset(); Status("14.074 MHz USB preset selected. Apply controls if connected; this does not identify or decode FT8."); }
     private void Enabled()
     {
         bool connected = Controller.Connected;
-        foreach (string name in new[] {"ConnectButton","RefreshButton","ProtocolInput","OutputInput","NativeDirectoryInput"})
+        foreach (string name in new[] {"ConnectButton","ProtocolInput","NativeDirectoryInput",
+            "EthernetInput","RadioInput","MacInput","DurationInput","ConfirmHardwareInput"})
             Control<Control>(name).IsEnabled = !busy && !connected && !closing;
+        foreach (string name in new[] {"OutputInput","RefreshButton"})
+            Control<Control>(name).IsEnabled = !busy && !closing && !options.Automated && !enduranceRunning;
+        Control<ComboBox>("PairInput").IsEnabled = !busy && !closing && !options.Automated && !enduranceRunning && Control<ComboBox>("PairInput").ItemCount > 0;
+        Control<Button>("SwitchOutputButton").IsEnabled = connected && !busy && !closing && !options.Automated && !enduranceRunning;
+        Control<Button>("ForgetOutputButton").IsEnabled = !busy && !connected && !closing && (preferences.Audio is not null || !preferences.AudioSelectionInitialized);
+        Control<Button>("DiscoverButton").IsEnabled = HardwareSelected && !busy && !connected && !closing && !options.Automated && !enduranceRunning;
+        Control<ComboBox>("DiscoveredRadioInput").IsEnabled = HardwareSelected && !busy && !connected && !closing && Control<ComboBox>("DiscoveredRadioInput").ItemCount > 0;
+        Control<Button>("ListenButton").IsEnabled = connected && !busy && !closing && Controller.Settings.Muted && !options.Automated && !enduranceRunning;
+        ToolTip.SetTip(Control<Button>("ListenButton"),HardwareSelected
+            ? "Explicit G2 listening preset: AF −10 dB, medium AGC maximum 80 dB, then unmute. Uses applied tuning. Check your monitor volume first."
+            : "Unmute at the applied gain; does not apply pending tuning or gain edits.");
+        Control<Button>("Ft8Button").IsEnabled = !busy && !closing;
         Control<Button>("DisconnectButton").IsEnabled = (connected || busy) && !closing;
         Control<Button>("ApplyButton").IsEnabled = connected && !busy && !closing;
         Control<CheckBox>("MuteInput").IsEnabled = connected && !busy && !closing;
@@ -84,7 +174,7 @@ public partial class MainWindow : Window
         if (busy || closing) return;
         busy = true; Enabled(); Status(progress);
         try { await operation(); Status(success); }
-        catch (OperationCanceledException) { Status("Operation cancelled; simulator/output stopped."); }
+        catch (OperationCanceledException) { Status("Operation cancelled; receiver/output stopped."); }
         catch (Exception ex) { Controller.Diagnostics.Event("operation-failed",ex); Status(ex.Message); }
         finally { busy = false; Enabled(); }
     }
@@ -95,31 +185,53 @@ public partial class MainWindow : Window
         string directory = Control<TextBox>("NativeDirectoryInput").Text ?? "";
         var device = Control<ComboBox>("OutputInput").SelectedItem as PlaybackDevice;
         if ((options.Automated || enduranceRunning) && device is not null) throw new InvalidOperationException("Automated runs cannot open physical audio.");
-        await Controller.ConnectAsync(directory,protocol,device,initialSettings:ReadSettings());
+        if (device is not null) device = device.WithPair(Control<ComboBox>("PairInput").SelectedItem as PlaybackPair
+            ?? throw new ArgumentException("Select a stereo output pair before connecting."));
+        if (HardwareSelected)
+        {
+            if (options.Automated || enduranceRunning) throw new InvalidOperationException("Automated campaigns cannot contact hardware.");
+            var initial = ReadSettings();
+            if (!int.TryParse(Control<TextBox>("DurationInput").Text,NumberStyles.None,CultureInfo.InvariantCulture,out int seconds))
+                throw new ArgumentException("Enter 5–60 receive seconds.");
+            var request = new G2HardwareRequest(new(Control<TextBox>("EthernetInput").Text ?? "",
+                Control<TextBox>("RadioInput").Text ?? "",Control<TextBox>("MacInput").Text ?? ""),
+                initial.FrequencyHz,seconds,Control<CheckBox>("ConfirmHardwareInput").IsChecked == true);
+            Control<CheckBox>("ConfirmHardwareInput").IsChecked = false; // consent is never reused or persisted
+            await Controller.ConnectG2Async(directory,request,device,initialSettings:initial);
+        }
+        else await Controller.ConnectAsync(directory,protocol,device,initialSettings:ReadSettings());
         Control<CheckBox>("MuteInput").IsChecked = true;
         Control<Slider>("GainInput").Value = Controller.Settings.AudioGainDb;
         Control<SpectrumView>("SpectrumDisplay").Reset();
         await SavePreferences();
-    },"Starting owned simulator and receiver…","Connected to simulator. Output muted; adjust controls, then unmute when ready.");
+    },HardwareSelected ? "Verifying idle Ethernet G2 and starting ANT1 receive…" : "Starting owned simulator and receiver…",
+        HardwareSelected ? "G2 ANT1 RX connected for a bounded test. Output muted; unmute when ready. No TX." :
+        "Connected to simulator. Output muted; adjust controls, then unmute when ready.");
     private async void OnDisconnect(object? sender,RoutedEventArgs e)
     {
         if (closing) return;
         try
         {
+            await CancelLookup();
             await Controller.DisconnectAsync();
             Status("Disconnected. No radio or audio stream is open.");
         }
         catch (Exception ex) { Status($"Shutdown error: {ex.Message}"); }
         finally { Control<CheckBox>("MuteInput").IsChecked = true; Enabled(); }
     }
-    private async void OnRefresh(object? sender,RoutedEventArgs e) => await Operation(async () =>
-    {
-        string directory = Control<TextBox>("NativeDirectoryInput").Text ?? "";
-        var devices = await Task.Run(() => PlaybackOutput.EnumerateDevices(directory));
-        outputs.Clear(); outputs.Add("No device (silent monitor)"); outputs.AddRange(devices);
-        Control<ComboBox>("OutputInput").ItemsSource = outputs.ToArray(); Control<ComboBox>("OutputInput").SelectedIndex = 0;
-    },"Enumerating output devices (no stream opened)…","Output list refreshed. Select a device before connecting; no device remains selected by default.");
+    private async void OnRefresh(object? sender,RoutedEventArgs e) => await RefreshOutputs();
     private async void OnApply(object? sender,RoutedEventArgs e) => await Apply();
+    private async void OnListen(object? sender,RoutedEventArgs e) => await StartListening();
+    internal Task StartListening() => Operation(async () =>
+    {
+        if (options.Automated || enduranceRunning) throw new InvalidOperationException("Automated campaigns cannot start audible listening.");
+        await Controller.StartListeningAsync();
+        var value = Controller.Settings;
+        Control<CheckBox>("MuteInput").IsChecked = value.Muted;
+        Control<Slider>("GainInput").Value = value.AudioGainDb;
+        Control<TextBox>("AgcMaxInput").Text = value.AgcMaxGainDb.ToString(CultureInfo.InvariantCulture);
+        Control<ComboBox>("AgcInput").SelectedIndex = value.AgcMode switch { ReceiveAgcMode.Off => 0,ReceiveAgcMode.Slow => 1,ReceiveAgcMode.Medium => 2,_ => 3 };
+    },"Starting deliberate listening…","Listening started. Watch output levels; slider edits need Apply. Reconnect starts muted again.");
     private async void OnInputKey(object? sender,KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled = true; await Apply(); } }
     internal Task Apply() => Operation(async () => { await Controller.ApplyAsync(ReadSettings()); await SavePreferences(); },"Applying receive controls…","Receive controls applied. Spectrum levels are uncalibrated, not dBm.");
     private PreviewSettings ReadSettings()
@@ -156,10 +268,23 @@ public partial class MainWindow : Window
         try
         {
             var value = ReadSettings(); value.Validate();
-            receive = ReceiverPreferences.From(Control<ComboBox>("ProtocolInput").SelectedIndex == 0 ? 2 : 1,value);
+            if (!HardwareSelected) receive = ReceiverPreferences.From(Control<ComboBox>("ProtocolInput").SelectedIndex == 0 ? 2 : 1,value);
         }
         catch (ArgumentException) { /* An invalid draft must not destroy the last valid controls. */ }
-        preferences = new(1,receive,new(normalWidth,normalHeight,wasMaximized));
+        var connection = preferences.Connection ?? new();
+        if (HardwareSelected)
+        {
+            try
+            {
+                var target = new G2RadioTarget(Control<TextBox>("EthernetInput").Text ?? "",Control<TextBox>("RadioInput").Text ?? "",
+                    Control<TextBox>("MacInput").Text ?? "");
+                var next = new ConnectionPreferences(target,int.Parse(Control<TextBox>("DurationInput").Text ?? "",CultureInfo.InvariantCulture),true);
+                next.Validate(); connection = next;
+            }
+            catch (Exception ex) when (ex is ArgumentException or FormatException or OverflowException) { /* Retain the last valid target, never consent. */ }
+        }
+        else connection = connection with { UseG2 = false };
+        preferences = new(2,receive,new(normalWidth,normalHeight,wasMaximized),connection,preferences.Audio,preferences.AudioSelectionInitialized);
         try { await preferencesStore.SaveAsync(preferences); preferencesWarning = null; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         { preferencesWarning = ex.Message; Controller.Diagnostics.Event("settings-save-unavailable",ex); }
@@ -196,7 +321,16 @@ public partial class MainWindow : Window
     private async void RefreshSnapshot()
     {
         if (closing) return;
+        UpdateGainText();
         Controller.Diagnostics.PublishDisplay(Control<SpectrumView>("SpectrumDisplay").Telemetry);
+        if (!Controller.Connected && !busy && Controller.LastSnapshot is { Hardware.StopReason:1 } completed &&
+            !ReferenceEquals(completedSnapshot,completed))
+        {
+            completedSnapshot = completed;
+            Control<CheckBox>("MuteInput").IsChecked = true;
+            Status("G2 receive test completed; receive/output closed and STOP sent. Confirm ANT1 again to reconnect.");
+        }
+        Enabled();
         if (Controller.Error is { } fault && !handlingFault)
         {
             handlingFault = true;
@@ -205,16 +339,17 @@ public partial class MainWindow : Window
                 await Controller.DisconnectAsync();
                 Control<CheckBox>("MuteInput").IsChecked = true;
                 // A removed/reordered device is never silently selected again.
-                outputs.Clear(); outputs.Add("No device (silent monitor)");
-                Control<ComboBox>("OutputInput").ItemsSource = outputs.ToArray();
-                Control<ComboBox>("OutputInput").SelectedIndex = 0;
+                ResetOutputChoices();
+                Control<TextBlock>("AudioRestoreText").Text = "Output stopped. Refresh and review the device/pair before reconnecting.";
                 Status($"Stopped safely: {fault.Message}"); Enabled();
             }
             catch (Exception ex) { Status($"Shutdown error: {ex.Message}"); }
             finally { handlingFault = false; }
             return;
         }
-        var snapshot = Controller.Snapshot; if (snapshot is null) return;
+        var snapshot = Controller.Snapshot;
+        UpdateMeter(snapshot?.Output);
+        if (snapshot is null) return;
         var settings = Controller.Settings;
         Control<TextBlock>("FrequencyText").Text = (settings.FrequencyHz/1e6).ToString("F6",CultureInfo.InvariantCulture);
         Control<TextBlock>("ModeText").Text = $"{settings.Mode.ToString().ToUpperInvariant()} · {settings.LowCutHz}–{settings.HighCutHz} Hz";
@@ -226,6 +361,22 @@ public partial class MainWindow : Window
         Control<TextBlock>("OutputHealthText").Text = $"Underruns / drops   {snapshot.Output.Underruns+snapshot.Output.DriverUnderruns} / {snapshot.Output.Rejected}\n{correction}\n{(snapshot.Output.Physical ? "Device" : "Silent monitor")} · {(settings.Muted ? "muted" : "unmuted")}";
         Control<SpectrumView>("SpectrumDisplay").Update(snapshot.Spectrum);
     }
+    internal void UpdateMeter(PlaybackState? output)
+    {
+        var level = output is { Active:true,Muted:false,Switching:false } ? output.Levels ?? PlaybackLevels.Silence : PlaybackLevels.Silence;
+        Control<ProgressBar>("LeftMeter").Value = PlaybackLevels.Decibels(level.LeftRms);
+        Control<ProgressBar>("RightMeter").Value = PlaybackLevels.Decibels(level.RightRms);
+        static string Peak(double value) => value <= 0 ? "−∞ dBFS" : $"{PlaybackLevels.Decibels(value):F1} dBFS";
+        Control<TextBlock>("LeftPeakText").Text = Peak(level.LeftPeak);
+        Control<TextBlock>("RightPeakText").Text = Peak(level.RightPeak);
+        string state = output is null ? "disconnected" : output.Switching ? "switching output" : !output.Active ? "stopped" : output.Muted ? "MUTED" : output.Physical ?
+            $"channels {output.FirstOutputChannel+1}–{output.FirstOutputChannel+2}" : "silent monitor · no speakers";
+        var label = Control<TextBlock>("MeterStatus");
+        label.Text = $"OUTPUT · {state} · dBFS (RMS bars / peak labels){(output?.ClippedSamples > 0 ? " · CLIP detected" : "")}";
+        label.Foreground = output?.ClippedSamples > 0 ? Brushes.OrangeRed : output?.Muted == true ? Brushes.Goldenrod : Brushes.LightSlateGray;
+        ToolTip.SetTip(Control<ProgressBar>("LeftMeter"),$"Software L RMS: {PlaybackLevels.Decibels(level.LeftRms):F1} dBFS. Post mute; not hardware monitor readback.");
+        ToolTip.SetTip(Control<ProgressBar>("RightMeter"),$"Software R RMS: {PlaybackLevels.Decibels(level.RightRms):F1} dBFS. Post mute; not hardware monitor readback.");
+    }
     private async void OnClosing(object? sender,WindowClosingEventArgs e)
     {
         if (mayClose) return;
@@ -233,7 +384,7 @@ public partial class MainWindow : Window
         if (closing) return;
         closing = true; timer.Stop(); Enabled(); Status("Stopping output and joining receiver…");
         await Task.Yield(); // leave the original Closing event before issuing Close again
-        try { await Controller.DisposeAsync(); await SavePreferences(); }
+        try { await CancelLookup(); await Controller.DisposeAsync(); await SavePreferences(); }
         catch (Exception ex) { Console.Error.WriteLine($"Shutdown: {ex.Message}"); }
         finally { mayClose = true; Close(); }
     }

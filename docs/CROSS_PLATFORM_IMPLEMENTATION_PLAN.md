@@ -232,6 +232,13 @@ Linux sanitizer/leak and unchanged reconnect-memory guards; see the
 
 **Exit:** headless Windows and Mac sessions each receive from the G2 for at least 30 minutes, produce finite advancing spectrum data and complete ten start/stop/reconnect cycles. Synthetic P1 spectra match the fixture expectations. Publish measured counters and distinguish network loss from application overruns. Linux runs native/simulator smoke checks as available.
 
+The 2026-09-08 [`g2-soak` test infrastructure](G2_HARDWARE_RECEIVE.md#controlled-longer-receive-campaign)
+adds explicit bounded 60–3600-second receive campaigns and optional ten-second
+reconnect phases, with aggregate reports retained on success, failure and
+cancellation. The normal desktop/CLI 60-second limit remains unchanged. Fixture
+and loopback tests do not satisfy this physical Windows/Mac endurance gate;
+longer hardware sessions still need deliberate staged execution and evidence.
+
 This is the first major engine-viability gate. If it fails, resolve transport, DSP or lifecycle issues before beginning the desktop port.
 
 ### M5 — Shared receive-only desktop preview

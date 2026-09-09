@@ -16,11 +16,80 @@ run on one stable control thread (including WASAPI COM ownership).
 | Windows | Shared WASAPI | No-device renderer; no speakers opened |
 | Linux | ALSA | No-device renderer; no sound card required |
 
-Only explicitly selected stereo float outputs at 44.1, 48 or 96 kHz are accepted.
+Only supported stereo float outputs at 44.1, 48 or 96 kHz are accepted.
 Selection prefers 48 kHz, then 44.1, then 96. A refreshed device index must still
 match its UTF-8 name and host API at open; a stale/mismatched selection fails.
 There is no automatic default-device fallback. Names are not persistent unique
 hardware IDs; refresh and reselect after device changes.
+
+On first interactive launch with a new valid preferences store, the desktop
+enumerates outputs and selects the backend-reported **system default output**
+(PortAudio `Pa_GetDefaultOutputDevice`), using its first supported stereo pair.
+This is output-device metadata, not a microphone/input selector, and opens no
+stream. It does not change OS volume/defaults or track later OS-default changes.
+Saved selections take precedence. An explicitly saved No-device choice, an old
+profile without the new initialization flag, or a missing/ambiguous saved device
+never silently becomes system speakers. No supported default means No device
+with an explanation, not another arbitrary output. Native default-output metadata
+uses a new additive export; rebuild/stage native audio and the managed app together.
+
+### Stereo routing and output meters
+
+The desktop offers adjacent stereo pairs within the selected device (up to 128
+advertised channels), with 1-based channel numbers. CoreAudio provides channel
+names where available; other backends use numbered labels. On the currently
+enumerated MOTU 828, Main Out is **1–2**, Phones 1 is **11–12**, and Phones 2 is
+**13–14**. Devices and pairs can be changed during receive: select them, then
+click **Switch output**. Until that click, the active output remains unchanged.
+The desktop remembers the
+explicit choice by name/backend/channel count/pair names and number, not device
+index. On startup, fresh metadata must uniquely match before restoring selection;
+no stream opens. Missing/ambiguous/changed outputs stay unselected, with a visible
+warning and the bookmark retained for later Refresh. There is no fallback.
+**Forget saved output** clears the bookmark. Selecting a new device displays its
+first supported pair; choose the desired
+pair before connecting or switching. Device name/host/channel count are revalidated at open,
+and unsupported rates/pairs fail without falling back to another output.
+
+The same receive/simulator/pump remains running through a successful switch;
+frequency/filter/AGC/AF and mute state are unchanged. The old output is muted,
+detached and joined before opening the new one. During driver close/open, the
+pump continues consuming PCM and updating spectrum/safety status, counting
+discarded audio instead of buffering it for stale playback. No driver open/close
+call holds the pump lock. The new stream starts with an empty queue and fresh
+prefill/resampler/meter/clock state. The handoff has an audible gap; this is not
+a crossfade or a click-free/latency guarantee. Check the new monitor's volume.
+
+**Refresh devices** also works while connected: it briefly releases audio,
+re-enumerates and uniquely matches/reopens the *active* route, not a pending UI
+choice or a different system default. A silent monitor stays silent. Failure to
+close/open/match stops the complete receive session, leaves it muted and never
+tries another physical output. Cancellation joins the handoff before cleanup;
+the G2's independent deadline still wins and cannot be extended by switching.
+A driver call that hangs indefinitely can still delay joined shutdown; it is
+not killed unsafely. No G2 control packets are introduced for output changes.
+
+CoreAudio uses an explicit full-device channel map with a stereo callback;
+unselected physical slots are unmapped. WASAPI/ALSA use a multichannel callback
+through the selected pair and write zeros to preceding channels. Only pairs
+passing the backend's format probe are offered. Our routing does not change the
+interface's mixer or monitor volume; actual driver/hardware routing remains a
+manual qualification. See the [PortAudio CoreAudio channel-map API](https://portaudio.com/docs/v19-doxydocs/pa__mac__core_8h.html).
+
+L/R RMS bars and peak labels measure fixed 100 ms windows of actual **post-mute
+software output**, including priming/starvation silence. Bars span −96..0 dBFS;
+muted/stopped/disconnected output reads silence immediately. These are not DAC,
+speaker or hardware-mixer readbacks. The older `peak` and clipping counters remain
+pre-mute lifetime values for the current output; CLIP resets on output replacement.
+New `levels` snapshots are rolling, so a previously loud sample cannot mask a
+currently quiet output. The sample-driven no-device renderer measures the same
+path without speakers, and is labelled accordingly.
+
+The additive **routing/meter ABI 1** leaves playback ABI 2 and its 22-value state
+record intact. Rebuild the managed app and native audio library together; older
+libraries without these new exports cannot run the updated app. Meter storage,
+routing scratch and publication are bounded; our callback still performs no
+allocation, locking, managed calls or logging.
 
 The callback queue has 8,192 stereo source frames (about 171 ms maximum at
 48 kHz), with a 4,096-frame prefill for independently clocked output (about
@@ -107,7 +176,9 @@ dotnet run --project src/Thetis.Headless -c Release --no-build --no-restore -- \
 `playback-selftest` owns P1/P2 loopback peers, verifies startup silence, the
 1 kHz tone at AF −20 dB with AGC off, mute, clean counters and muted reconnect.
 It never enumerates or opens hardware audio. `audio-devices` initializes and
-enumerates outputs but does not open a stream or microphone.
+enumerates outputs and their supported stereo pairs but does not open a stream
+or microphone. Pair selection is currently a desktop feature; the headless
+listening commands use the selected device's first supported pair.
 
 Optional, deliberate listening to a **simulated tone**, not a radio:
 
@@ -128,12 +199,22 @@ and TX options. The [desktop](DESKTOP_PREVIEW.md) uses the same owner.
 The user confirmed hearing the simulator through the Mac desktop. This is an
 initial manual listening check; device identity/rate, latency, unplug behavior
 and duration were not recorded. It is not a full physical-device qualification.
+The user subsequently confirmed live G2 receive through the 828 at AF −10 dB
+and AGC maximum 80 dB. The explicit desktop **Start listening** action applies
+those software settings for G2 only (medium AGC), then unmutes. For simulators
+it only unmutes at the already-applied gain. Neither action commits pending
+tuning edits, changes system volume or restores unmute on reconnect. Check
+monitor volume first. The output-pair/meter increment uses only fixtures and
+read-only enumeration; it has not repeated physical listening or qualified
+the 828's headphone outputs.
 
-Runtime `9311607c` passes Windows, macOS and Linux native, managed, signal and
-desktop CI, including Linux sanitizer/leak checks. Local validation passes all
+Earlier runtime `9311607c` passes Windows, macOS and Linux native, managed,
+signal and desktop CI, including Linux sanitizer/leak checks. Its validation passes all
 189 managed cases, 14 Release native tests and 14 sanitizer tests. See the
-[current validation record](NATIVE_CI_RESULTS.md#audio-clock-recovery-and-output-loss-checkpoint)
+[clock-recovery validation record](NATIVE_CI_RESULTS.md#audio-clock-recovery-and-output-loss-checkpoint)
 for exact source, hosted results and qualification limits.
+The later routing/meter changes are a local working-tree increment; see the
+[latest checkpoint](NATIVE_CI_RESULTS.md) for its separate results.
 
 Clock-recovery tests exercise eight virtual-hour controller scenarios (0,
 ±100/500/1,000 ppm and a direction reversal), bounded slew/anti-windup, and
@@ -223,9 +304,13 @@ macOS sanitizers do not enable leak detection.
 No physical playback or RF transmission was used for this implementation's
 automated validation. Actual sound quality, stereo routing, device-specific
 latency/rates/loss, resampler wideband response, sustained physical-clock drift, speech,
-noise and calibrated RF levels remain unqualified. Do not connect this preview
-to a G2: hardware streaming is deliberately absent. The existing G2 receive-only
-ANT1 constraint is unchanged.
+noise and calibrated RF levels remain unqualified. A later, separate
+[G2 Ethernet receive checkpoint](G2_HARDWARE_RECEIVE.md) adds explicitly confirmed
+ANT1/20m hardware receive and the `g2-listen` command through the shared desktop
+owner. It retains conservative mute/gain defaults, closes output at the native
+5–60 second deadline, and has no microphone or hardware TX path. The simulator
+commands above continue to reject hardware endpoints. See that checkpoint for
+actual physical-output evidence; older simulator results do not qualify it.
 
 The callback design follows [PortAudio's callback restrictions](https://files.portaudio.com/docs/v19-doxydocs/writing_a_callback.html)
 and [stream lifecycle API](https://files.portaudio.com/docs/v19-doxydocs/portaudio_8h.html).

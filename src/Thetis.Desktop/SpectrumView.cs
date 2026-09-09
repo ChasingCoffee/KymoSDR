@@ -21,6 +21,16 @@ public sealed class SpectrumView : Control, IDisposable
     private readonly IBrush text = new SolidColorBrush(Color.Parse("#8196AC"));
     private ReceiveSpectrumFrame? frame;
     private ReceiveSpectrumFrame? renderedFrame;
+    private int spanHz,firstPixel,pixelCount;
+    private double floorDb = -100,ceilingDb;
+    public int VisibleSpanHz => spanHz;
+    public double FloorDb => floorDb;
+    public void SetView(int spanHz,double floorDb,double ceilingDb)
+    {
+        if (spanHz < 0 || spanHz > 384000 || !double.IsFinite(floorDb) || !double.IsFinite(ceilingDb) ||
+            floorDb < -200 || ceilingDb > 20 || ceilingDb-floorDb < 10) throw new ArgumentException("Invalid spectrum view.");
+        this.spanHz = spanHz; this.floorDb = floorDb; this.ceilingDb = ceilingDb; Reset();
+    }
     public long FramesDisplayed { get; private set; }
     public long FramesRendered { get; private set; }
     private long lifetimeDisplayed,lifetimeRendered,sourceSkipped;
@@ -34,13 +44,16 @@ public sealed class SpectrumView : Control, IDisposable
             sourceSkipped += Math.Max(0,value.Sequence-frame.Sequence-1);
         frame = value; ++FramesDisplayed; ++lifetimeDisplayed;
         var source = value.LevelsDb.Span;
+        pixelCount = spanHz == 0 ? source.Length : Math.Clamp((int)Math.Round(spanHz/value.BinWidthHz),1,source.Length);
+        firstPixel = (source.Length-pixelCount)/2;
         Buffer.BlockCopy(waterfall,0,waterfall,Columns*sizeof(int),Columns*(Rows-1)*sizeof(int));
         for (int x = 0; x < Columns; ++x)
         {
-            int start = x*source.Length/Columns, end = (x+1)*source.Length/Columns;
+            int start = firstPixel+x*pixelCount/Columns;
+            int end = Math.Min(firstPixel+pixelCount,Math.Max(start+1,firstPixel+(x+1)*pixelCount/Columns));
             float peak = -200;
             for (int i = start; i < end; ++i) peak = Math.Max(peak,source[i]);
-            levels[x] = peak; waterfall[x] = ColorFor(peak);
+            levels[x] = peak; waterfall[x] = ColorFor(-110+(peak-floorDb)/(ceilingDb-floorDb)*105);
         }
         using (var locked = image.Lock())
             for (int y = 0; y < Rows; ++y) Marshal.Copy(waterfall,y*Columns,locked.Address+y*locked.RowBytes,Columns);
@@ -68,7 +81,7 @@ public sealed class SpectrumView : Control, IDisposable
         {
             double y = plot.Y+i*height/5;
             context.DrawLine(grid,new(plot.X,y),new(plot.Right,y));
-            Label(context,(-20*i).ToString(CultureInfo.InvariantCulture),new Point(12,y-6),10);
+            Label(context,(ceilingDb-(ceilingDb-floorDb)*i/5).ToString("F0",CultureInfo.InvariantCulture),new Point(8,y-6),10);
         }
         for (int i = 0; i <= 4; ++i)
         {
@@ -76,7 +89,7 @@ public sealed class SpectrumView : Control, IDisposable
             context.DrawLine(grid,new(x,plot.Y),new(x,plot.Bottom));
             if (frame is not null)
             {
-                double hz = frame.FirstFrequencyHz+(frame.LevelsDb.Length-1)*frame.BinWidthHz*i/4;
+                double hz = frame.FrequencyAt(firstPixel)+(pixelCount-1)*frame.BinWidthHz*i/4;
                 Label(context,(hz/1e6).ToString("F3",CultureInfo.InvariantCulture),new Point(x-22,plot.Bottom+7),10);
             }
         }
@@ -89,15 +102,15 @@ public sealed class SpectrumView : Control, IDisposable
                 var geometry = new StreamGeometry();
                 using (var path = geometry.Open())
                 {
-                    path.BeginFigure(new(plot.X,plot.Bottom-Math.Clamp((levels[0]+100)/100,0,1)*height),false);
-                    for (int x = 1; x < Columns; ++x) path.LineTo(new(plot.X+x*width/(Columns-1),plot.Bottom-Math.Clamp((levels[x]+100)/100,0,1)*height));
+                    path.BeginFigure(new(plot.X,plot.Bottom-Math.Clamp((levels[0]-floorDb)/(ceilingDb-floorDb),0,1)*height),false);
+                    for (int x = 1; x < Columns; ++x) path.LineTo(new(plot.X+x*width/(Columns-1),plot.Bottom-Math.Clamp((levels[x]-floorDb)/(ceilingDb-floorDb),0,1)*height));
                     path.EndFigure(false);
                 }
                 context.DrawGeometry(null,line,geometry);
             }
             context.DrawImage(image,new Rect(0,0,Columns,Rows),waterfallRect);
         }
-        else Label(context,"Connect a simulator to begin",new Point(plot.X+20,plot.Y+height/2),14);
+        else Label(context,"Connect a receive source to begin",new Point(plot.X+20,plot.Y+height/2),14);
         context.DrawRectangle(null,grid,waterfallRect);
     }
     private void Label(DrawingContext context,string value,Point at,double size) => context.DrawText(
