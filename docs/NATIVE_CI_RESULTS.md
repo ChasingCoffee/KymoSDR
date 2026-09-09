@@ -40,7 +40,33 @@ least 24000 measured frames, then explicitly closes its owned loopback session.
 A 60-second native fallback and the CTest wall deadline still bound a stalled
 fixture. Dedicated native deadline and key/watchdog fail-close scenarios remain
 unchanged. No amplitude/rejection or clean-counter threshold is relaxed.
-Hosted revalidation is pending.
+The [run at `bed5a595`](https://github.com/ChasingCoffee/KymoSDR/actions/runs/34300791965)
+passes the full Windows and Linux native workflows and Linux sanitizers. macOS
+still fails the coarse-timer fixture before reaching its sample budget. A local
+125 ms delayed-wakeup reproduction now identifies **stop reason 3 (missing
+status)** with zero status packets: sending status every 30 iterations can
+exceed the real three-second watchdog. That explains a fixture failure mechanism;
+the older hosted log did not retain its stop reason.
+
+The next fixture-only correction sends status on each active wakeup and credits
+returned 48 kHz PCM before refilling 192 kHz I/Q. Outstanding input across the
+whole chain is capped at 4096 complex samples, below the CM input ring's 6144;
+slow DSP cannot accumulate unbounded bursts. The coarse regression deliberately
+waits 125 ms, reproducing the old missing-heartbeat condition without relying on
+host timer behavior. Failure logs now include worker, stop reason, status count
+and socket errors. Production deadlines/watchdogs, explicit watchdog-fault
+scenarios, sample coverage, signal limits and zero-error gates are unchanged.
+Final local Release passes both cases in **58.16 s** (17.00 s standard,
+41.15 s delayed wakeups); serial ASan/UBSan passes both in **63.30 s**
+(21.24 s standard, 42.06 s delayed wakeups), with macOS `detect_leaks=0`.
+All eight mode/offset cases per build produce 72000 PCM frames, including
+24000 measured frames, wanted RMS 0.00707106613 and rejected RMS
+1.45534826e-10. Every sideband case retains an active worker, stop reason zero,
+75 status packets and clean receive/DSP/overrun counters. JUnit reports are
+`artifacts/native/g2-wakeup-validation.xml` and the matching `native-asan` path.
+Hosted revalidation is pending. Passive local checks confirm the saved 828
+Main Out L/R route is still available and is the system default; no physical
+stream, G2 discovery/RX, unplug or sleep/wake test has been started for this step.
 
 ## Controlled G2 endurance and CI catch-up infrastructure — local working tree
 

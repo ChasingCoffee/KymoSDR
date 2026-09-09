@@ -55,12 +55,35 @@ static void verify_sideband(int mode, int offset)
     for (int step = 0; step < 2000; ++step)
     {
         validate_sent(&run_seen,&stop_seen);
+        // Return PCM credit before refilling input so a delayed wakeup does
+        // not need an extra sleep just to notice the previous batch completed.
+        int count = ThetisP2ReceiveReadAudio(audio,4096); CHECK(count >= 0);
+        // Match the established CM controls/gain fixtures: discard one full
+        // second of produced 48 kHz PCM before measuring settled rejection.
+        for (int i = 0; i < count; ++i)
+        {
+            CHECK(isfinite(audio[2*i]) && isfinite(audio[2*i+1]));
+            if (warmup++ >= 48000) { energy += audio[2*i]*audio[2*i]; ++measured; }
+        }
+        int n = ThetisP2ReceiveReadSpectrum(1,pixels,4095,metadata,12); CHECK(n >= 0);
+        if (n > 0)
+        {
+            int peak = 0; for (int i = 1; i < n; ++i) if (pixels[i] > pixels[peak]) peak = i;
+            CHECK(fabs((peak-n/2)*192000.0/4096-offset) < 50); ++spectra;
+        }
+        CHECK(ThetisG2ReceiveGetState(safety,8) == 8);
+        if (!safety[2] || measured >= 24000) break;
         if (run_seen)
         {
-            // At most four packets (952 complex samples) per wakeup.
-            // Supply enough PCM even with a 16 ms timer; wall-clock
-            // pacing here is a fixture property, not RF/audio qualification.
-            for (int batch = 0; batch < 4; ++batch)
+            // Heartbeats must not wait for a fixed number of possibly slow
+            // wakeups. This is fixture traffic; the real watchdog is unchanged.
+            CHECK(test_peer_send(peers[1],(int)state[2],status,60) == 60);
+            // Credit returned PCM at the fixed 192k -> 48k ratio. Keep at most
+            // 4096 complex samples outstanding across UDP, CM, DSP and the tap,
+            // below CM's 6144-sample input ring. Each wakeup sends at most 17
+            // packets, and cannot accumulate more input while DSP falls behind.
+            // This tests settled signal correctness, not physical audio timing.
+            while (sample + 238 <= 4 * warmup + 4096)
             {
                 packet[0] = (unsigned char)(sequence>>24); packet[1] = (unsigned char)(sequence>>16);
                 packet[2] = (unsigned char)(sequence>>8); packet[3] = (unsigned char)sequence++;
@@ -78,31 +101,15 @@ static void verify_sideband(int mode, int offset)
                 }
                 CHECK(test_peer_send(peers[3],(int)state[2],packet,1444) == 1444);
             }
-            if (step % 30 == 0) CHECK(test_peer_send(peers[1],(int)state[2],status,60) == 60);
         }
-        int count = ThetisP2ReceiveReadAudio(audio,4096); CHECK(count >= 0);
-        // Match the established CM controls/gain fixtures: discard one full
-        // second of produced 48 kHz PCM before measuring settled rejection.
-        for (int i = 0; i < count; ++i)
-        {
-            CHECK(isfinite(audio[2*i]) && isfinite(audio[2*i+1]));
-            if (warmup++ >= 48000) { energy += audio[2*i]*audio[2*i]; ++measured; }
-        }
-        int n = ThetisP2ReceiveReadSpectrum(1,pixels,4095,metadata,12); CHECK(n >= 0);
-        if (n > 0)
-        {
-            int peak = 0; for (int i = 1; i < n; ++i) if (pixels[i] > pixels[peak]) peak = i;
-            CHECK(fabs((peak-n/2)*192000.0/4096-offset) < 50); ++spectra;
-        }
-        CHECK(ThetisG2ReceiveGetState(safety,8) == 8);
-        if (!safety[2] || measured >= 24000) break;
         Sleep(sideband_sleep_ms);
     }
     double rms = measured ? sqrt(energy/measured) : 0;
     int wanted = (mode == 1) == (offset > 0);
     CHECK(ThetisP2ReceiveGetState(state,24) == 24);
-    printf("G2 sideband mode=%d offset=%d sleep=%dms: RMS=%.9g wanted=%d PCM=%ld measured=%ld spectra=%d missing=%lld input-overruns=%lld audio-drops=%lld\n",
-        mode,offset,sideband_sleep_ms,rms,wanted,warmup,measured,spectra,(long long)state[9],(long long)state[17],(long long)state[19]);
+    printf("G2 sideband mode=%d offset=%d sleep=%dms: RMS=%.9g wanted=%d PCM=%ld measured=%ld spectra=%d missing=%lld input-overruns=%lld audio-drops=%lld worker=%lld stop-reason=%lld status=%lld socket-errors=%lld\n",
+        mode,offset,sideband_sleep_ms,rms,wanted,warmup,measured,spectra,(long long)state[9],(long long)state[17],(long long)state[19],
+        (long long)safety[2],(long long)safety[3],(long long)state[14],(long long)state[15]);
     CHECK(measured >= 24000 && spectra > 0 && safety[2] && safety[3] == 0 && !safety[4] && !safety[7]);
     CHECK(!state[9] && !state[10] && !state[11] && !state[12] && !state[15] && !state[17] && !state[19] && !state[21]);
     CHECK(wanted ? rms > .003 && rms < .02 : rms < .00001);
@@ -112,7 +119,9 @@ int main(int argc, char **argv)
 {
     int coarse = argc == 2 && !strcmp(argv[1],"--coarse-timer");
     CHECK(argc == 1 || coarse);
-    if (coarse) sideband_sleep_ms = 16;
+    // Emulate delayed/coalesced fixture wakeups, including a status interval
+    // that would exceed the real 3-second watchdog if tied to 30 iterations.
+    if (coarse) sideband_sleep_ms = 125;
     CHECK(g2_duration_valid(60,0) && !g2_duration_valid(61,0));
     CHECK(g2_duration_valid(3600,1) && !g2_duration_valid(3601,1) && !g2_duration_valid(0,1));
     CHECK(!g2_deadline_reached(12345,3612344,3600));
@@ -201,7 +210,7 @@ int main(int argc, char **argv)
         for (int offset = -1500; offset <= 1500; offset += 3000) verify_sideband(mode,offset);
     for (int i = 0; i < 4; ++i) cm_socket_close(&peers[i]);
     destroy_impulse_cache();
-    puts(coarse ? "PASS: G2 settled sidebands and clean counters with a 16 ms fixture timer" :
+    puts(coarse ? "PASS: G2 settled sidebands and clean counters with 125 ms fixture wakeups" :
         "PASS: G2 wire firewall, rollback, deadlines, key/status/IQ fail-close, hardware IQ orientation and both sidebands");
     return 0;
 }

@@ -172,6 +172,43 @@ pass/fail budget. Sleep/wake, display performance and audible device handoffs
 remain separate manual/desktop qualification tasks. A virtual-hour unit test is
 not a one-hour G2 receive result.
 
+### Physical output and recovery checklist
+
+Run these separately from the uninterrupted endurance measurement, with a person
+at the computer and the speaker/headphone level checked. Keep ANT1 receive-only;
+never test PTT, MOX, keying or transmit. Do not unplug a device or suspend the
+computer during someone else's work. Close other SDR clients first.
+
+1. **Baseline:** after the current native CI is green, freshly enumerate the
+   selected output and stereo pair. Run the 60-second `g2-soak` report check,
+   then 5 minutes. Review every report before advancing to 30 and 60 minutes;
+   explicitly request reconnect phases when testing them. Stop at the first
+   failed gate. Record audible results separately from software counters.
+2. **Live route change:** in a separate bounded desktop session, export a
+   baseline report, choose a verified output/pair, and click **Switch output**.
+   A short audio gap is expected. Confirm the selected physical destination by
+   listening, continuous spectrum/receive-session identity, unchanged tuning and
+   gain/mute settings, a new output generation, and no receive errors. Output
+   counters restart for each generation; handoff-discarded PCM is not packet loss.
+   Export another report. Switching must not extend the radio deadline.
+3. **Output loss:** first exercise an owned simulator session with the same
+   physical output. Disconnect the device manually and verify receive closes,
+   audio stays muted, and no different output is selected or opened. Restore the
+   device, refresh/review its identity and pair, then reconnect explicitly. Only
+   repeat against the G2 after the simulator check passes; confirm the G2 is idle
+   after shutdown. Never accept automatic unmute or reconnection as recovery.
+4. **Sleep/wake:** use the simulator first and suspend/wake the computer manually.
+   Record whether the app fails closed, remains responsive and requires explicit
+   recovery; no automatic resumed audio is a pass. Hardware sleep/wake remains
+   a separate supervised test, not something established by watchdog unit tests
+   or a successful uninterrupted soak.
+
+Retain the managed commit, native library hashes, OS, route/rate, duration and
+local diagnostic report names with each result. Do not put private device names
+or addresses into shared diagnostic exports. Headless G2 results do not qualify
+desktop rendering, and macOS results do not qualify Windows hardware playback.
+The normal desktop duration limit is not increased by this checklist.
+
 ## Desktop, listening and optional FT8 capture
 
 See [desktop use](DESKTOP_PREVIEW.md#use). **Discover radios · Ethernet** performs
